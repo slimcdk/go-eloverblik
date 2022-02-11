@@ -5,19 +5,19 @@ type CustomerAPI interface {
 	AddRelationOnID() error
 	AddRelationOnAccessCode() error
 	DeleteRelation() error
-	GetMeteringPoints() error
-	GetMeteringPointDetails() error
+	GetMeteringPoints(bool) ([]MeteringPoints, error)
+	GetMeteringPointDetails(meteringPointIDs []string) ([]MeteringPointDetails, error)
 	GetCharges() error
-	GetTimeSeries() error
+	GetTimeSeries(query TimeseriesQuery) ([]TimeSeriesResponse, error)
 	GetMeterReadings() error
 }
 
 type ThirdPartyAPI interface {
 	GetDataAccessToken() (string, error)
 	GetAuthorizations() error
-	GetMeteringPoints() error
-	GetMeteringPointDetails() error
+	GetMeteringPoints(bool) ([]MeteringPoints, error)
+	GetMeteringPointDetails(meteringPointIDs []string) ([]MeteringPointDetails, error)
 	GetCharges() error
-	GetTimeSeries() error
+	GetTimeSeries(query TimeseriesQuery) ([]TimeSeriesResponse, error)
 	GetMeterReadings() error
 }

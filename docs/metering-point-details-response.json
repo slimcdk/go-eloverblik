@@ -1,0 +1,84 @@
+{
+    "result": [
+        {
+            "result": {
+                "meteringPointId": "string",
+                "parentMeteringPointId": "string",
+                "typeOfMP": "string",
+                "energyTimeSeriesMeasureUnit": "string",
+                "estimatedAnnualVolume": "string",
+                "settlementMethod": "string",
+                "meterNumber": "string",
+                "gridOperatorName": "string",
+                "meteringGridAreaIdentification": "string",
+                "netSettlementGroup": "string",
+                "physicalStatusOfMP": "string",
+                "consumerCategory": "string",
+                "powerLimitKW": "string",
+                "powerLimitA": "string",
+                "subTypeOfMP": "string",
+                "productionObligation": "string",
+                "mpCapacity": "string",
+                "mpConnectionType": "string",
+                "disconnectionType": "string",
+                "product": "string",
+                "consumerCVR": "string",
+                "dataAccessCVR": "string",
+                "consumerStartDate": "string",
+                "meterReadingOccurrence": "string",
+                "mpReadingCharacteristics": "string",
+                "meterCounterDigits": "string",
+                "meterCounterMultiplyFactor": "string",
+                "meterCounterUnit": "string",
+                "meterCounterType": "string",
+                "taxReduction": "string",
+                "taxSettlementDate": "string",
+                "mpRelationType": "string",
+                "streetCode": "string",
+                "streetName": "string",
+                "buildingNumber": "string",
+                "floorId": "string",
+                "roomId": "string",
+                "postcode": "string",
+                "cityName": "string",
+                "citySubDivisionName": "string",
+                "municipalityCode": "string",
+                "locationDescription": "string",
+                "firstConsumerPartyName": "string",
+                "secondConsumerPartyName": "string",
+                "contactAddresses": [
+                    {
+                        "contactName1": "string",
+                        "contactName2": "string",
+                        "addressCode": "string",
+                        "streetName": "string",
+                        "buildingNumber": "string",
+                        "floorId": "string",
+                        "roomId": "string",
+                        "citySubDivisionName": "string",
+                        "postcode": "string",
+                        "cityName": "string",
+                        "countryName": "string",
+                        "contactPhoneNumber": "string",
+                        "contactMobileNumber": "string",
+                        "contactEmailAddress": "string",
+                        "contactType": "string"
+                    }
+                ],
+                "childMeteringPoints": [
+                    {
+                        "meteringPointId": "string",
+                        "parentMeteringPointId": "string",
+                        "typeOfMP": "string",
+                        "meterReadingOccurrence": "string",
+                        "meterNumber": "string"
+                    }
+                ]
+            },
+            "success": true,
+            "errorCode": 10000,
+            "errorText": "string",
+            "id": "string"
+        }
+    ]
+}

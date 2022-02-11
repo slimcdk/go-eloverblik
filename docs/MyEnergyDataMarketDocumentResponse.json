@@ -1,0 +1,54 @@
+{
+  "result": [
+    {
+      "MyEnergyData_MarketDocument": {
+        "mRID": "string",
+        "createdDateTime": "string",
+        "sender_MarketParticipant.name": "string",
+        "sender_MarketParticipant.mRID": {
+          "codingScheme": "string",
+          "name": "string"
+        },
+        "period.timeInterval": {
+          "start": "string",
+          "end": "string"
+        },
+        "TimeSeries": [
+          {
+            "mRID": "string",
+            "businessType": "string",
+            "curveType": "string",
+            "measurement_Unit.name": "string",
+            "MarketEvaluationPoint": {
+              "mRID": {
+                "codingScheme": "string",
+                "name": "string"
+              }
+            },
+            "Period": [
+              {
+                "resolution": "string",
+                "timeInterval": {
+                  "start": "string",
+                  "end": "string"
+                },
+                "Point": [
+                  {
+                    "position": "string",
+                    "out_Quantity.quantity": "string",
+                    "out_Quantity.quality": "string"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "success": true,
+      "errorCode": "string",
+      "errorText": "string",
+      "id": "string",
+      "stackTrace": "string"
+    }
+  ]
+}
