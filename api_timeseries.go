@@ -57,6 +57,22 @@ type PointResponse struct {
 	Out_Quantity_quality  string `json:"out_Quantity.quality"`
 }
 
+type MeterReading struct {
+	Result struct {
+		MeteringPointID string             `json:"meteringPointId"`
+		MeterReadings   []MeterReadingData `json:"readings"`
+	} `json:"result"`
+	StatusResponse
+}
+
+type MeterReadingData struct {
+	ReadingDate      string `json:"readingDate"`
+	RegistrationDate string `json:"registrationDate"`
+	MeterNumber      string `json:"meterNumber"`
+	MeterReading     string `json:"meterReading"`
+	MeasurementUnit  string `json:"measurementUnit"`
+}
+
 func (c *client) GetTimeSeries(meteringPointIDs []string, from, to time.Time, aggregation Aggregation) ([]TimeSeries, error) {
 
 	dateFrom, dateTo := from.Format(DateFormat), to.Format(DateFormat)
@@ -107,7 +123,6 @@ func (c *client) GetMeterReadings(meteringPointIDs []string, from, to time.Time)
 	// Build URL
 	_url := c.hostUrl
 	_url.Path += fmt.Sprintf("/MeterData/GetMeterReadings/%s/%s", dateFrom, dateTo)
-	fmt.Println(_url.Path)
 
 	// Construct body payload
 	var buf bytes.Buffer
@@ -141,20 +156,4 @@ func (c *client) GetMeterReadings(meteringPointIDs []string, from, to time.Time)
 
 	return result.Result, err
 
-}
-
-type MeterReading struct {
-	Result struct {
-		MeteringPointID string             `json:"meteringPointId"`
-		MeterReadings   []MeterReadingData `json:"readings"`
-	} `json:"result"`
-	StatusResponse
-}
-
-type MeterReadingData struct {
-	ReadingDate      string `json:"readingDate"`
-	RegistrationDate string `json:"registrationDate"`
-	MeterNumber      string `json:"meterNumber"`
-	MeterReading     string `json:"meterReading"`
-	MeasurementUnit  string `json:"measurementUnit"`
 }
