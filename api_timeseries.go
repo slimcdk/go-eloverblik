@@ -57,13 +57,9 @@ type PointResponse struct {
 	Out_Quantity_quality  string `json:"out_Quantity.quality"`
 }
 
-func (c *client) GetMeterReadings(meteringPointIDs []string, from, to time.Time) error { return nil }
-
 func (c *client) GetTimeSeries(meteringPointIDs []string, from, to time.Time, aggregation Aggregation) ([]TimeSeries, error) {
 
-	// Define resource path
-	dateFrom := from.Format(DateFormat) // TODO: Verify time format
-	dateTo := to.Format(DateFormat)     // TODO: Verify time format
+	dateFrom, dateTo := from.Format(DateFormat), to.Format(DateFormat)
 	if !validAggregation(aggregation) {
 		return nil, ErrorAggrationNotValid
 	}
@@ -89,12 +85,7 @@ func (c *client) GetTimeSeries(meteringPointIDs []string, from, to time.Time, ag
 
 	// Make request and parse response
 	res, err := c.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	// Retry if possible
-	for isRetryableError(err) {
+	if isRetryableError(res.StatusCode, err) {
 		return c.GetTimeSeries(meteringPointIDs, from, to, aggregation)
 	}
 
@@ -107,4 +98,63 @@ func (c *client) GetTimeSeries(meteringPointIDs []string, from, to time.Time, ag
 	}
 
 	return result.Result, err
+}
+
+func (c *client) GetMeterReadings(meteringPointIDs []string, from, to time.Time) ([]MeterReading, error) {
+
+	dateFrom, dateTo := from.Format(DateFormat), to.Format(DateFormat)
+
+	// Build URL
+	_url := c.hostUrl
+	_url.Path += fmt.Sprintf("/MeterData/GetMeterReadings/%s/%s", dateFrom, dateTo)
+	fmt.Println(_url.Path)
+
+	// Construct body payload
+	var buf bytes.Buffer
+	err := json.NewEncoder(&buf).Encode(meteringPointIDsToRequestStruct(meteringPointIDs))
+	if err != nil {
+		return nil, err
+	}
+
+	// Construct request and set authorization
+	req, err := http.NewRequest(http.MethodPost, _url.String(), &buf)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.accessToken))
+	req.Header.Set("Content-Type", "application/json")
+
+	// Make request and parse response
+	res, err := c.client.Do(req)
+	if isRetryableError(res.StatusCode, err) {
+		return c.GetMeterReadings(meteringPointIDs, from, to)
+	}
+
+	// Decode response result
+	var result struct {
+		Result []MeterReading `json:"result"`
+	}
+
+	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Result, err
+
+}
+
+type MeterReading struct {
+	Result struct {
+		MeteringPointID string             `json:"meteringPointId"`
+		MeterReadings   []MeterReadingData `json:"readings"`
+	} `json:"result"`
+	StatusResponse
+}
+
+type MeterReadingData struct {
+	ReadingDate      string `json:"readingDate"`
+	RegistrationDate string `json:"registrationDate"`
+	MeterNumber      string `json:"meterNumber"`
+	MeterReading     string `json:"meterReading"`
+	MeasurementUnit  string `json:"measurementUnit"`
 }

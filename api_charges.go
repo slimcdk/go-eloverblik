@@ -80,12 +80,7 @@ func (c *client) GetCharges(meteringPointIDs []string) ([]MeteringPointPrices, e
 
 	// Make request and parse response
 	res, err := c.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	// Retry if possible
-	for isRetryableError(err) {
+	if isRetryableError(res.StatusCode, err) {
 		return c.GetCharges(meteringPointIDs)
 	}
 

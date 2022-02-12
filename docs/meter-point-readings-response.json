@@ -1,0 +1,23 @@
+{
+    "result": [
+        {
+            "result": {
+                "meteringPointId": "string",
+                "readings": [
+                    {
+                        "readingDate": "string",
+                        "registrationDate": "string",
+                        "meterNumber": "string",
+                        "meterReading": "string",
+                        "measurementUnit": "string"
+                    }
+                ]
+            },
+            "success": true,
+            "errorCode": "string",
+            "errorText": "string",
+            "id": "string",
+            "stackTrace": "string"
+        }
+    ]
+}

@@ -7,7 +7,7 @@ type BaseAPI interface {
 	GetMeteringPointDetails(meteringPointIDs []string) ([]MeteringPointDetails, error)
 	GetCharges(meteringPointIDs []string) ([]MeteringPointPrices, error)
 	GetTimeSeries(meteringPointIDs []string, from, to time.Time, aggregation Aggregation) ([]TimeSeries, error)
-	GetMeterReadings(meteringPointIDs []string, from, to time.Time) error
+	GetMeterReadings(meteringPointIDs []string, from, to time.Time) ([]MeterReading, error)
 }
 
 type CustomerAPI interface {

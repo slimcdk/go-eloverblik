@@ -3,6 +3,7 @@ package eloverblik
 import (
 	"errors"
 	"fmt"
+	"net/http"
 )
 
 var (
@@ -72,6 +73,10 @@ func ErrorClientConnection(status int) error {
 	return fmt.Errorf("could't connect to eloverblik: %d", status)
 }
 
-func isRetryableError(error) bool {
-	return false
+func isRetryableError(status int, err error) bool {
+
+	if err == nil || status == http.StatusOK {
+		return false
+	}
+	return true
 }
