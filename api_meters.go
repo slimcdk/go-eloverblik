@@ -162,10 +162,6 @@ func (c *client) GetMeteringPointDetails(meteringPointIDs []string) ([]MeteringP
 	return result.Result, err
 }
 
-func (c *ThirdPartyClient) GetMeteringPoints(scope, identifier string) ([]MeteringPoints, error) {
-	return nil, nil
-}
-
 func (c *CustomerClient) GetMeteringPoints(includeAll bool) ([]MeteringPoints, error) {
 
 	// Build URL
@@ -184,6 +180,35 @@ func (c *CustomerClient) GetMeteringPoints(includeAll bool) ([]MeteringPoints, e
 	res, err := c.client.client.Do(req)
 	if isRetryableError(res.StatusCode, err) {
 		return c.GetMeteringPoints(includeAll)
+	}
+
+	// Decode response result
+	var result struct {
+		Result []MeteringPoints `json:"result"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Result, err
+}
+
+func (c *ThirdPartyClient) GetMeteringPoints(scope, identifier string) ([]MeteringPoints, error) {
+	// Build URL
+	_url := c.hostUrl
+	_url.Path += fmt.Sprintf("/MeteringPoints/MeteringPoints/%s/%s", scope, identifier)
+
+	// Construct payload and endpoint path
+	req, err := http.NewRequest(http.MethodGet, _url.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.accessToken))
+
+	// Make request and parse response
+	res, err := c.client.client.Do(req)
+	if isRetryableError(res.StatusCode, err) {
+		return c.GetMeteringPoints(scope, identifier)
 	}
 
 	// Decode response result
