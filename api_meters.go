@@ -30,7 +30,7 @@ type MeteringPoints struct {
 	ConsumerCVR             string                `json:"consumerCVR"`
 	DataAccessCVR           string                `json:"dataAccessCVR"`
 	MeterNumber             string                `json:"meterNumber"`
-	ConsumerStartDate       string                `json:"consumerStartDate"`
+	ConsumerStartDate       string                `json:"consumerStartDate"` // TODO: Parse time
 	HasRelation             bool                  `json:"hasRelation"`
 	ChildMeteringPoints     []ChildMeteringPoints `json:"childMeteringPoints"`
 }
@@ -71,7 +71,7 @@ type MeteringPointDetail struct {
 	Product                        string               `json:"product"`
 	ConsumerCVR                    string               `json:"consumerCVR"`
 	DataAccessCVR                  string               `json:"dataAccessCVR"`
-	ConsumerStartDate              string               `json:"consumerStartDate"`
+	ConsumerStartDate              string               `json:"consumerStartDate"` // TODO: Parse time
 	MeterReadingOccurrence         string               `json:"meterReadingOccurrence"`
 	MpReadingCharacteristics       string               `json:"mpReadingCharacteristics"`
 	MeterCounterDigits             string               `json:"meterCounterDigits"`
@@ -79,9 +79,9 @@ type MeteringPointDetail struct {
 	MeterCounterUnit               string               `json:"meterCounterUnit"`
 	MeterCounterType               string               `json:"meterCounterType"`
 	BalanceSupplierName            string               `json:"balanceSupplierName"`
-	BalanceSupplierStartDate       string               `json:"balanceSupplierStartDate"`
+	BalanceSupplierStartDate       string               `json:"balanceSupplierStartDate"` // TODO: Parse time
 	TaxReduction                   string               `json:"taxReduction"`
-	TaxSettlementDate              string               `json:"taxSettlementDate"`
+	TaxSettlementDate              string               `json:"taxSettlementDate"` // TODO: Parse time
 	MpRelationType                 string               `json:"mpRelationType"`
 	StreetCode                     string               `json:"streetCode"`
 	StreetName                     string               `json:"streetName"`
@@ -125,7 +125,11 @@ type ChildMeteringPoint struct {
 	MeterNumber            string `json:"meterNumber"`
 }
 
-func (c *client) GetMeteringPoints(includeAll bool) ([]MeteringPoints, error) {
+func (c *ThirdPartyClient) GetMeteringPoints(scope, identifier string) ([]MeteringPoints, error) {
+	return nil, nil
+}
+
+func (c *CustomerClient) GetMeteringPoints(includeAll bool) ([]MeteringPoints, error) {
 
 	// Build URL
 	_url := c.hostUrl
@@ -140,7 +144,7 @@ func (c *client) GetMeteringPoints(includeAll bool) ([]MeteringPoints, error) {
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.accessToken))
 
 	// Make request and parse response
-	res, err := c.client.Do(req)
+	res, err := c.client.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -173,13 +177,13 @@ func (c *client) GetMeteringPointDetails(meteringPointIDs []string) ([]MeteringP
 	if err != nil {
 		return nil, err
 	}
-
 	// Construct payload and endpoint path
 	req, err := http.NewRequest(http.MethodPost, _url.String(), &buf)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.accessToken))
+	req.Header.Set("Content-Type", "application/json")
 
 	// Make request and parse response
 	res, err := c.client.Do(req)

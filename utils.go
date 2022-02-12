@@ -9,11 +9,16 @@ func isAny(check interface{}, against ...interface{}) bool {
 	return false
 }
 
-func verifyAggregation(aggregation Aggregation) (Aggregation, error) {
-	if !isAny(aggregation, AggregationActual, AggregationQuarter, AggregationHour, AggregationDay, AggregationMonth, AggregationYear) {
-		return aggregation, ErrorAggrationNotValid
-	}
-	return aggregation, nil
+func validAggregation(aggregation Aggregation) bool {
+	return isAny(
+		aggregation,
+		AggregationActual,
+		AggregationQuarter,
+		AggregationHour,
+		AggregationDay,
+		AggregationMonth,
+		AggregationYear,
+	)
 }
 
 func meteringPointIDsToRequestStruct(IDs []string) meteringPointIDs {

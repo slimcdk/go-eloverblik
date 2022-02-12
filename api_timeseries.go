@@ -1,24 +1,14 @@
 package eloverblik
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"time"
 )
 
-type TimeseriesQuery struct {
-	MeteringPointIDs []string
-	DateFrom, DateTo time.Time
-	Aggregation      Aggregation
-}
-
-type timeSeriesRequest struct {
-	meteringPointIDs
-}
-
-type timeSeriesResult struct {
-	Result []TimeSeriesResponse `json:"result"`
-}
-
-type TimeSeriesResponse struct {
+type TimeSeries struct {
 	MyEnergyDataMarketDocument MyEnergyDataMarketDocumentResponse `json:"MyEnergyData_MarketDocument"`
 	StatusResponse
 }
@@ -67,30 +57,54 @@ type PointResponse struct {
 	Out_Quantity_quality  string `json:"out_Quantity.quality"`
 }
 
-func (c *client) GetTimeSeries(query TimeseriesQuery) ([]TimeSeriesResponse, error) {
-	return nil, nil
-	// requestPayload := MeteringPointIDsRequest{MeteringPointID: MeteringPointID{MeteringPointIDs: query.MeteringPointIDs}}
-	// dateFrom := query.DateFrom.Format(DateFormat) // TODO: Verify time format
-	// dateTo := query.DateTo.Format(DateFormat)     // TODO: Verify time format
-	// aggregation, err := verifyAggregation(query.Aggregation)
-	// if err != nil {
-	// 	return nil, err
-	// }
+func (c *client) GetMeterReadings(meteringPointIDs []string, from, to time.Time) error { return nil }
 
-	// // Build URL
-	// _url := c.hostUrl
-	// _url.Path += fmt.Sprintf("/MeterData/GetTimeSeries/%s/%s/%s", dateFrom, dateTo, aggregation)
+func (c *client) GetTimeSeries(meteringPointIDs []string, from, to time.Time, aggregation Aggregation) ([]TimeSeries, error) {
 
-	// // Make request and check for errors
-	// result := timeSeriesResult{}
-	// status, err := c.makeRequest(http.MethodPost, _url, requestPayload, &result)
-	// if status != http.StatusOK || err != nil {
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// 	return nil, ErrorClientConnection(status)
-	// }
+	// Define resource path
+	dateFrom := from.Format(DateFormat) // TODO: Verify time format
+	dateTo := to.Format(DateFormat)     // TODO: Verify time format
+	if !validAggregation(aggregation) {
+		return nil, ErrorAggrationNotValid
+	}
 
-	// return result.Result, err
+	// Build URL
+	_url := c.hostUrl
+	_url.Path += fmt.Sprintf("/MeterData/GetTimeSeries/%s/%s/%s", dateFrom, dateTo, aggregation)
 
+	// Construct body payload
+	var buf bytes.Buffer
+	err := json.NewEncoder(&buf).Encode(meteringPointIDsToRequestStruct(meteringPointIDs))
+	if err != nil {
+		return nil, err
+	}
+
+	// Construct request and set authorization
+	req, err := http.NewRequest(http.MethodPost, _url.String(), &buf)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.accessToken))
+	req.Header.Set("Content-Type", "application/json")
+
+	// Make request and parse response
+	res, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	// Retry if possible
+	for isRetryableError(err) {
+		return c.GetTimeSeries(meteringPointIDs, from, to, aggregation)
+	}
+
+	// Decode response result
+	var result struct {
+		Result []TimeSeries `json:"result"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Result, err
 }

@@ -1,5 +1,7 @@
 package eloverblik
 
-func (c *client) AddRelationOnID() error         { return nil }
-func (c *client) AddRelationOnAccessCode() error { return nil }
-func (c *client) DeleteRelation() error          { return nil }
+func (c *CustomerClient) AddRelationOnID(meteringPointIDs []string) error { return nil }
+func (c *CustomerClient) AddRelationOnAccessCode(meteringPointID, webAccessCode string) error {
+	return nil
+}
+func (c *CustomerClient) DeleteRelation(meteringPointID string) error { return nil }

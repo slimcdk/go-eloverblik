@@ -1,23 +1,25 @@
 package eloverblik
 
-type CustomerAPI interface {
+import "time"
+
+type BaseAPI interface {
 	GetDataAccessToken() (string, error)
-	AddRelationOnID() error
-	AddRelationOnAccessCode() error
-	DeleteRelation() error
-	GetMeteringPoints(bool) ([]MeteringPoints, error)
 	GetMeteringPointDetails(meteringPointIDs []string) ([]MeteringPointDetails, error)
-	GetCharges() error
-	GetTimeSeries(query TimeseriesQuery) ([]TimeSeriesResponse, error)
-	GetMeterReadings() error
+	GetCharges(meteringPointIDs []string) ([]MeteringPointPrices, error)
+	GetTimeSeries(meteringPointIDs []string, from, to time.Time, aggregation Aggregation) ([]TimeSeries, error)
+	GetMeterReadings(meteringPointIDs []string, from, to time.Time) error
+}
+
+type CustomerAPI interface {
+	BaseAPI
+	AddRelationOnID(meteringPointIDs []string) error
+	AddRelationOnAccessCode(meteringPointID, webAccessCode string) error
+	DeleteRelation(meteringPointID string) error
+	GetMeteringPoints(bool) ([]MeteringPoints, error)
 }
 
 type ThirdPartyAPI interface {
-	GetDataAccessToken() (string, error)
+	BaseAPI
 	GetAuthorizations() error
-	GetMeteringPoints(bool) ([]MeteringPoints, error)
-	GetMeteringPointDetails(meteringPointIDs []string) ([]MeteringPointDetails, error)
-	GetCharges() error
-	GetTimeSeries(query TimeseriesQuery) ([]TimeSeriesResponse, error)
-	GetMeterReadings() error
+	GetMeteringPoints(scope, identifier string) ([]MeteringPoints, error)
 }

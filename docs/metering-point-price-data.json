@@ -1,0 +1,54 @@
+{
+    "result": [
+        {
+            "result": {
+                "meteringPointId": "string",
+                "subscriptions": [
+                    {
+                        "subscriptionId": "string",
+                        "name": "string",
+                        "description": "string",
+                        "owner": "string",
+                        "validFromDate": "string",
+                        "validToDate": "string",
+                        "price": 0,
+                        "quantity": 0
+                    }
+                ],
+                "fees": [
+                    {
+                        "feeId": "string",
+                        "name": "string",
+                        "description": "string",
+                        "owner": "string",
+                        "validFromDate": "string",
+                        "validToDate": "string",
+                        "price": 0,
+                        "quantity": 0
+                    }
+                ],
+                "tariffs": [
+                    {
+                        "tariffId": "string",
+                        "name": "string",
+                        "description": "string",
+                        "owner": "string",
+                        "periodType": "string",
+                        "validFromDate": "string",
+                        "validToDate": "string",
+                        "prices": [
+                            {
+                                "position": "string",
+                                "price": 0
+                            }
+                        ]
+                    }
+                ]
+            },
+            "success": true,
+            "errorCode": 10000,
+            "errorText": "string",
+            "id": "string"
+        }
+    ]
+}
