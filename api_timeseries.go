@@ -28,8 +28,8 @@ type MRIDResponse struct {
 }
 
 type TimeInterval struct {
-	Start string `json:"start"`
-	End   string `json:"end"`
+	Start time.Time `json:"start"`
+	End   time.Time `json:"end"`
 }
 
 type TimeSeriesTimeSeriesResponse struct {
@@ -38,7 +38,7 @@ type TimeSeriesTimeSeriesResponse struct {
 	CurveType             string                        `json:"curveType"`
 	Measurement_Unit_name string                        `json:"measurement_Unit.name"`
 	MarketEvaluationPoint MarketEvaluationPointResponse `json:"MarketEvaluationPoint"`
-	Period                []PeriodResponse              `json:"Period"`
+	Periods               []PeriodResponse              `json:"Period"`
 }
 
 type MarketEvaluationPointResponse struct {
@@ -48,7 +48,7 @@ type MarketEvaluationPointResponse struct {
 type PeriodResponse struct {
 	Resolution   string          `json:"resolution"`
 	TimeInterval TimeInterval    `json:"timeInterval"`
-	Point        []PointResponse `json:"point"`
+	Points       []PointResponse `json:"point"`
 }
 
 type PointResponse struct {
