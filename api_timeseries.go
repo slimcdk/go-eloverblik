@@ -83,6 +83,7 @@ func (c *client) GetTimeSeries(meteringPointIDs []string, from, to time.Time, ag
 	// Build URL
 	_url := c.hostUrl
 	_url.Path += fmt.Sprintf("/MeterData/GetTimeSeries/%s/%s/%s", dateFrom, dateTo, aggregation)
+	fmt.Println(_url.Path)
 
 	// Construct body payload
 	var buf bytes.Buffer
