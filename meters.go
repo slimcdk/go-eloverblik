@@ -1,12 +1,9 @@
 package eloverblik
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
+	"time"
 )
 
 type MeteringPoints struct {
@@ -16,8 +13,8 @@ type MeteringPoints struct {
 	StreetCode              string                `json:"streetCode"`
 	StreetName              string                `json:"streetName"`
 	BuildingNumber          string                `json:"buildingNumber"`
-	FloorId                 string                `json:"floorId"`
-	RoomId                  string                `json:"roomId"`
+	FloorID                 string                `json:"floorId"`
+	RoomID                  string                `json:"roomId"`
 	Postcode                string                `json:"postcode"`
 	CityName                string                `json:"cityName"`
 	CitySubDivisionName     string                `json:"citySubDivisionName"`
@@ -30,7 +27,7 @@ type MeteringPoints struct {
 	ConsumerCVR             string                `json:"consumerCVR"`
 	DataAccessCVR           string                `json:"dataAccessCVR"`
 	MeterNumber             string                `json:"meterNumber"`
-	ConsumerStartDate       string                `json:"consumerStartDate"` // TODO: Parse time
+	ConsumerStartDate       time.Time             `json:"consumerStartDate"`
 	HasRelation             bool                  `json:"hasRelation"`
 	ChildMeteringPoints     []ChildMeteringPoints `json:"childMeteringPoints"`
 }
@@ -49,8 +46,8 @@ type MeteringPointDetails struct {
 }
 
 type MeteringPointDetail struct {
-	MeteringPointId                string               `json:"meteringPointId"`
-	ParentMeteringPointId          string               `json:"parentMeteringPointId"`
+	MeteringPointID                string               `json:"meteringPointId"`
+	ParentMeteringPointID          string               `json:"parentMeteringPointId"`
 	TypeOfMP                       string               `json:"typeOfMP"`
 	EnergyTimeSeriesMeasureUnit    string               `json:"energyTimeSeriesMeasureUnit"`
 	EstimatedAnnualVolume          string               `json:"estimatedAnnualVolume"`
@@ -71,7 +68,7 @@ type MeteringPointDetail struct {
 	Product                        string               `json:"product"`
 	ConsumerCVR                    string               `json:"consumerCVR"`
 	DataAccessCVR                  string               `json:"dataAccessCVR"`
-	ConsumerStartDate              string               `json:"consumerStartDate"` // TODO: Parse time
+	ConsumerStartDate              time.Time            `json:"consumerStartDate"`
 	MeterReadingOccurrence         string               `json:"meterReadingOccurrence"`
 	MpReadingCharacteristics       string               `json:"mpReadingCharacteristics"`
 	MeterCounterDigits             string               `json:"meterCounterDigits"`
@@ -79,15 +76,15 @@ type MeteringPointDetail struct {
 	MeterCounterUnit               string               `json:"meterCounterUnit"`
 	MeterCounterType               string               `json:"meterCounterType"`
 	BalanceSupplierName            string               `json:"balanceSupplierName"`
-	BalanceSupplierStartDate       string               `json:"balanceSupplierStartDate"` // TODO: Parse time
+	BalanceSupplierStartDate       time.Time            `json:"balanceSupplierStartDate"`
 	TaxReduction                   string               `json:"taxReduction"`
-	TaxSettlementDate              string               `json:"taxSettlementDate"` // TODO: Parse time
+	TaxSettlementDate              time.Time            `json:"taxSettlementDate"`
 	MpRelationType                 string               `json:"mpRelationType"`
 	StreetCode                     string               `json:"streetCode"`
 	StreetName                     string               `json:"streetName"`
 	BuildingNumber                 string               `json:"buildingNumber"`
-	FloorId                        string               `json:"floorId"`
-	RoomId                         string               `json:"roomId"`
+	FloorID                        string               `json:"floorId"`
+	RoomID                         string               `json:"roomId"`
 	Postcode                       string               `json:"postcode"`
 	CityName                       string               `json:"cityName"`
 	CitySubDivisionName            string               `json:"citySubDivisionName"`
@@ -105,8 +102,8 @@ type ContactAddress struct {
 	AddressCode         string `json:"addressCode"`
 	StreetName          string `json:"streetName"`
 	BuildingNumber      string `json:"buildingNumber"`
-	FloorId             string `json:"floorId"`
-	RoomId              string `json:"roomId"`
+	FloorID             string `json:"floorId"`
+	RoomID              string `json:"roomId"`
 	CitySubDivisionName string `json:"citySubDivisionName"`
 	Postcode            string `json:"postcode"`
 	CityName            string `json:"cityName"`
@@ -118,106 +115,105 @@ type ContactAddress struct {
 }
 
 type ChildMeteringPoint struct {
-	MeteringPointId        string `json:"meteringPointId"`
-	ParentMeteringPointId  string `json:"parentMeteringPointId"`
+	MeteringPointID        string `json:"meteringPointId"`
+	ParentMeteringPointID  string `json:"parentMeteringPointId"`
 	TypeOfMP               string `json:"typeOfMP"`
 	MeterReadingOccurrence string `json:"meterReadingOccurrence"`
 	MeterNumber            string `json:"meterNumber"`
 }
 
-func (c *client) GetMeteringPointDetails(meteringPointIDs []string) ([]MeteringPointDetails, error) {
+// func (c *client) GetMeteringPointDetails(meteringPointIDs []string) ([]MeteringPointDetails, error) {
 
-	// Build URL
-	_url := c.hostUrl
-	_url.Path += "/MeteringPoints/MeteringPoint/GetDetails"
+// 	// Build URL
+// 	_url := c.hostUrl
+// 	_url.Path += "/MeteringPoints/MeteringPoint/GetDetails"
 
-	// Construct body payload
-	var buf bytes.Buffer
-	err := json.NewEncoder(&buf).Encode(meteringPointIDsToRequestStruct(meteringPointIDs))
+// 	// Construct body payload
+// 	var buf bytes.Buffer
+// 	err := json.NewEncoder(&buf).Encode(meteringPointIDsToRequestStruct(meteringPointIDs))
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	// Construct payload and endpoint path
+// 	req, err := http.NewRequest(http.MethodPost, _url.String(), &buf)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.accessToken))
+// 	req.Header.Set("Content-Type", "application/json")
+
+// 	// Make request and parse response
+// 	res, err := c.client.Do(req)
+// 	if isRetryableError(res.StatusCode, err) {
+// 		return c.GetMeteringPointDetails(meteringPointIDs)
+// 	}
+
+// 	// Decode response result
+// 	var result struct {
+// 		Result []MeteringPointDetails `json:"result"`
+// 	}
+// 	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
+// 		return nil, err
+// 	}
+
+// 	return result.Result, err
+// }
+
+func (c *client) GetMeteringPoints(includeAll bool) ([]MeteringPoints, error) {
+
+	// Ensure access token is fresh
+	accessToken, err := c.GetDataAccessToken()
 	if err != nil {
 		return nil, err
 	}
-	// Construct payload and endpoint path
-	req, err := http.NewRequest(http.MethodPost, _url.String(), &buf)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.accessToken))
-	req.Header.Set("Content-Type", "application/json")
 
-	// Make request and parse response
-	res, err := c.client.Do(req)
-	if isRetryableError(res.StatusCode, err) {
-		return c.GetMeteringPointDetails(meteringPointIDs)
-	}
-
-	// Decode response result
-	var result struct {
-		Result []MeteringPointDetails `json:"result"`
-	}
-	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-
-	return result.Result, err
-}
-
-func (c *CustomerClient) GetMeteringPoints(includeAll bool) ([]MeteringPoints, error) {
-
-	// Build URL
-	_url := c.hostUrl
-	_url.RawQuery = url.Values{"includeAll": {strconv.FormatBool(includeAll)}}.Encode()
-	_url.Path += "/MeteringPoints/MeteringPoints"
-
-	// Construct payload and endpoint path
-	req, err := http.NewRequest(http.MethodGet, _url.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.accessToken))
-
-	// Make request and parse response
-	res, err := c.client.client.Do(req)
-	if isRetryableError(res.StatusCode, err) {
-		return c.GetMeteringPoints(includeAll)
-	}
-
-	// Decode response result
+	// Response struct
 	var result struct {
 		Result []MeteringPoints `json:"result"`
 	}
-	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
+
+	// Request preflight
+	req := c.resty.R()
+	req.SetHeader("Accept", "application/json")
+	req.SetAuthToken(accessToken)
+	req.SetResult(&result)
+	req.SetPathParams(map[string]string{
+		"includeAll": strconv.FormatBool(includeAll),
+	})
+
+	// Execute request
+	res, err := req.Get("/MeteringPoints/MeteringPoints")
+	if err != nil || res.StatusCode() != http.StatusOK {
 		return nil, err
 	}
-
 	return result.Result, err
 }
 
-func (c *ThirdPartyClient) GetMeteringPoints(scope, identifier string) ([]MeteringPoints, error) {
-	// Build URL
-	_url := c.hostUrl
-	_url.Path += fmt.Sprintf("/MeteringPoints/MeteringPoints/%s/%s", scope, identifier)
+// func (c *client) GetMeteringPointsForScope(scope, identifier string) ([]MeteringPoints, error) {
+// 	// Build URL
+// 	_url := c.hostUrl
+// 	_url.Path += fmt.Sprintf("/MeteringPoints/MeteringPoints/%s/%s", scope, identifier)
 
-	// Construct payload and endpoint path
-	req, err := http.NewRequest(http.MethodGet, _url.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.accessToken))
+// 	// Construct payload and endpoint path
+// 	req, err := http.NewRequest(http.MethodGet, _url.String(), nil)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.accessToken))
 
-	// Make request and parse response
-	res, err := c.client.client.Do(req)
-	if isRetryableError(res.StatusCode, err) {
-		return c.GetMeteringPoints(scope, identifier)
-	}
+// 	// Make request and parse response
+// 	res, err := c.client.client.Do(req)
+// 	if isRetryableError(res.StatusCode, err) {
+// 		return c.GetMeteringPoints(scope, identifier)
+// 	}
 
-	// Decode response result
-	var result struct {
-		Result []MeteringPoints `json:"result"`
-	}
-	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
-		return nil, err
-	}
+// 	// Decode response result
+// 	var result struct {
+// 		Result []MeteringPoints `json:"result"`
+// 	}
+// 	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
+// 		return nil, err
+// 	}
 
-	return result.Result, err
-}
+// 	return result.Result, err
+// }

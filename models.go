@@ -15,3 +15,13 @@ type StatusResponse struct {
 	ID         string `json:"id"`
 	StackTrace string `json:"stackTrace"`
 }
+
+type TimeseriesError struct {
+	Type    string `json:"type"`
+	Title   string `json:"title"`
+	Status  int    `json:"status"`
+	TraceID string `json:"traceId"`
+	Errors  struct {
+		DollarSign []string `json:"$"`
+	} `json:"errors"`
+}

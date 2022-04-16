@@ -2,51 +2,57 @@ package eloverblik
 
 import (
 	"fmt"
+	"log"
 	"net/http"
-	"net/url"
+
+	"github.com/go-resty/resty/v2"
 )
 
 type client struct {
 	refreshToken string
 	accessToken  string
-	hostUrl      url.URL
-	client       *http.Client
+	resty        *resty.Client
+	log          *log.Logger
 }
 
-type CustomerClient struct{ *client }
-type ThirdPartyClient struct{ *client }
+// Base struct
+func buildClient(refreshToken string, apiType APIType) (client, error) {
 
-// Base struct to authenticate with fetch access tokens
-func newClient(refreshToken string, hostUrl url.URL) (*client, error) {
-	c := client{
-		refreshToken: refreshToken,
-		hostUrl:      hostUrl,
-		client:       http.DefaultClient,
-	}
-	return &c, c.authenticate()
+	// Set resty client parameters
+	r := resty.NewWithClient(http.DefaultClient)
+	r.SetBaseURL(fmt.Sprintf("https://%s/%s/api/1", hostModeMap[Mode], apiType+"api"))
+	c := client{refreshToken: refreshToken, resty: r}
+	return c, c.authenticate()
 }
 
 // NewCustomerClient wraps NewCustomerApi calls.
-func NewCustomerClient(refreshToken string) (CustomerAPI, error) {
-
-	hostUrl := url.URL{
-		Scheme: HTTP_SCHEME,
-		Host:   PROD_HOST,
-		Path:   fmt.Sprintf("%s/%s", CUSTOMER_ENDPOINTS, API_VERSION_1),
-	}
-
-	c, err := newClient(refreshToken, hostUrl)
-	return &CustomerClient{client: c}, err
+func CustomerClient(refreshToken string) (Customer, error) {
+	c, err := buildClient(refreshToken, customerApiAtype)
+	return Customer(&c), err
 }
 
 // NewThirdPartyClient wraps ThirdPartyApi calls.
-func NewThirdPartyClient(refreshToken string) (ThirdPartyAPI, error) {
-	hostUrl := url.URL{
-		Scheme: HTTP_SCHEME,
-		Host:   PROD_HOST,
-		Path:   fmt.Sprintf("%s/%s", THIRDPART_ENDPOINTS, API_VERSION_1),
+func ThirdPartyClient(refreshToken string) (ThirdParty, error) {
+	c, err := buildClient(refreshToken, thirdPartyApiType)
+	return ThirdParty(&c), err
+}
+
+// SetMode
+func SetMode(value string) {
+	if value == "" {
+		value = TestMode
 	}
 
-	c, err := newClient(refreshToken, hostUrl)
-	return &ThirdPartyClient{client: c}, err
+	switch value {
+	case TestMode:
+		Mode = TestMode
+	case ReleaseMode:
+		Mode = ReleaseMode
+	default:
+		panic("gin mode unknown: " + value + " (available mode: debug release test)")
+	}
+}
+
+func (c *client) SetLogger(log *log.Logger) {
+	c.log = log
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 type MeteringPointPrices struct {
@@ -20,36 +21,36 @@ type MeteringPointPrice struct {
 }
 
 type Subscription struct {
-	SubscriptionId string  `json:"subscriptionId"`
-	Name           string  `json:"name"`
-	Description    string  `json:"description"`
-	Owner          string  `json:"owner"`
-	ValidFromDate  string  `json:"validFromDate"` // TODO: Parse time
-	ValidToDate    string  `json:"validToDate"`   // TODO: Parse time
-	Price          float32 `json:"price"`         // TODO: Correct int type?
-	Quantity       int     `json:"quantity"`      // TODO: Correct int type?
+	SubscriptionID string    `json:"subscriptionId"`
+	Name           string    `json:"name"`
+	Description    string    `json:"description"`
+	Owner          string    `json:"owner"`
+	ValidFromDate  time.Time `json:"validFromDate"`
+	ValidToDate    time.Time `json:"validToDate"`
+	Price          float32   `json:"price"`    // TODO: Correct int type?
+	Quantity       int       `json:"quantity"` // TODO: Correct int type?
 }
 
 type Fee struct {
-	FeeId         string `json:"feeId"`
-	Name          string `json:"name"`
-	Description   string `json:"description"`
-	Owner         string `json:"owner"`
-	ValidFromDate string `json:"validFromDate"` // TODO: Parse time
-	ValidToDate   string `json:"validToDate"`   // TODO: Parse time
-	Price         int    `json:"price"`         // TODO: Correct int type?
-	Quantity      int    `json:"quantity"`      // TODO: Correct int type?
+	FeeID         string    `json:"feeId"`
+	Name          string    `json:"name"`
+	Description   string    `json:"description"`
+	Owner         string    `json:"owner"`
+	ValidFromDate time.Time `json:"validFromDate"`
+	ValidToDate   time.Time `json:"validToDate"`
+	Price         int       `json:"price"`    // TODO: Correct int type?
+	Quantity      int       `json:"quantity"` // TODO: Correct int type?
 }
 
 type Tariff struct {
-	TariffId      string  `json:"tariffId"`
-	Name          string  `json:"name"`
-	Description   string  `json:"description"`
-	Owner         string  `json:"owner"`
-	PeriodType    string  `json:"periodType"`
-	ValidFromDate string  `json:"validFromDate"` // TODO: Parse time
-	ValidToDate   string  `json:"validToDate"`   // TODO: Parse time
-	Prices        []Price `json:"prices"`
+	TariffID      string    `json:"tariffId"`
+	Name          string    `json:"name"`
+	Description   string    `json:"description"`
+	Owner         string    `json:"owner"`
+	PeriodType    string    `json:"periodType"`
+	ValidFromDate time.Time `json:"validFromDate"`
+	ValidToDate   time.Time `json:"validToDate"`
+	Prices        []Price   `json:"prices"`
 }
 
 type Price struct {
