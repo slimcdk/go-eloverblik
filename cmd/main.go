@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -40,13 +41,20 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	meter := meters[0]
+	var meter eloverblik.MeteringPoints
+	for _, m := range meters {
+		if strings.Compare(m.MeteringPointID, "571313154390571520") == 0 {
+			meter = m
+			break
+		}
+	}
+	prettyPrint(meter)
 
 	ts, err := e.GetTimeSeries(
 		[]string{meter.MeteringPointID},
 		meter.ConsumerStartDate,
-		meter.ConsumerStartDate.Add(time.Hour*24*7),
-		//time.Now(),
+		//meter.ConsumerStartDate.Add(eloverblik.MaximumRequestDuration),
+		time.Now(),
 		eloverblik.Quarter,
 	)
 	if err != nil {
@@ -54,6 +62,6 @@ func main() {
 	}
 
 	fmt.Println("Fetched timeseries")
-	prettyPrint(ts)
+	prettyPrint(ts[0].Flatten())
 	fmt.Println()
 }
