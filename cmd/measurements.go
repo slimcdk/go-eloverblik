@@ -34,7 +34,6 @@ var timeseriesCmd = &cobra.Command{
 		return nil
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		cobra.CheckErr(gout.BindCobra(cmd, nil))
 		fromFlag, _ := cmd.Flags().GetString("from")
 		toFlag, _ := cmd.Flags().GetString("to")
 		aggregation, _ := cmd.Flags().GetString("aggregation")

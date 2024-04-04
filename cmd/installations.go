@@ -9,7 +9,6 @@ import (
 var installationsCmd = &cobra.Command{
 	Use: "installations",
 	Run: func(cmd *cobra.Command, args []string) {
-		cobra.CheckErr(gout.BindCobra(cmd, nil))
 
 		includeAll, _ := cmd.Flags().GetBool("include-all")
 
