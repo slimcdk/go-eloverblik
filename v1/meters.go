@@ -173,13 +173,13 @@ func (c *client) GetMeteringPoints(includeAll bool) ([]MeteringPoints, error) {
 	}
 
 	// Request preflight
-	req := c.resty.R()
-	req.SetHeader("Accept", "application/json")
-	req.SetAuthToken(accessToken)
-	req.SetResult(&result)
-	req.SetPathParams(map[string]string{
-		"includeAll": strconv.FormatBool(includeAll),
-	})
+	req := c.resty.R().
+		SetHeader("Accept", "application/json").
+		SetAuthToken(accessToken).
+		SetResult(&result).
+		SetPathParams(map[string]string{
+			"includeAll": strconv.FormatBool(includeAll),
+		})
 
 	// Execute request
 	res, err := req.Get("/MeteringPoints/MeteringPoints")

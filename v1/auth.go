@@ -11,10 +11,10 @@ func (c *client) authenticate() error {
 	}
 
 	// Request preflight
-	req := c.resty.R()
-	req.SetHeader("Accept", "application/json")
-	req.SetAuthToken(c.refreshToken)
-	req.SetResult(&result)
+	req := c.resty.R().
+		SetHeader("Accept", "application/json").
+		SetAuthToken(c.refreshToken).
+		SetResult(&result)
 
 	// Execute request
 	res, err := req.Get("/token")
