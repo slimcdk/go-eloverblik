@@ -72,12 +72,14 @@ type MeterReadingData struct {
 }
 
 type FlatTimeSeriesPoint struct {
-	From, To     time.Time
-	Measurement  float64
-	Quality      string
-	Unit         string
-	CurveType    string
-	BusinessType string
+	From         time.Time  `json:"from"`
+	To           time.Time  `json:"to"`
+	Measurement  float64    `json:"measurement"`
+	Quality      string     `json:"quality"`
+	Unit         string     `json:"unit"`
+	CurveType    string     `json:"curvetype"`
+	BusinessType string     `json:"businesstype"`
+	Resolution   Resolution `json:"resolution"`
 }
 
 // GetTimeSeries fetches meter accumulated meter readings within the given aggregation
@@ -96,15 +98,15 @@ func (c *client) GetTimeSeries(meteringPointIDs []string, from, to time.Time, ag
 	}
 
 	// Request preflight
-	req := c.resty.R()
-	req.SetHeader("Accept", "application/json")
-	req.SetAuthToken(accessToken)
-	req.SetResult(&result)
-	req.SetError(&apiErrorMsg)
-	req.SetBody(meteringPointIDsToRequestStruct(meteringPointIDs))
+	req := c.resty.R().
+		SetHeader("Accept", "application/json").
+		SetAuthToken(accessToken).
+		SetResult(&result).
+		SetError(&apiErrorMsg).
+		SetBody(meteringPointIDsToRequestStruct(meteringPointIDs))
 
 	// Execute request
-	res, err := req.Post(fmt.Sprintf("/MeterData/GetTimeSeries/%s/%s/%s", from.Format(requestDateFormat), to.Format(requestDateFormat), aggregation))
+	res, err := req.Post(fmt.Sprintf("/MeterData/GetTimeSeries/%s/%s/%s", from.In(cph).Format(time.DateOnly), to.In(cph).Format(time.DateOnly), aggregation))
 	if err != nil {
 		return nil, err
 	}
@@ -132,21 +134,18 @@ func (c *client) GetMeterReadings(meteringPointIDs []string, from, to time.Time)
 	}
 
 	// Request preflight
-	req := c.resty.R()
-	req.SetHeader("Accept", "application/json")
-	req.SetAuthToken(accessToken)
-	req.SetResult(&result)
-	req.SetError(&resError)
-	req.SetBody(meteringPointIDsToRequestStruct(meteringPointIDs))
+	req := c.resty.R().
+		SetHeader("Accept", "application/json").
+		SetAuthToken(accessToken).
+		SetResult(&result).
+		SetError(&resError).
+		SetBody(meteringPointIDsToRequestStruct(meteringPointIDs))
 
 	// Execute request
-	res, err := req.Post(fmt.Sprintf("/MeterData/GetMeterReadings/%s/%s", from.Format(requestDateFormat), to.Format(requestDateFormat)))
+	res, err := req.Post(fmt.Sprintf("/MeterData/GetMeterReadings/%s/%s", from.In(cph).Format(time.DateOnly), to.In(cph).Format(time.DateOnly)))
 	if err != nil || res.StatusCode() != http.StatusOK {
 		return nil, err
 	}
-
-	fmt.Println(res.Request.URL)
-
 	return result.Result, err
 }
 
@@ -157,18 +156,40 @@ func (ts *TimeSeries) Flatten() []FlatTimeSeriesPoint {
 
 	for _, ts := range ts.MyEnergyDataMarketDocument.TimeSeries {
 		for _, period := range ts.Periods {
+
+			var resolution time.Duration
+			switch Resolution(period.Resolution) {
+			case PT15M:
+				resolution = time.Minute * 15
+			case PT1H:
+				resolution = time.Hour
+			case PT1D:
+				resolution = time.Hour * 24
+			}
+
 			for _, point := range period.Points {
 
-				offset := time.Hour * time.Duration(point.Position-1)
+				offset := time.Duration(point.Position-1) * resolution
+
+				var to time.Time
+				switch Resolution(period.Resolution) {
+				case P1M:
+					to = period.TimeInterval.End.In(cph)
+				case PT1Y:
+					to = period.TimeInterval.End.In(cph)
+				default:
+					to = period.TimeInterval.Start.In(cph).Add(offset).Add(resolution)
+				}
 
 				fts = append(fts, FlatTimeSeriesPoint{
-					From:         period.TimeInterval.Start.Add(offset),
-					To:           period.TimeInterval.Start.Add(offset).Add(time.Hour),
+					From:         period.TimeInterval.Start.In(cph).Add(offset),
+					To:           to,
 					Measurement:  point.OutQuantityQuantity,
 					Quality:      point.OutQuantityQuality,
 					Unit:         ts.MeasurementUnitName,
 					CurveType:    ts.CurveType,
 					BusinessType: ts.BusinessType,
+					Resolution:   Resolution(period.Resolution),
 				})
 			}
 		}

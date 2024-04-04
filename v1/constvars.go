@@ -4,6 +4,7 @@ import "time"
 
 type Aggregation string
 type APIType string
+type Resolution string
 
 const (
 	testModeHost      string  = "apipreprod.eloverblik.dk"
@@ -29,6 +30,8 @@ var (
 		"preprod":       testModeHost, // Testing purposes
 		"preproduction": testModeHost, // Testing purposes
 	}
+
+	cph, _ = time.LoadLocation("Europe/Copenhagen")
 )
 
 const (
@@ -38,11 +41,15 @@ const (
 	Day     Aggregation = "Day"
 	Month   Aggregation = "Month"
 	Year    Aggregation = "Year"
+
+	PT15M Resolution = "PT15M"
+	PT1H  Resolution = "PT1H"
+	PT1D  Resolution = "PT1D"
+	P1M   Resolution = "P1M"
+	PT1Y  Resolution = "PT1Y"
 )
 
 const (
-	requestDateFormat string = "2006-01-02"
-
 	MaximumDayRequestLeap  int           = 730
 	MaximumRequestDuration time.Duration = time.Hour * 24 * 730
 )
