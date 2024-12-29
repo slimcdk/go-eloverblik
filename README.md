@@ -1,1 +1,1 @@
-# Golang API wrapper client for eloverblik.dk
+# Go client for eloverblik.dk

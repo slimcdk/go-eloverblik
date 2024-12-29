@@ -1,4 +1,3 @@
-
 # Created by https://www.toptal.com/developers/gitignore/api/go,windows,macos,linux,dotenv
 # Edit at https://www.toptal.com/developers/gitignore?templates=go,windows,macos,linux,dotenv
 
@@ -27,10 +26,6 @@
 
 # Go workspace file
 go.work
-
-### Go Patch ###
-/vendor/
-/Godeps/
 
 ### Linux ###
 *~
@@ -75,6 +70,10 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
+
+### macOS Patch ###
+# iCloud generated files
+*.icloud
 
 ### Windows ###
 # Windows thumbnail cache files
