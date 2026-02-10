@@ -1,15 +1,14 @@
-// For format details, see https://aka.ms/devcontainer.json. For config options, see the
-// README at: https://github.com/devcontainers/templates/tree/main/src/go
 {
-	"name": "Go",
-	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-	"image": "mcr.microsoft.com/devcontainers/go:1-1.23-bookworm",
+	"name": "Go wrapper for Eloverblik ",
+	"image": "mcr.microsoft.com/devcontainers/go:2-1.25-trixie",
 	"privileged": true,
 	"capAdd": ["SYS_PTRACE"],
 	"securityOpt": ["seccomp=unconfined"],
 	
 	"features": {
-		"ghcr.io/devcontainers/features/docker-in-docker:2": {},
+		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+			"moby": false
+		},
 		"ghcr.io/devcontainers/features/github-cli:1": {},
 		"ghcr.io/guiyomh/features/golangci-lint:0": {},
 		"ghcr.io/devcontainers-extra/features/act:1": {},
@@ -30,7 +29,12 @@
 		
 			// Add the IDs of extensions you want installed when the container is created.
 			"extensions": [
-				"golang.Go"
+				"golang.Go",
+				"github.vscode-github-actions",
+				"esbenp.prettier-vscode",
+                "dbaeumer.vscode-eslint",
+                "eamodio.gitlens",
+                "shardulm94.trailing-spaces"
 			]
 		}
 	},
