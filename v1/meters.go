@@ -1,9 +1,10 @@
 package eloverblik
 
 import (
+	"fmt"
+	"io"
 	"net/http"
 	"strconv"
-	"time"
 )
 
 type MeteringPoints struct {
@@ -27,7 +28,7 @@ type MeteringPoints struct {
 	ConsumerCVR             string                `json:"consumerCVR"`
 	DataAccessCVR           string                `json:"dataAccessCVR"`
 	MeterNumber             string                `json:"meterNumber"`
-	ConsumerStartDate       time.Time             `json:"consumerStartDate"`
+	ConsumerStartDate       FlexibleTime          `json:"consumerStartDate"`
 	HasRelation             bool                  `json:"hasRelation"`
 	ChildMeteringPoints     []ChildMeteringPoints `json:"childMeteringPoints"`
 }
@@ -40,8 +41,8 @@ type ChildMeteringPoints struct {
 	MeterNumber            string `json:"meterNumber"`
 }
 
-type MeteringPointDetails struct {
-	Result MeteringPointDetail `json:"result"`
+type MeteringPointDetailsResponse struct {
+	Result MeteringPointDetail `json:"result,omitempty"`
 	StatusResponse
 }
 
@@ -68,7 +69,7 @@ type MeteringPointDetail struct {
 	Product                        string               `json:"product"`
 	ConsumerCVR                    string               `json:"consumerCVR"`
 	DataAccessCVR                  string               `json:"dataAccessCVR"`
-	ConsumerStartDate              time.Time            `json:"consumerStartDate"`
+	ConsumerStartDate              FlexibleTime         `json:"consumerStartDate"`
 	MeterReadingOccurrence         string               `json:"meterReadingOccurrence"`
 	MpReadingCharacteristics       string               `json:"mpReadingCharacteristics"`
 	MeterCounterDigits             string               `json:"meterCounterDigits"`
@@ -76,9 +77,9 @@ type MeteringPointDetail struct {
 	MeterCounterUnit               string               `json:"meterCounterUnit"`
 	MeterCounterType               string               `json:"meterCounterType"`
 	BalanceSupplierName            string               `json:"balanceSupplierName"`
-	BalanceSupplierStartDate       time.Time            `json:"balanceSupplierStartDate"`
+	BalanceSupplierStartDate       FlexibleTime         `json:"balanceSupplierStartDate"`
 	TaxReduction                   string               `json:"taxReduction"`
-	TaxSettlementDate              time.Time            `json:"taxSettlementDate"`
+	TaxSettlementDate              FlexibleTime         `json:"taxSettlementDate"`
 	MpRelationType                 string               `json:"mpRelationType"`
 	StreetCode                     string               `json:"streetCode"`
 	StreetName                     string               `json:"streetName"`
@@ -122,43 +123,6 @@ type ChildMeteringPoint struct {
 	MeterNumber            string `json:"meterNumber"`
 }
 
-// func (c *client) GetMeteringPointDetails(meteringPointIDs []string) ([]MeteringPointDetails, error) {
-
-// 	// Build URL
-// 	_url := c.hostUrl
-// 	_url.Path += "/MeteringPoints/MeteringPoint/GetDetails"
-
-// 	// Construct body payload
-// 	var buf bytes.Buffer
-// 	err := json.NewEncoder(&buf).Encode(meteringPointIDsToRequestStruct(meteringPointIDs))
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	// Construct payload and endpoint path
-// 	req, err := http.NewRequest(http.MethodPost, _url.String(), &buf)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.accessToken))
-// 	req.Header.Set("Content-Type", "application/json")
-
-// 	// Make request and parse response
-// 	res, err := c.client.Do(req)
-// 	if isRetryableError(res.StatusCode, err) {
-// 		return c.GetMeteringPointDetails(meteringPointIDs)
-// 	}
-
-// 	// Decode response result
-// 	var result struct {
-// 		Result []MeteringPointDetails `json:"result"`
-// 	}
-// 	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
-// 		return nil, err
-// 	}
-
-// 	return result.Result, err
-// }
-
 func (c *client) GetMeteringPoints(includeAll bool) ([]MeteringPoints, error) {
 
 	// Ensure access token is fresh
@@ -189,31 +153,64 @@ func (c *client) GetMeteringPoints(includeAll bool) ([]MeteringPoints, error) {
 	return result.Result, err
 }
 
-// func (c *client) GetMeteringPointsForScope(scope, identifier string) ([]MeteringPoints, error) {
-// 	// Build URL
-// 	_url := c.hostUrl
-// 	_url.Path += fmt.Sprintf("/MeteringPoints/MeteringPoints/%s/%s", scope, identifier)
+func (c *client) GetMeteringPointDetails(meteringPointIDs []string) ([]MeteringPointDetailsResponse, error) {
+	// Ensure access token is fresh
+	accessToken, err := c.GetDataAccessToken()
+	if err != nil {
+		return nil, err
+	}
 
-// 	// Construct payload and endpoint path
-// 	req, err := http.NewRequest(http.MethodGet, _url.String(), nil)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.accessToken))
+	var path string
+	switch c.apiType {
+	case CustomerApi:
+		path = "/meteringpoints/meteringpoint/getdetails"
+	case ThirdPartyApi:
+		path = "/meteringpoint/getdetails"
+	default:
+		return nil, fmt.Errorf("unsupported API type for GetMeteringPointDetails")
+	}
 
-// 	// Make request and parse response
-// 	res, err := c.client.client.Do(req)
-// 	if isRetryableError(res.StatusCode, err) {
-// 		return c.GetMeteringPoints(scope, identifier)
-// 	}
+	var result struct {
+		Result []MeteringPointDetailsResponse `json:"result"`
+	}
+	var apiErrorMsg string
 
-// 	// Decode response result
-// 	var result struct {
-// 		Result []MeteringPoints `json:"result"`
-// 	}
-// 	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
-// 		return nil, err
-// 	}
+	res, err := c.resty.R().
+		SetAuthToken(accessToken).
+		SetBody(meteringPointIDsToRequestStruct(meteringPointIDs)).
+		SetResult(&result).
+		SetError(&apiErrorMsg).
+		Post(path)
 
-// 	return result.Result, err
-// }
+	if err != nil {
+		return nil, err
+	}
+	if err = apiError(apiErrorMsg, res.StatusCode()); err != nil {
+		return nil, err
+	}
+
+	return result.Result, nil
+}
+
+func (c *client) ExportMasterdata(meteringPointIDs []string) (io.ReadCloser, error) {
+	if c.apiType != CustomerApi {
+		return nil, fmt.Errorf("ExportMasterdata is only available for Customer API")
+	}
+
+	accessToken, err := c.GetDataAccessToken()
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := c.resty.R().
+		SetAuthToken(accessToken).
+		SetBody(meteringPointIDsToRequestStruct(meteringPointIDs)).
+		SetDoNotParseResponse(true).
+		Post("/meteringpoints/masterdata/export")
+
+	if err != nil || !res.IsSuccess() {
+		return nil, fmt.Errorf("failed to export masterdata, status: %s, err: %v", res.Status(), err)
+	}
+
+	return res.RawBody(), nil
+}

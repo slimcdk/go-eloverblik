@@ -2,7 +2,7 @@ package eloverblik
 
 import (
 	"fmt"
-	"net/http"
+	"io"
 	"time"
 )
 
@@ -55,22 +55,6 @@ type PointResponse struct {
 	OutQuantityQuality  string  `json:"out_Quantity.quality"`
 }
 
-type MeterReading struct {
-	Result struct {
-		MeteringPointID string             `json:"meteringPointId"`
-		MeterReadings   []MeterReadingData `json:"readings"`
-	} `json:"result"`
-	StatusResponse
-}
-
-type MeterReadingData struct {
-	ReadingDate      time.Time `json:"readingDate"`
-	RegistrationDate time.Time `json:"registrationDate"`
-	MeterNumber      string    `json:"meterNumber"`
-	MeterReading     string    `json:"meterReading"`
-	MeasurementUnit  string    `json:"measurementUnit"`
-}
-
 type FlatTimeSeriesPoint struct {
 	From         time.Time  `json:"from"`
 	To           time.Time  `json:"to"`
@@ -105,8 +89,11 @@ func (c *client) GetTimeSeries(meteringPointIDs []string, from, to time.Time, ag
 		SetError(&apiErrorMsg).
 		SetBody(meteringPointIDsToRequestStruct(meteringPointIDs))
 
+	// Both Customer and ThirdParty APIs use the same lowercase path
+	path := fmt.Sprintf("/meterdata/gettimeseries/%s/%s/%s", from.In(cph).Format(time.DateOnly), to.In(cph).Format(time.DateOnly), aggregation)
+
 	// Execute request
-	res, err := req.Post(fmt.Sprintf("/MeterData/GetTimeSeries/%s/%s/%s", from.In(cph).Format(time.DateOnly), to.In(cph).Format(time.DateOnly), aggregation))
+	res, err := req.Post(path)
 	if err != nil {
 		return nil, err
 	}
@@ -116,36 +103,6 @@ func (c *client) GetTimeSeries(meteringPointIDs []string, from, to time.Time, ag
 		return nil, err
 	}
 
-	return result.Result, err
-}
-
-func (c *client) GetMeterReadings(meteringPointIDs []string, from, to time.Time) ([]MeterReading, error) {
-
-	// Ensure access token is fresh
-	accessToken, err := c.GetDataAccessToken()
-	if err != nil {
-		return nil, err
-	}
-
-	// Response structs
-	var resError TimeseriesError
-	var result struct {
-		Result []MeterReading `json:"result"`
-	}
-
-	// Request preflight
-	req := c.resty.R().
-		SetHeader("Accept", "application/json").
-		SetAuthToken(accessToken).
-		SetResult(&result).
-		SetError(&resError).
-		SetBody(meteringPointIDsToRequestStruct(meteringPointIDs))
-
-	// Execute request
-	res, err := req.Post(fmt.Sprintf("/MeterData/GetMeterReadings/%s/%s", from.In(cph).Format(time.DateOnly), to.In(cph).Format(time.DateOnly)))
-	if err != nil || res.StatusCode() != http.StatusOK {
-		return nil, err
-	}
 	return result.Result, err
 }
 
@@ -196,4 +153,29 @@ func (ts *TimeSeries) Flatten() []FlatTimeSeriesPoint {
 	}
 
 	return fts
+}
+
+func (c *client) ExportTimeSeries(meteringPointIDs []string, from, to time.Time, aggregation Aggregation) (io.ReadCloser, error) {
+	if c.apiType != CustomerApi {
+		return nil, fmt.Errorf("ExportTimeSeries is only available for Customer API")
+	}
+
+	accessToken, err := c.GetDataAccessToken()
+	if err != nil {
+		return nil, err
+	}
+
+	path := fmt.Sprintf("/meterdata/timeseries/export/%s/%s/%s", from.In(cph).Format(time.DateOnly), to.In(cph).Format(time.DateOnly), aggregation)
+
+	res, err := c.resty.R().
+		SetAuthToken(accessToken).
+		SetBody(meteringPointIDsToRequestStruct(meteringPointIDs)).
+		SetDoNotParseResponse(true). // We want the raw response body
+		Post(path)
+
+	if err != nil || !res.IsSuccess() {
+		return nil, fmt.Errorf("failed to export time series, status: %s, err: %v", res.Status(), err)
+	}
+
+	return res.RawBody(), nil
 }
