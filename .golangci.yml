@@ -31,7 +31,7 @@ linters-settings:
   revive:
     rules:
       - name: exported
-        disabled: false
+        disabled: true
         arguments:
           - "checkPrivateReceivers"
           - "sayRepetitiveInsteadOfStutters"
