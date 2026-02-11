@@ -35,7 +35,7 @@ func meteringPointArgs(cmd *cobra.Command, args []string) error {
 
 // csvToJSON converts a CSV stream to JSON format
 func csvToJSON(stream io.ReadCloser) error {
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	reader := csv.NewReader(stream)
 	reader.Comma = ';' // Eloverblik CSV uses semicolon delimiter
@@ -82,7 +82,7 @@ func outputStream(stream io.ReadCloser, format string) error {
 		return csvToJSON(stream)
 	}
 	// Default CSV output
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 	_, err := io.Copy(output, stream)
 	return err
 }

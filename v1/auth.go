@@ -14,12 +14,12 @@ const (
 )
 
 type Authorization struct {
-	ID                          string    `json:"id"`
-	ThirdPartyName              string    `json:"thirdPartyName"`
-	ValidFrom                   string    `json:"validFrom"`
-	ValidTo                     string    `json:"validTo"`
-	CustomerName                string    `json:"customerName"`
-	CustomerCVR                 string    `json:"customerCVR"`
+	ID                          string       `json:"id"`
+	ThirdPartyName              string       `json:"thirdPartyName"`
+	ValidFrom                   string       `json:"validFrom"`
+	ValidTo                     string       `json:"validTo"`
+	CustomerName                string       `json:"customerName"`
+	CustomerCVR                 string       `json:"customerCVR"`
 	CustomerKey                 string       `json:"customerKey"`
 	IncludeFutureMeteringPoints bool         `json:"includeFutureMeteringPoints"`
 	Timestamp                   FlexibleTime `json:"timeStamp"`

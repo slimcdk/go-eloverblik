@@ -21,16 +21,6 @@ var (
 	Mode    string  = TestMode
 	ApiType APIType = customerApiAtype
 
-	// Lookup tables
-	hostModeMap map[string]string = map[string]string{
-		"prod":          prodModeHost, // Production purposes
-		"production":    prodModeHost, // Production purposes
-		"release":       prodModeHost, // Production purposes
-		"test":          testModeHost, // Testing purposes
-		"preprod":       testModeHost, // Testing purposes
-		"preproduction": testModeHost, // Testing purposes
-	}
-
 	cph, _ = time.LoadLocation("Europe/Copenhagen")
 )
 

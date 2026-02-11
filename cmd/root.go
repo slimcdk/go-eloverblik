@@ -32,5 +32,5 @@ func init() {
 	gout.SetFormatter(json.Formatter{})
 
 	rootCmd.PersistentFlags().String("token", "", "Eloverblik Access Token (required)")
-	rootCmd.MarkPersistentFlagRequired("token")
+	_ = rootCmd.MarkPersistentFlagRequired("token")
 }

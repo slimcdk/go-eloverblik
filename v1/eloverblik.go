@@ -1,8 +1,6 @@
 package eloverblik
 
 import (
-	"time"
-
 	"github.com/go-resty/resty/v2"
 )
 
@@ -10,7 +8,6 @@ import (
 type client struct {
 	refreshToken string
 	accessToken  string
-	tokenExpires time.Time
 	resty        *resty.Client
 	apiType      apiType
 }
