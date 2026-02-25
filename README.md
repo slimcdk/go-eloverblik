@@ -35,7 +35,7 @@ A comprehensive Go client library and CLI tool for the Danish energy data platfo
 ### Using Go Install
 
 ```bash
-go install github.com/slimcdk/go-eloverblik@latest
+go install github.com/slimcdk/go-eloverblik/cmd/elob@latest
 ```
 
 ### Download Pre-built Binaries
@@ -47,7 +47,7 @@ Download the latest release for your platform from [GitHub Releases](https://git
 ```bash
 git clone https://github.com/slimcdk/go-eloverblik.git
 cd go-eloverblik
-go build -o elob .
+go build -o elob ./cmd/elob
 ```
 
 ## Quick Start
@@ -422,12 +422,12 @@ golangci-lint run --timeout=5m
 
 ```bash
 # Build for current platform
-go build -o elob .
+go build -o elob ./cmd/elob
 
 # Cross-compile for different platforms
-GOOS=linux GOARCH=amd64 go build -o elob-linux-amd64 .
-GOOS=darwin GOARCH=arm64 go build -o elob-darwin-arm64 .
-GOOS=windows GOARCH=amd64 go build -o elob-windows-amd64.exe .
+GOOS=linux GOARCH=amd64 go build -o elob-linux-amd64 ./cmd/elob
+GOOS=darwin GOARCH=arm64 go build -o elob-darwin-arm64 ./cmd/elob
+GOOS=windows GOARCH=amd64 go build -o elob-windows-amd64.exe ./cmd/elob
 ```
 
 ## Project Structure
@@ -435,6 +435,8 @@ GOOS=windows GOARCH=amd64 go build -o elob-windows-amd64.exe .
 ```
 .
 ├── cmd/                    # CLI command implementations
+│   ├── elob/               # Application entry point
+│   │   └── main.go
 │   ├── measurements.go     # Timeseries and export commands
 │   ├── charges.go          # Charges commands
 │   ├── customer.go         # Customer-specific commands
@@ -456,8 +458,7 @@ GOOS=windows GOARCH=amd64 go build -o elob-windows-amd64.exe .
 │       └── test.yml        # CI/CD pipeline
 ├── .golangci.yml           # Linter configuration
 ├── go.mod                  # Go module definition
-├── go.sum                  # Dependency checksums
-└── main.go                 # CLI entry point
+└── go.sum                  # Dependency checksums
 ```
 
 ## Contributing
