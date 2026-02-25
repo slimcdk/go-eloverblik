@@ -35,7 +35,7 @@ A comprehensive Go client library and CLI tool for the Danish energy data platfo
 ### Using Go Install
 
 ```bash
-go install github.com/slimcdk/go-eloverblik/cmd/elob@latest
+go install github.com/slimcdk/go-eloverblik@latest
 ```
 
 ### Download Pre-built Binaries
@@ -47,7 +47,7 @@ Download the latest release for your platform from [GitHub Releases](https://git
 ```bash
 git clone https://github.com/slimcdk/go-eloverblik.git
 cd go-eloverblik
-go build -o elob ./cmd/elob
+go build -o elob .
 ```
 
 ## Quick Start
@@ -412,7 +412,7 @@ go test -v ./cmd/...
 
 ```bash
 # Install golangci-lint
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+go install github.com/golangci-lint/golangci-lint@latest
 
 # Run linter
 golangci-lint run --timeout=5m
@@ -422,12 +422,12 @@ golangci-lint run --timeout=5m
 
 ```bash
 # Build for current platform
-go build -o elob ./cmd/elob
+go build -o elob .
 
 # Cross-compile for different platforms
-GOOS=linux GOARCH=amd64 go build -o elob-linux-amd64 ./cmd/elob
-GOOS=darwin GOARCH=arm64 go build -o elob-darwin-arm64 ./cmd/elob
-GOOS=windows GOARCH=amd64 go build -o elob-windows-amd64.exe ./cmd/elob
+GOOS=linux GOARCH=amd64 go build -o elob-linux-amd64 .
+GOOS=darwin GOARCH=arm64 go build -o elob-darwin-arm64 .
+GOOS=windows GOARCH=amd64 go build -o elob-windows-amd64.exe .
 ```
 
 ## Project Structure
@@ -435,8 +435,6 @@ GOOS=windows GOARCH=amd64 go build -o elob-windows-amd64.exe ./cmd/elob
 ```
 .
 ├── cmd/                    # CLI command implementations
-│   ├── elob/               # Application entry point
-│   │   └── main.go
 │   ├── measurements.go     # Timeseries and export commands
 │   ├── charges.go          # Charges commands
 │   ├── customer.go         # Customer-specific commands
@@ -458,7 +456,8 @@ GOOS=windows GOARCH=amd64 go build -o elob-windows-amd64.exe ./cmd/elob
 │       └── test.yml        # CI/CD pipeline
 ├── .golangci.yml           # Linter configuration
 ├── go.mod                  # Go module definition
-└── go.sum                  # Dependency checksums
+├── go.sum                  # Dependency checksums
+└── main.go                 # CLI entry point
 ```
 
 ## Contributing

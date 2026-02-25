@@ -96,7 +96,7 @@ jobs:
 
     - name: Build binary
       run: |
-        GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -v -o dist/elob-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }} ./cmd/elob
+        GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -v -o dist/elob-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }} .
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
