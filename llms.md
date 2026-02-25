@@ -380,7 +380,7 @@ points, err := client.GetMeteringPointsForScope(
 
 ### Command Structure
 ```
-elob --token=<refresh-token> <api-type> <command> [args] [flags]
+go-eloverblik --token=<refresh-token> <api-type> <command> [args] [flags]
 
 Components:
   --token: Global flag, required for all commands
@@ -393,28 +393,28 @@ Components:
 ### CLI to Library Mapping
 
 ```yaml
-CLI: elob customer installations
+CLI: go-eloverblik customer installations
 Library: client.GetMeteringPoints(true)
 Returns: JSON array of metering points
 
-CLI: elob customer details 571313155411053087
+CLI: go-eloverblik customer details 571313155411053087
 Library: client.GetMeteringPointDetails([]string{"571313155411053087"})
 Returns: JSON array with detailed information
 
-CLI: elob customer timeseries 571313155411053087 --from=2024-01-01 --to=2024-01-31
+CLI: go-eloverblik customer timeseries 571313155411053087 --from=2024-01-01 --to=2024-01-31
 Library: |
   from := time.Parse(time.DateOnly, "2024-01-01")
   to := time.Parse(time.DateOnly, "2024-01-31")
   client.GetTimeSeries([]string{"571313155411053087"}, from, to, eloverblik.Hour)
 Returns: JSON with nested time series structure
 
-CLI: elob customer export-timeseries 571313155411053087 --from=2024-01-01 --format=json
+CLI: go-eloverblik customer export-timeseries 571313155411053087 --from=2024-01-01 --format=json
 Library: |
   stream, _ := client.ExportTimeSeries(...)
   // Then convert CSV to JSON
 Returns: JSON array of consumption records
 
-CLI: elob thirdparty authorizations
+CLI: go-eloverblik thirdparty authorizations
 Library: client.GetAuthorizations()
 Returns: JSON array of authorization grants
 ```

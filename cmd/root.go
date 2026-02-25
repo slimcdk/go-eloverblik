@@ -13,7 +13,7 @@ import (
 var clientInstance eloverblik.Client
 
 var rootCmd = &cobra.Command{
-	Use:   "elob",
+	Use:   "go-eloverblik",
 	Short: "A CLI for the Danish Eloverblik platform",
 	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
 		// write data access token to temporary location for reuse

@@ -47,7 +47,7 @@ Download the latest release for your platform from [GitHub Releases](https://git
 ```bash
 git clone https://github.com/slimcdk/go-eloverblik.git
 cd go-eloverblik
-go build -o elob .
+go build .
 ```
 
 ## Quick Start
@@ -66,18 +66,18 @@ go build -o elob .
 export ELO_TOKEN="your-refresh-token-here"
 
 # Get your metering points
-elob --token=$ELO_TOKEN customer installations
+go-eloverblik --token=$ELO_TOKEN customer installations
 
 # Get time series data
-elob --token=$ELO_TOKEN customer timeseries 571313155411053087 \
+go-eloverblik --token=$ELO_TOKEN customer timeseries 571313155411053087 \
   --from=2024-01-01 --to=2024-01-31
 
 # Export data as JSON
-elob --token=$ELO_TOKEN customer export-charges 571313155411053087 \
+go-eloverblik --token=$ELO_TOKEN customer export-charges 571313155411053087 \
   --format=json
 
 # Get charges information
-elob --token=$ELO_TOKEN customer charges 571313155411053087
+go-eloverblik --token=$ELO_TOKEN customer charges 571313155411053087
 ```
 
 ### Library Usage
@@ -177,63 +177,63 @@ func main() {
 
 ```bash
 # Installation Management
-elob customer installations                    # List all metering points
-elob customer details <metering-id>...         # Get detailed information
+go-eloverblik customer installations                    # List all metering points
+go-eloverblik customer details <metering-id>...         # Get detailed information
 
 # Relations
-elob customer add-relation <metering-id>...    # Add relation by ID
-elob customer add-relation-by-code <id> <code> # Add relation by web code
-elob customer delete-relation <metering-id>    # Remove relation
+go-eloverblik customer add-relation <metering-id>...    # Add relation by ID
+go-eloverblik customer add-relation-by-code <id> <code> # Add relation by web code
+go-eloverblik customer delete-relation <metering-id>    # Remove relation
 
 # Data Retrieval
-elob customer timeseries <metering-id>... \
+go-eloverblik customer timeseries <metering-id>... \
   --from=YYYY-MM-DD \
   --to=YYYY-MM-DD \
   --aggregation=Hour \                         # Actual, Quarter, Hour, Day, Month, Year
   --flatten                                    # Simplify output
 
-elob customer charges <metering-id>...         # Get charges and tariffs
+go-eloverblik customer charges <metering-id>...         # Get charges and tariffs
 
 # Data Export (CSV or JSON)
-elob customer export-timeseries <metering-id>... \
+go-eloverblik customer export-timeseries <metering-id>... \
   --from=YYYY-MM-DD \
   --to=YYYY-MM-DD \
   --format=json                                # csv (default) or json
 
-elob customer export-masterdata <metering-id>... \
+go-eloverblik customer export-masterdata <metering-id>... \
   --format=json
 
-elob customer export-charges <metering-id>... \
+go-eloverblik customer export-charges <metering-id>... \
   --format=json
 
 # Health Check
-elob customer alive                            # Check API status
+go-eloverblik customer alive                            # Check API status
 ```
 
 ### Third-Party Commands
 
 ```bash
 # Authorization Management
-elob thirdparty authorizations                 # List all authorizations
+go-eloverblik thirdparty authorizations                 # List all authorizations
 
 # Metering Points
-elob thirdparty metering-points <scope> <identifier>
+go-eloverblik thirdparty metering-points <scope> <identifier>
   # Scope: authorizationid, customercvr, customerkey
 
-elob thirdparty metering-point-ids <scope> <identifier>
+go-eloverblik thirdparty metering-point-ids <scope> <identifier>
   # Get IDs only (faster)
 
 # Data Retrieval
-elob thirdparty details <metering-id>...
-elob thirdparty timeseries <metering-id>... \
+go-eloverblik thirdparty details <metering-id>...
+go-eloverblik thirdparty timeseries <metering-id>... \
   --from=YYYY-MM-DD \
   --to=YYYY-MM-DD \
   --aggregation=Hour
 
-elob thirdparty charges <metering-id>...
+go-eloverblik thirdparty charges <metering-id>...
 
 # Health Check
-elob thirdparty alive
+go-eloverblik thirdparty alive
 ```
 
 ## Library Reference
@@ -274,14 +274,14 @@ eloverblik.CustomerKeyScope      // Scope by customer key
 ### Export Data to CSV File
 
 ```bash
-elob --token=$ELO_TOKEN customer export-timeseries 571313155411053087 \
+go-eloverblik --token=$ELO_TOKEN customer export-timeseries 571313155411053087 \
   --from=2024-01-01 --to=2024-12-31 > consumption_2024.csv
 ```
 
 ### Export Data to JSON File
 
 ```bash
-elob --token=$ELO_TOKEN customer export-charges 571313155411053087 \
+go-eloverblik --token=$ELO_TOKEN customer export-charges 571313155411053087 \
   --format=json > charges.json
 ```
 
@@ -422,12 +422,12 @@ golangci-lint run --timeout=5m
 
 ```bash
 # Build for current platform
-go build -o elob .
+go build .
 
 # Cross-compile for different platforms
-GOOS=linux GOARCH=amd64 go build -o elob-linux-amd64 .
-GOOS=darwin GOARCH=arm64 go build -o elob-darwin-arm64 .
-GOOS=windows GOARCH=amd64 go build -o elob-windows-amd64.exe .
+GOOS=linux GOARCH=amd64 go build -o go-eloverblik-linux-amd64 .
+GOOS=darwin GOARCH=arm64 go build -o go-eloverblik-darwin-arm64 .
+GOOS=windows GOARCH=amd64 go build -o go-eloverblik-windows-amd64.exe .
 ```
 
 ## Project Structure

@@ -96,11 +96,11 @@ jobs:
 
     - name: Build binary
       run: |
-        GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -v -o dist/elob-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }} .
+        GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -v -o dist/go-eloverblik-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }} .
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: elob-${{ matrix.os }}-${{ matrix.arch }}
+        name: go-eloverblik-${{ matrix.os }}-${{ matrix.arch }}
         path: dist/*
         retention-days: 7
