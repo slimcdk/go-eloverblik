@@ -1,9 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 
-	"github.com/drewstinnett/gout/v2"
 	"github.com/slimcdk/go-eloverblik/v1"
 	"github.com/spf13/cobra"
 )
@@ -27,7 +27,9 @@ If 'include-all' is 'true', the list is merged with additional non-linked meteri
 		meters, err := customerAPI.GetMeteringPoints(includeAll)
 		cobra.CheckErr(err)
 
-		gout.MustPrint(meters)
+		bytes, err := json.Marshal(meters)
+		cobra.CheckErr(err)
+		output.Write(bytes)
 	},
 }
 

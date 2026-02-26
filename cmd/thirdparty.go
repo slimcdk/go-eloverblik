@@ -1,9 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 
-	"github.com/drewstinnett/gout/v2"
 	"github.com/slimcdk/go-eloverblik/v1"
 	"github.com/spf13/cobra"
 )
@@ -12,6 +12,9 @@ var thirdpartyCmd = &cobra.Command{
 	Use:   "thirdparty",
 	Short: "Commands for the Eloverblik Third-Party API",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if clientInstance != nil {
+			return nil
+		}
 		token, err := cmd.Root().PersistentFlags().GetString("token")
 		if err != nil {
 			return err
@@ -40,7 +43,9 @@ var meteringPointsForScopeCmd = &cobra.Command{
 
 		points, err := thirdpartyAPI.GetMeteringPointsForScope(eloverblik.AuthorizationScope(scope), identifier)
 		cobra.CheckErr(err)
-		gout.MustPrint(points)
+		bytes, err := json.Marshal(points)
+		cobra.CheckErr(err)
+		output.Write(bytes)
 	},
 }
 
@@ -60,7 +65,9 @@ var meteringPointIDsForScopeCmd = &cobra.Command{
 
 		ids, err := thirdpartyAPI.GetMeteringPointIDsForScope(eloverblik.AuthorizationScope(scope), identifier)
 		cobra.CheckErr(err)
-		gout.MustPrint(ids)
+		bytes, err := json.Marshal(ids)
+		cobra.CheckErr(err)
+		output.Write(bytes)
 	},
 }
 

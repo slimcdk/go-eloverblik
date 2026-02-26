@@ -1,9 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 
-	"github.com/drewstinnett/gout/v2"
 	"github.com/slimcdk/go-eloverblik/v1"
 	"github.com/spf13/cobra"
 )
@@ -19,7 +19,9 @@ var addRelationByIDCmd = &cobra.Command{
 		}
 		results, err := customerAPI.AddRelationByID(args)
 		cobra.CheckErr(err)
-		gout.MustPrint(results)
+		bytes, err := json.Marshal(results)
+		cobra.CheckErr(err)
+		output.Write(bytes)
 	},
 }
 
@@ -34,7 +36,9 @@ var addRelationByCodeCmd = &cobra.Command{
 		}
 		result, err := customerAPI.AddRelationByWebAccessCode(args[0], args[1])
 		cobra.CheckErr(err)
-		gout.MustPrint(result)
+		bytes, err := json.Marshal(result)
+		cobra.CheckErr(err)
+		output.Write(bytes)
 	},
 }
 
@@ -49,7 +53,9 @@ var deleteRelationCmd = &cobra.Command{
 		}
 		ok, err := customerAPI.DeleteRelation(args[0])
 		cobra.CheckErr(err)
-		gout.MustPrint(ok)
+		bytes, err := json.Marshal(ok)
+		cobra.CheckErr(err)
+		output.Write(bytes)
 	},
 }
 

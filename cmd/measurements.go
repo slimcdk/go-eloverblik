@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/drewstinnett/gout/v2"
 	"github.com/slimcdk/go-eloverblik/v1"
 	"github.com/spf13/cobra"
 )
@@ -138,7 +137,9 @@ func newDetailsCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			details, err := clientInstance.GetMeteringPointDetails(args)
 			cobra.CheckErr(err)
-			gout.MustPrint(details)
+			bytes, err := json.Marshal(details)
+			cobra.CheckErr(err)
+			output.Write(bytes)
 		},
 	}
 }
@@ -187,14 +188,18 @@ func newTimeseriesCmd() *cobra.Command {
 			cobra.CheckErr(err)
 
 			if !flatten {
-				gout.MustPrint(tss)
+				bytes, err := json.Marshal(tss)
+				cobra.CheckErr(err)
+				output.Write(bytes)
 			} else {
 				flattened := make(map[string][]eloverblik.FlatTimeSeriesPoint, len(args))
 				for _, ts := range tss {
 					id := ts.MyEnergyDataMarketDocument.TimeSeries[0].MRID
 					flattened[id] = ts.Flatten()
 				}
-				gout.MustPrint(flattened)
+				bytes, err := json.Marshal(flattened)
+				cobra.CheckErr(err)
+				output.Write(bytes)
 			}
 		},
 	}

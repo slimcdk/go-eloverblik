@@ -1,9 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 
-	"github.com/drewstinnett/gout/v2"
 	"github.com/slimcdk/go-eloverblik/v1"
 	"github.com/spf13/cobra"
 )
@@ -19,7 +19,9 @@ var customerChargesCmd = &cobra.Command{
 		}
 		charges, err := customerAPI.GetCustomerCharges(args)
 		cobra.CheckErr(err)
-		gout.MustPrint(charges)
+		bytes, err := json.Marshal(charges)
+		cobra.CheckErr(err)
+		output.Write(bytes)
 	},
 }
 
@@ -34,7 +36,9 @@ var thirdpartyChargesCmd = &cobra.Command{
 		}
 		charges, err := thirdpartyAPI.GetThirdPartyCharges(args)
 		cobra.CheckErr(err)
-		gout.MustPrint(charges)
+		bytes, err := json.Marshal(charges)
+		cobra.CheckErr(err)
+		output.Write(bytes)
 	},
 }
 

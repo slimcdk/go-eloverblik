@@ -280,13 +280,36 @@ func TestParseDate(t *testing.T) {
 
 type MockClient struct {
 	eloverblik.Client
-	GetMeteringPointDetailsFunc func(meteringPointIDs []string) ([]eloverblik.MeteringPointDetail, error)
+	GetMeteringPointDetailsFunc func(meteringPointIDs []string) ([]eloverblik.MeteringPointDetailsResponse, error)
 	GetTimeSeriesFunc           func(meteringPointIDs []string, from, to time.Time, aggregation eloverblik.Aggregation) ([]eloverblik.TimeSeries, error)
 	ExportTimeSeriesFunc        func(meteringPointIDs []string, from, to time.Time, aggregation eloverblik.Aggregation) (io.ReadCloser, error)
 	ExportMasterdataFunc        func(meteringPointIDs []string) (io.ReadCloser, error)
 }
 
-func (m *MockClient) GetMeteringPointDetails(meteringPointIDs []string) ([]eloverblik.MeteringPointDetail, error) {
+type MockCustomerClient struct {
+	MockClient
+}
+
+func (m *MockCustomerClient) GetCustomerCharges(meteringPointIDs []string) ([]eloverblik.CustomerChargeResponse, error) {
+	return nil, nil
+}
+func (m *MockCustomerClient) AddRelationByID(meteringPointIDs []string) ([]eloverblik.StringResponse, error) {
+	return nil, nil
+}
+func (m *MockCustomerClient) AddRelationByWebAccessCode(meteringPointID, webAccessCode string) (string, error) {
+	return "", nil
+}
+func (m *MockCustomerClient) DeleteRelation(meteringPointID string) (bool, error) {
+	return false, nil
+}
+func (m *MockCustomerClient) GetMeteringPoints(includeAll bool) ([]eloverblik.MeteringPoints, error) {
+	return nil, nil
+}
+func (m *MockCustomerClient) ExportCharges(meteringPointIDs []string) (io.ReadCloser, error) {
+	return nil, nil
+}
+
+func (m *MockClient) GetMeteringPointDetails(meteringPointIDs []string) ([]eloverblik.MeteringPointDetailsResponse, error) {
 	if m.GetMeteringPointDetailsFunc != nil {
 		return m.GetMeteringPointDetailsFunc(meteringPointIDs)
 	}
@@ -316,16 +339,66 @@ func (m *MockClient) ExportMasterdata(meteringPointIDs []string) (io.ReadCloser,
 
 func TestDetailsCmd(t *testing.T) {
 	mock := &MockClient{
-		GetMeteringPointDetailsFunc: func(meteringPointIDs []string) ([]eloverblik.MeteringPointDetail, error) {
+		GetMeteringPointDetailsFunc: func(meteringPointIDs []string) ([]eloverblik.MeteringPointDetailsResponse, error) {
 			assert.Equal(t, []string{"571313174002485069"}, meteringPointIDs)
-			return []eloverblik.MeteringPointDetail{{Success: true}}, nil
+			return []eloverblik.MeteringPointDetailsResponse{{
+				StatusResponse: eloverblik.StatusResponse{
+					Success: true,
+				},
+			}}, nil
 		},
 	}
 	clientInstance = mock
+	defer func() { clientInstance = nil }()
 
-	out, err := execute(t, "details", "571313174002485069")
+	oldOutput := output
+	var buf bytes.Buffer
+	output = &buf
+	defer func() { output = oldOutput }()
+
+	_, err := execute(t, "customer", "details", "571313174002485069", "--token", "dummy")
 	assert.NoError(t, err)
-	assert.Contains(t, out, `"success": true`)
+	assert.Contains(t, buf.String(), `"success":true`)
+}
+
+func TestExportTimeseriesCmd(t *testing.T) {
+	// Mock the customer API for export commands
+	mockCustomer := &MockCustomerClient{}
+	mockCustomer.ExportTimeSeriesFunc = func(meteringPointIDs []string, from, to time.Time, aggregation eloverblik.Aggregation) (io.ReadCloser, error) {
+		assert.Equal(t, []string{"571313174002485069"}, meteringPointIDs)
+		return io.NopCloser(strings.NewReader("header;value\n2026-01-01;1.23")), nil
+	}
+	clientInstance = mockCustomer
+	defer func() { clientInstance = nil }()
+
+	// Redirect output for export command
+	oldOutput := output
+	var buf bytes.Buffer
+	output = &buf
+	defer func() { output = oldOutput }()
+
+	_, err := execute(t, "customer", "export-timeseries", "571313174002485069", "--from", "2026-01-01", "--token", "dummy")
+	assert.NoError(t, err)
+	assert.Contains(t, buf.String(), "2026-01-01;1.23")
+}
+
+func TestExportMasterdataCmd(t *testing.T) {
+	mockCustomer := &MockCustomerClient{}
+	mockCustomer.ExportMasterdataFunc = func(meteringPointIDs []string) (io.ReadCloser, error) {
+		assert.Equal(t, []string{"571313174002485069"}, meteringPointIDs)
+		return io.NopCloser(strings.NewReader("id;address\n571313174002485069;Some Address")), nil
+	}
+	clientInstance = mockCustomer
+	defer func() { clientInstance = nil }()
+
+	oldOutput := output
+	var buf bytes.Buffer
+	output = &buf
+	defer func() { output = oldOutput }()
+
+	_, err := execute(t, "customer", "export-masterdata", "571313174002485069", "--token", "dummy")
+	assert.NoError(t, err)
+	assert.Contains(t, buf.String(), "571313174002485069;Some Address")
 }
 
 func TestTimeseriesCmd(t *testing.T) {
@@ -336,55 +409,25 @@ func TestTimeseriesCmd(t *testing.T) {
 		},
 	}
 	clientInstance = mock
+	defer func() { clientInstance = nil }()
 
-	_, err := execute(t, "timeseries", "571313174002485069", "--from", "2026-01-01")
+	oldOutput := output
+	var buf bytes.Buffer
+	output = &buf
+	defer func() { output = oldOutput }()
+
+	_, err := execute(t, "customer", "timeseries", "571313174002485069", "--from", "2026-01-01", "--token", "dummy")
 	assert.NoError(t, err)
+	assert.JSONEq(t, `[]`, buf.String())
 
 	// Test with period
-	_, err = execute(t, "timeseries", "571313174002485069", "--period", "last_week")
+	buf.Reset()
+	_, err = execute(t, "customer", "timeseries", "571313174002485069", "--period", "last_week", "--token", "dummy")
 	assert.NoError(t, err)
+	assert.JSONEq(t, `[]`, buf.String())
 
 	// Test mutually exclusive flags
-	_, err = execute(t, "timeseries", "571313174002485069", "--period", "last_week", "--from", "2026-01-01")
+	buf.Reset()
+	_, err = execute(t, "customer", "timeseries", "571313174002485069", "--period", "last_week", "--from", "2026-01-01", "--token", "dummy")
 	assert.Error(t, err)
-}
-
-func TestExportTimeseriesCmd(t *testing.T) {
-	// Mock the customer API for export commands
-	mockCustomer := &MockClient{
-		ExportTimeSeriesFunc: func(meteringPointIDs []string, from, to time.Time, aggregation eloverblik.Aggregation) (io.ReadCloser, error) {
-			assert.Equal(t, []string{"571313174002485069"}, meteringPointIDs)
-			return io.NopCloser(strings.NewReader("header;value\n2026-01-01;1.23")), nil
-		},
-	}
-	clientInstance = mockCustomer
-
-	// Redirect output for export command
-	oldOutput := output
-	var buf bytes.Buffer
-	output = &buf
-	defer func() { output = oldOutput }()
-
-	_, err := execute(t, "export-timeseries", "571313174002485069", "--from", "2026-01-01")
-	assert.NoError(t, err)
-	assert.Contains(t, buf.String(), "2026-01-01;1.23")
-}
-
-func TestExportMasterdataCmd(t *testing.T) {
-	mockCustomer := &MockClient{
-		ExportMasterdataFunc: func(meteringPointIDs []string) (io.ReadCloser, error) {
-			assert.Equal(t, []string{"571313174002485069"}, meteringPointIDs)
-			return io.NopCloser(strings.NewReader("id;address\n571313174002485069;Some Address")), nil
-		},
-	}
-	clientInstance = mockCustomer
-
-	oldOutput := output
-	var buf bytes.Buffer
-	output = &buf
-	defer func() { output = oldOutput }()
-
-	_, err := execute(t, "export-masterdata", "571313174002485069")
-	assert.NoError(t, err)
-	assert.Contains(t, buf.String(), "571313174002485069;Some Address")
 }

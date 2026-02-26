@@ -11,6 +11,9 @@ var customerCmd = &cobra.Command{
 	Use:   "customer",
 	Short: "Commands for the Eloverblik Customer API",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if clientInstance != nil {
+			return nil
+		}
 		token, err := cmd.Root().PersistentFlags().GetString("token")
 		if err != nil {
 			return err

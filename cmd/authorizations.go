@@ -1,9 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 
-	"github.com/drewstinnett/gout/v2"
 	"github.com/slimcdk/go-eloverblik/v1"
 	"github.com/spf13/cobra"
 )
@@ -22,7 +22,9 @@ var authorizationsCmd = &cobra.Command{
 		authorizations, err := thirdpartyAPI.GetAuthorizations()
 		cobra.CheckErr(err)
 
-		gout.MustPrint(authorizations)
+		bytes, err := json.Marshal(authorizations)
+		cobra.CheckErr(err)
+		output.Write(bytes)
 	},
 }
 
