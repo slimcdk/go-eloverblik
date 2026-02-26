@@ -186,6 +186,18 @@ go-eloverblik customer add-relation-by-code <id> <code> # Add relation by web co
 go-eloverblik customer delete-relation <metering-id>    # Remove relation
 
 # Data Retrieval
+go-eloverblik customer timeseries <metering-id>... --period=last_month
+go-eloverblik customer timeseries <metering-id>... --from=now-30d --to=now
+
+# Use --from/--to for specific ranges:
+#   YYYY-MM-DD
+#   now
+#   now-30d (days), now-4w (weeks), now-2m (months), now-1y (years)
+#
+# Use --period for common ranges (cannot be used with --from/--to):
+#   yesterday, this_week, last_week, this_month, last_month,
+#   this_year, last_year
+
 go-eloverblik customer timeseries <metering-id>... \
   --from=YYYY-MM-DD \
   --to=YYYY-MM-DD \
@@ -195,6 +207,8 @@ go-eloverblik customer timeseries <metering-id>... \
 go-eloverblik customer charges <metering-id>...         # Get charges and tariffs
 
 # Data Export (CSV or JSON)
+go-eloverblik customer export-timeseries <metering-id>... --period=last_year
+
 go-eloverblik customer export-timeseries <metering-id>... \
   --from=YYYY-MM-DD \
   --to=YYYY-MM-DD \
@@ -225,6 +239,7 @@ go-eloverblik thirdparty metering-point-ids <scope> <identifier>
 
 # Data Retrieval
 go-eloverblik thirdparty details <metering-id>...
+go-eloverblik thirdparty timeseries <metering-id>... --period=last_week
 go-eloverblik thirdparty timeseries <metering-id>... \
   --from=YYYY-MM-DD \
   --to=YYYY-MM-DD \
@@ -267,6 +282,25 @@ eloverblik.Year     // Yearly aggregation
 eloverblik.AuthorizationIDScope  // Scope by authorization ID
 eloverblik.CustomerCVRScope      // Scope by customer CVR number
 eloverblik.CustomerKeyScope      // Scope by customer key
+```
+
+### Period Constants
+
+For convenience, the library provides a `Period` type and constants for common time ranges. These can be used with the `GetDatesFromPeriod` helper function to easily specify dates for API calls.
+
+```go
+import eloverblik "github.com/slimcdk/go-eloverblik/v1"
+
+// Get data for the last month
+from, to, err := eloverblik.GetDatesFromPeriod(eloverblik.LastMonth)
+if err != nil {
+    // handle error
+}
+timeseries, err := client.GetTimeSeries(ids, from, to, eloverblik.Day)
+
+// Available Period constants:
+// Yesterday, ThisWeek, LastWeek, ThisMonth, LastMonth,
+// ThisYear, LastYear
 ```
 
 ## Examples
@@ -399,13 +433,9 @@ for _, detail := range details {
 # Run all tests
 go test ./...
 
-# Run with coverage
-go test -v -race -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out
-
-# Run specific package tests
-go test -v ./v1/...
-go test -v ./cmd/...
+# Run tests for a specific package
+go test ./v1
+go test ./cmd
 ```
 
 ### Running Linter

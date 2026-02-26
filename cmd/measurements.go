@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/drewstinnett/gout/v2"
@@ -76,6 +78,47 @@ func csvToJSON(stream io.ReadCloser) error {
 	return encoder.Encode(records)
 }
 
+// parseDate supports various date formats:
+// - YYYY-MM-DD
+// - now
+// - now-30d (days)
+// - now-4w (weeks)
+// - now-2m (months)
+// - now-1y (years)
+func parseDate(dateStr string) (time.Time, error) {
+	if dateStr == "now" {
+		return time.Now(), nil
+	}
+
+	// Standard date format
+	if t, err := time.Parse(time.DateOnly, dateStr); err == nil {
+		return t, nil
+	}
+
+	// Relative date format (e.g., now-30d)
+	re := regexp.MustCompile(`^now-(\d+)([dwmy])$`)
+	matches := re.FindStringSubmatch(strings.ToLower(dateStr))
+
+	if len(matches) == 3 {
+		value, _ := strconv.Atoi(matches[1])
+		unit := matches[2]
+		now := time.Now()
+
+		switch unit {
+		case "d":
+			return now.AddDate(0, 0, -value), nil
+		case "w":
+			return now.AddDate(0, 0, -value*7), nil
+		case "m":
+			return now.AddDate(0, -value, 0), nil
+		case "y":
+			return now.AddDate(-value, 0, 0), nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("invalid date format: '%s'. Use YYYY-MM-DD, now, or now-Xd/w/m/y", dateStr)
+}
+
 // outputStream outputs the stream as either CSV or JSON based on format flag
 func outputStream(stream io.ReadCloser, format string) error {
 	if format == "json" {
@@ -105,15 +148,40 @@ func newTimeseriesCmd() *cobra.Command {
 		Use:   "timeseries <metering-id> [metering-id ...]",
 		Short: "Get time series for one or more metering points",
 		Args:  meteringPointArgs,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			period, _ := cmd.Flags().GetString("period")
+
+			// Check for mutual exclusivity and requirements
+			if period != "" {
+				if cmd.Flags().Changed("from") || cmd.Flags().Changed("to") {
+					return errors.New("--period cannot be used with --from or --to")
+				}
+			} else {
+				if !cmd.Flags().Changed("from") {
+					return errors.New("either --period or --from is required")
+				}
+			}
+			return nil
+		},
 		Run: func(cmd *cobra.Command, args []string) {
+			period, _ := cmd.Flags().GetString("period")
 			fromFlag, _ := cmd.Flags().GetString("from")
 			toFlag, _ := cmd.Flags().GetString("to")
 			aggregation, _ := cmd.Flags().GetString("aggregation")
 			flatten, _ := cmd.Flags().GetBool("flatten")
 
-			from, fromErr := time.Parse(time.DateOnly, fromFlag)
-			to, toErr := time.Parse(time.DateOnly, toFlag)
-			cobra.CheckErr(errors.Join(fromErr, toErr))
+			var from, to time.Time
+			var err error
+
+			if period != "" {
+				from, to, err = eloverblik.GetDatesFromPeriod(eloverblik.Period(period))
+				cobra.CheckErr(err)
+			} else {
+				from, err = parseDate(fromFlag)
+				cobra.CheckErr(err)
+				to, err = parseDate(toFlag)
+				cobra.CheckErr(err)
+			}
 
 			tss, err := clientInstance.GetTimeSeries(args, from, to, eloverblik.Aggregation(aggregation))
 			cobra.CheckErr(err)
@@ -130,11 +198,11 @@ func newTimeseriesCmd() *cobra.Command {
 			}
 		},
 	}
-	cmd.Flags().String("from", "", "start date (YYYY-MM-DD, required)")
-	cmd.Flags().String("to", time.Now().Format(time.DateOnly), "end date (YYYY-MM-DD, defaults to today)")
+	cmd.Flags().String("from", "", "start date (YYYY-MM-DD, now, now-30d/w/m/y)")
+	cmd.Flags().String("to", time.Now().Format(time.DateOnly), "end date (YYYY-MM-DD, now, now-30d/w/m/y, defaults to today)")
+	cmd.Flags().String("period", "", "predefined period (yesterday, last_week, etc.)")
 	cmd.Flags().String("aggregation", string(eloverblik.Hour), "aggregation level (Actual, Quarter, Hour, Day, Month, Year)")
 	cmd.Flags().Bool("flatten", false, "simplify the data series")
-	_ = cmd.MarkFlagRequired("from")
 	return cmd
 }
 
@@ -143,15 +211,40 @@ func newExportTimeseriesCmd() *cobra.Command {
 		Use:   "export-timeseries <metering-id> [metering-id ...]",
 		Short: "Export time series as a raw stream (customer API only)",
 		Args:  meteringPointArgs,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			period, _ := cmd.Flags().GetString("period")
+
+			// Check for mutual exclusivity and requirements
+			if period != "" {
+				if cmd.Flags().Changed("from") || cmd.Flags().Changed("to") {
+					return errors.New("--period cannot be used with --from or --to")
+				}
+			} else {
+				if !cmd.Flags().Changed("from") {
+					return errors.New("either --period or --from is required")
+				}
+			}
+			return nil
+		},
 		Run: func(cmd *cobra.Command, args []string) {
+			period, _ := cmd.Flags().GetString("period")
 			fromFlag, _ := cmd.Flags().GetString("from")
 			toFlag, _ := cmd.Flags().GetString("to")
 			aggregation, _ := cmd.Flags().GetString("aggregation")
 			format, _ := cmd.Flags().GetString("format")
 
-			from, fromErr := time.Parse(time.DateOnly, fromFlag)
-			to, toErr := time.Parse(time.DateOnly, toFlag)
-			cobra.CheckErr(errors.Join(fromErr, toErr))
+			var from, to time.Time
+			var err error
+
+			if period != "" {
+				from, to, err = eloverblik.GetDatesFromPeriod(eloverblik.Period(period))
+				cobra.CheckErr(err)
+			} else {
+				from, err = parseDate(fromFlag)
+				cobra.CheckErr(err)
+				to, err = parseDate(toFlag)
+				cobra.CheckErr(err)
+			}
 
 			customerAPI, ok := clientInstance.(eloverblik.Customer)
 			if !ok {
@@ -165,11 +258,11 @@ func newExportTimeseriesCmd() *cobra.Command {
 			cobra.CheckErr(err)
 		},
 	}
-	cmd.Flags().String("from", "", "start date (YYYY-MM-DD, required)")
-	cmd.Flags().String("to", time.Now().Format(time.DateOnly), "end date (YYYY-MM-DD, defaults to today)")
+	cmd.Flags().String("from", "", "start date (YYYY-MM-DD, now, now-30d/w/m/y)")
+	cmd.Flags().String("to", time.Now().Format(time.DateOnly), "end date (YYYY-MM-DD, now, now-30d/w/m/y, defaults to today)")
+	cmd.Flags().String("period", "", "predefined period (yesterday, last_week, etc.)")
 	cmd.Flags().String("aggregation", string(eloverblik.Hour), "aggregation level (Actual, Quarter, Hour, Day, Month, Year)")
 	cmd.Flags().String("format", "csv", "output format (csv, json)")
-	_ = cmd.MarkFlagRequired("from")
 	return cmd
 }
 
