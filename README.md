@@ -11,7 +11,7 @@ A comprehensive Go client library and CLI tool for the Danish energy data platfo
 
 - **Complete API Coverage**: Supports both Customer and Third-Party APIs
 - **Data Export**: Export timeseries, masterdata, and charges in CSV or JSON format
-- **Well-Tested**: 73% test coverage with comprehensive unit tests
+- **Well-Tested**: 84% test coverage with comprehensive unit tests
 - **Easy to Use**: Simple CLI interface and intuitive Go library
 - **Flexible**: Automatic token refresh and error handling
 - **Multi-Platform**: Cross-compiled binaries for Linux, macOS, and Windows
@@ -304,6 +304,57 @@ timeseries, err := client.GetTimeSeries(ids, from, to, eloverblik.Day)
 ```
 
 ## Examples
+
+### Fetch Hourly Data for the Past 7 Days
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+    "os"
+    "time"
+
+    eloverblik "github.com/slimcdk/go-eloverblik/v1"
+)
+
+func main() {
+    client := eloverblik.NewCustomer(os.Getenv("ELO_TOKEN"))
+
+    from := time.Now().AddDate(0, 0, -7)
+    to := time.Now()
+
+    ts, err := client.GetTimeSeries(
+        []string{"571313155411053087"},
+        from, to,
+        eloverblik.Hour,
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    for _, series := range ts {
+        for _, point := range series.Flatten() {
+            fmt.Printf("%s  %.3f %s\n",
+                point.Timestamp.Format("2006-01-02 15:04"),
+                point.Value,
+                point.Unit,
+            )
+        }
+    }
+}
+```
+
+Or using a predefined period:
+
+```go
+from, to, err := eloverblik.GetDatesFromPeriod(eloverblik.LastWeek)
+if err != nil {
+    log.Fatal(err)
+}
+ts, err := client.GetTimeSeries(ids, from, to, eloverblik.Hour)
+```
 
 ### Export Data to CSV File
 

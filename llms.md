@@ -6,7 +6,8 @@ This documentation is structured for AI agents to easily understand, parse, and 
 
 ```yaml
 package: github.com/slimcdk/go-eloverblik
-version: v1
+import: github.com/slimcdk/go-eloverblik/v1
+install: go get github.com/slimcdk/go-eloverblik/v1
 language: Go
 purpose: Interface with Danish Eloverblik electricity data API
 apis:
@@ -390,6 +391,33 @@ Components:
   [flags]: Optional command-specific flags
 ```
 
+### Date Specification (--from / --to / --period)
+
+The `timeseries` and `export-timeseries` commands support two mutually exclusive ways to specify date ranges:
+
+```yaml
+Option A - Explicit dates with --from and --to:
+  --from: Required start date
+  --to: End date (defaults to today)
+  Formats:
+    - YYYY-MM-DD: Absolute date (e.g., 2024-01-01)
+    - now: Current date/time
+    - now-Nd: N days ago (e.g., now-30d)
+    - now-Nw: N weeks ago (e.g., now-4w)
+    - now-Nm: N months ago (e.g., now-2m)
+    - now-Ny: N years ago (e.g., now-1y)
+
+Option B - Predefined period with --period:
+  --period: Named time range (cannot be combined with --from or --to)
+  Values: yesterday, this_week, last_week, this_month, last_month, this_year, last_year
+
+Examples:
+  --from=2024-01-01 --to=2024-01-31    # Explicit range
+  --from=now-30d                         # Last 30 days (--to defaults to today)
+  --from=now-1y --to=now-6m             # Relative range
+  --period=last_month                    # Predefined period
+```
+
 ### CLI to Library Mapping
 
 ```yaml
@@ -405,6 +433,19 @@ CLI: go-eloverblik customer timeseries 571313155411053087 --from=2024-01-01 --to
 Library: |
   from := time.Parse(time.DateOnly, "2024-01-01")
   to := time.Parse(time.DateOnly, "2024-01-31")
+  client.GetTimeSeries([]string{"571313155411053087"}, from, to, eloverblik.Hour)
+Returns: JSON with nested time series structure
+
+CLI: go-eloverblik customer timeseries 571313155411053087 --from=now-30d
+Library: |
+  from := time.Now().AddDate(0, 0, -30)
+  to := time.Now()
+  client.GetTimeSeries([]string{"571313155411053087"}, from, to, eloverblik.Hour)
+Returns: JSON with nested time series structure
+
+CLI: go-eloverblik customer timeseries 571313155411053087 --period=last_month
+Library: |
+  from, to, _ := eloverblik.GetDatesFromPeriod(eloverblik.LastMonth)
   client.GetTimeSeries([]string{"571313155411053087"}, from, to, eloverblik.Hour)
 Returns: JSON with nested time series structure
 
@@ -527,6 +568,22 @@ for {
 }
 ```
 
+### Pattern 4: Use Predefined Periods
+```go
+// Instead of calculating dates manually, use Period constants:
+from, to, err := eloverblik.GetDatesFromPeriod(eloverblik.LastMonth)
+if err != nil {
+    log.Fatal(err)
+}
+
+ts, err := client.GetTimeSeries(
+    []string{"571313155411053087"},
+    from, to,
+    eloverblik.Day,
+)
+// Process data...
+```
+
 ## Error Handling Patterns
 
 ### Pattern 1: Check Both Error Returns and Success Fields
@@ -626,6 +683,39 @@ const (
 )
 ```
 
+### Period
+```go
+type Period string
+
+const (
+    Yesterday Period = "yesterday"
+    ThisWeek  Period = "this_week"
+    LastWeek  Period = "last_week"
+    ThisMonth Period = "this_month"
+    LastMonth Period = "last_month"
+    ThisYear  Period = "this_year"
+    LastYear  Period = "last_year"
+)
+
+// FUNCTION: GetDatesFromPeriod
+// PURPOSE: Convert a Period constant to concrete from/to time.Time values
+// INPUTS:
+//   - period (Period): One of the predefined period constants
+// OUTPUTS:
+//   - from (time.Time): Start of the period
+//   - to (time.Time): End of the period
+//   - err (error): Non-nil if period string is invalid
+// BEHAVIOR:
+//   - Yesterday: midnight yesterday to end of yesterday
+//   - ThisWeek/LastWeek: week starts on Sunday
+//   - ThisMonth/ThisYear: from start of period to now
+//   - LastMonth/LastYear: full previous period
+// EXAMPLE:
+from, to, err := eloverblik.GetDatesFromPeriod(eloverblik.LastMonth)
+if err != nil { /* handle error */ }
+ts, err := client.GetTimeSeries(ids, from, to, eloverblik.Day)
+```
+
 ## Constraints and Limits
 
 ```yaml
@@ -657,7 +747,7 @@ Token Validity:
 ## CLI Output Formats
 
 ```yaml
-Default: JSON (formatted with gout library)
+Default: JSON (via encoding/json)
 Export Commands:
   --format=csv: Semicolon-delimited, UTF-8 BOM, Danish headers
   --format=json: Converted from CSV to JSON array
@@ -666,9 +756,9 @@ Export Commands:
 ## Testing Patterns
 
 ```yaml
-Unit Test Coverage: 73.0%
-  cmd package: 37.0%
-  v1 package: 78.9%
+Unit Test Coverage: 84.1%
+  cmd package: 60.2%
+  v1 package: 80.6%
 
 Test Files:
   - *_test.go files use httpmock for HTTP mocking
@@ -790,6 +880,62 @@ func main() {
         }
         fmt.Printf("Charge: %v\n", record)
     }
+}
+```
+
+## Example: Fetch Hourly Data for the Past 7 Days (Go Library)
+
+Use this as a reference when generating Go code that consumes this package.
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "log"
+    "os"
+    "time"
+
+    eloverblik "github.com/slimcdk/go-eloverblik/v1"
+)
+
+func main() {
+    // Create a Customer API client (use NewThirdParty for business access)
+    client := eloverblik.NewCustomer(os.Getenv("ELO_TOKEN"))
+
+    // Option A: specify dates manually
+    from := time.Now().AddDate(0, 0, -7)
+    to := time.Now()
+
+    // Option B: use a predefined period helper
+    // from, to, err := eloverblik.GetDatesFromPeriod(eloverblik.LastWeek)
+
+    // Fetch hourly time series for one or more metering point IDs
+    ts, err := client.GetTimeSeries(
+        []string{"571313155411053087"},
+        from, to,
+        eloverblik.Hour, // Aggregation: Actual, Quarter, Hour, Day, Month, Year
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Flatten the nested API response into simple timestamp/value pairs
+    for _, series := range ts {
+        for _, point := range series.Flatten() {
+            fmt.Printf("%s  %.3f %s (quality: %s)\n",
+                point.Timestamp.Format(time.RFC3339),
+                point.Value,
+                point.Unit,
+                point.Quality,
+            )
+        }
+    }
+
+    // All API responses serialize to JSON
+    out, _ := json.MarshalIndent(ts, "", "  ")
+    fmt.Println(string(out))
 }
 ```
 
