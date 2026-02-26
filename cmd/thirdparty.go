@@ -45,7 +45,8 @@ var meteringPointsForScopeCmd = &cobra.Command{
 		cobra.CheckErr(err)
 		bytes, err := json.Marshal(points)
 		cobra.CheckErr(err)
-		output.Write(bytes)
+		_, err = output.Write(bytes)
+		cobra.CheckErr(err)
 	},
 }
 
@@ -67,7 +68,8 @@ var meteringPointIDsForScopeCmd = &cobra.Command{
 		cobra.CheckErr(err)
 		bytes, err := json.Marshal(ids)
 		cobra.CheckErr(err)
-		output.Write(bytes)
+		_, err = output.Write(bytes)
+		cobra.CheckErr(err)
 	},
 }
 

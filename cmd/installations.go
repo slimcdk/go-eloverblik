@@ -29,7 +29,8 @@ If 'include-all' is 'true', the list is merged with additional non-linked meteri
 
 		bytes, err := json.Marshal(meters)
 		cobra.CheckErr(err)
-		output.Write(bytes)
+		_, err = output.Write(bytes)
+		cobra.CheckErr(err)
 	},
 }
 

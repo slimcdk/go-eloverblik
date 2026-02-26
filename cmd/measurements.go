@@ -139,7 +139,8 @@ func newDetailsCmd() *cobra.Command {
 			cobra.CheckErr(err)
 			bytes, err := json.Marshal(details)
 			cobra.CheckErr(err)
-			output.Write(bytes)
+			_, err = output.Write(bytes)
+			cobra.CheckErr(err)
 		},
 	}
 }
@@ -190,7 +191,8 @@ func newTimeseriesCmd() *cobra.Command {
 			if !flatten {
 				bytes, err := json.Marshal(tss)
 				cobra.CheckErr(err)
-				output.Write(bytes)
+				_, err = output.Write(bytes)
+				cobra.CheckErr(err)
 			} else {
 				flattened := make(map[string][]eloverblik.FlatTimeSeriesPoint, len(args))
 				for _, ts := range tss {
@@ -199,7 +201,8 @@ func newTimeseriesCmd() *cobra.Command {
 				}
 				bytes, err := json.Marshal(flattened)
 				cobra.CheckErr(err)
-				output.Write(bytes)
+				_, err = output.Write(bytes)
+				cobra.CheckErr(err)
 			}
 		},
 	}

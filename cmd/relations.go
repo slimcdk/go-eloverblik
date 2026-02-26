@@ -21,7 +21,8 @@ var addRelationByIDCmd = &cobra.Command{
 		cobra.CheckErr(err)
 		bytes, err := json.Marshal(results)
 		cobra.CheckErr(err)
-		output.Write(bytes)
+		_, err = output.Write(bytes)
+		cobra.CheckErr(err)
 	},
 }
 
@@ -38,7 +39,8 @@ var addRelationByCodeCmd = &cobra.Command{
 		cobra.CheckErr(err)
 		bytes, err := json.Marshal(result)
 		cobra.CheckErr(err)
-		output.Write(bytes)
+		_, err = output.Write(bytes)
+		cobra.CheckErr(err)
 	},
 }
 
@@ -55,7 +57,8 @@ var deleteRelationCmd = &cobra.Command{
 		cobra.CheckErr(err)
 		bytes, err := json.Marshal(ok)
 		cobra.CheckErr(err)
-		output.Write(bytes)
+		_, err = output.Write(bytes)
+		cobra.CheckErr(err)
 	},
 }
 

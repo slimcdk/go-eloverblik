@@ -24,7 +24,8 @@ var authorizationsCmd = &cobra.Command{
 
 		bytes, err := json.Marshal(authorizations)
 		cobra.CheckErr(err)
-		output.Write(bytes)
+		_, err = output.Write(bytes)
+		cobra.CheckErr(err)
 	},
 }
 

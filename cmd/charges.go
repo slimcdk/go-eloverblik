@@ -21,7 +21,8 @@ var customerChargesCmd = &cobra.Command{
 		cobra.CheckErr(err)
 		bytes, err := json.Marshal(charges)
 		cobra.CheckErr(err)
-		output.Write(bytes)
+		_, err = output.Write(bytes)
+		cobra.CheckErr(err)
 	},
 }
 
@@ -38,7 +39,8 @@ var thirdpartyChargesCmd = &cobra.Command{
 		cobra.CheckErr(err)
 		bytes, err := json.Marshal(charges)
 		cobra.CheckErr(err)
-		output.Write(bytes)
+		_, err = output.Write(bytes)
+		cobra.CheckErr(err)
 	},
 }
 
