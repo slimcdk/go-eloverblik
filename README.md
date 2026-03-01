@@ -167,10 +167,51 @@ func main() {
 
 ## CLI Reference
 
+### Help Output
+
+Running `go-eloverblik --help` shows a grouped command tree:
+
+```
+A CLI for the Danish Eloverblik platform
+
+Usage:
+  go-eloverblik [command]
+
+Available Commands:
+
+  customer
+    add-relation             Link one or more metering points to the authenticated user by ID
+    add-relation-by-code     Link a metering point to the authenticated user via a web access code
+    alive                    Check if the API is operational
+    charges                  Get charges (subscriptions, fees, tariffs) for one or more metering points
+    delete-relation          Unlink a metering point from the authenticated user
+    details                  Get metering point details
+    export-charges           Export charges (customer API only)
+    export-masterdata        Export metering point masterdata (customer API only)
+    export-timeseries        Export time series as a raw stream (customer API only)
+    installations            Get metering points (installations)
+    timeseries               Get time series for one or more metering points
+
+  thirdparty
+    alive                    Check if the API is operational
+    authorizations           Get authorizations (powers of attorney) granted by customers
+    charges                  Get charges (subscriptions, tariffs) for one or more metering points
+    details                  Get metering point details
+    metering-point-ids       Get metering point IDs accessible under a specific authorization scope
+    metering-points          Get metering points accessible under a specific authorization scope
+    timeseries               Get time series for one or more metering points
+
+Flags:
+  -h, --help           help for go-eloverblik
+      --token string   Eloverblik Access Token (required)
+
+Use "go-eloverblik [command] --help" for more information about a command.
+```
+
 ### Global Flags
 
 ```
---token string   Eloverblik API refresh token (required, can use env: ELO_TOKEN)
+--token string   Eloverblik API refresh token (required)
 ```
 
 ### Customer Commands
