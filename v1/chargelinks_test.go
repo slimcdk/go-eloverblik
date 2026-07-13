@@ -2,6 +2,8 @@ package eloverblik
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"testing"
@@ -10,7 +12,24 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+// capturingLogger records what resty logs, so a test can prove resty had nothing to
+// complain about. resty logs a warning of its own when it cannot unmarshal a response body,
+// and swallows the body, which is exactly the failure this guards against.
+type capturingLogger struct {
+	warnings []string
+	errs     []string
+}
+
+func (l *capturingLogger) Errorf(format string, v ...any) {
+	l.errs = append(l.errs, fmt.Sprintf(format, v...))
+}
+func (l *capturingLogger) Warnf(format string, v ...any) {
+	l.warnings = append(l.warnings, fmt.Sprintf(format, v...))
+}
+func (l *capturingLogger) Debugf(string, ...any) {}
 
 func TestGetChargeLinksWithCharges(t *testing.T) {
 	mockResty := resty.New()
@@ -240,4 +259,49 @@ func TestGetChargeLinksWithCharges(t *testing.T) {
 		assert.Nil(t, result)
 		assert.ErrorIs(t, err, ErrorInvalidDateFormat)
 	})
+}
+
+// TestGetChargeLinksWithChargesNotDeployed covers the answer the live API actually gives
+// this endpoint today: a 404 with an RFC 7807 problem document rather than the usual
+// "[code] message" string. It used to make resty warn "Cannot unmarshal response body" and
+// drop the body, leaving the caller with a bare "could't connect to eloverblik: 404".
+func TestGetChargeLinksWithChargesNotDeployed(t *testing.T) {
+	logger := &capturingLogger{}
+
+	mockResty := resty.New().SetLogger(logger)
+	httpmock.ActivateNonDefault(mockResty.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	c := &client{
+		accessToken: "test-access-token",
+		resty:       mockResty,
+		apiType:     ThirdPartyApi,
+	}
+
+	httpmock.RegisterResponder("POST", "/meteringpoint/getchargelinkswithcharges",
+		func(_ *http.Request) (*http.Response, error) {
+			resp := httpmock.NewStringResponse(404, problemDocument404)
+			resp.Header.Set("Content-Type", "application/problem+json; charset=utf-8")
+			return resp, nil
+		})
+
+	result, err := c.GetChargeLinksWithCharges(
+		[]string{"571313180100000001"},
+		time.Date(2024, 1, 1, 0, 0, 0, 0, cph),
+		time.Date(2024, 2, 1, 0, 0, 0, 0, cph),
+	)
+	assert.Nil(t, result)
+	require.Error(t, err)
+
+	// The problem document reaches the caller whole, trace ID included: it is what Energinet
+	// support asks for when an endpoint they declare answers 404
+	var apiErr *APIError
+	require.True(t, errors.As(err, &apiErr))
+	assert.Equal(t, 404, apiErr.StatusCode)
+	assert.Equal(t, "Not Found", apiErr.Title)
+	assert.Equal(t, "00-9c485a3a3ed458eab22cab724111db63-ed7aa1e057161e52-01", apiErr.TraceID)
+
+	// resty had nothing to complain about: the body was read, not swallowed
+	assert.Empty(t, logger.warnings)
+	assert.Empty(t, logger.errs)
 }

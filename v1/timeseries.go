@@ -76,7 +76,7 @@ func (c *client) GetTimeSeries(meteringPointIDs []string, from, to time.Time, ag
 	}
 
 	// Response structs
-	var apiErrorMsg string
+	var apiErrBody apiErrorBody
 	var result struct {
 		Result []TimeSeries `json:"result"`
 	}
@@ -86,7 +86,7 @@ func (c *client) GetTimeSeries(meteringPointIDs []string, from, to time.Time, ag
 		SetHeader("Accept", "application/json").
 		SetAuthToken(accessToken).
 		SetResult(&result).
-		SetError(&apiErrorMsg).
+		SetError(&apiErrBody).
 		SetBody(meteringPointIDsToRequestStruct(meteringPointIDs))
 
 	// Both Customer and ThirdParty APIs use the same lowercase path
@@ -99,7 +99,7 @@ func (c *client) GetTimeSeries(meteringPointIDs []string, from, to time.Time, ag
 	}
 
 	// Handle API errors
-	if err = apiError(apiErrorMsg, res.StatusCode()); err != nil {
+	if err = apiErrorFromBody(apiErrBody, res.StatusCode()); err != nil {
 		return nil, err
 	}
 

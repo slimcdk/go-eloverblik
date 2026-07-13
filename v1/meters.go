@@ -148,14 +148,14 @@ func (c *client) GetMeteringPoints(includeAll bool) ([]MeteringPoints, error) {
 	var result struct {
 		Result []MeteringPoints `json:"result"`
 	}
-	var apiErrorMsg string
+	var apiErrBody apiErrorBody
 
 	// Request preflight
 	req := c.resty.R().
 		SetHeader("Accept", "application/json").
 		SetAuthToken(accessToken).
 		SetResult(&result).
-		SetError(&apiErrorMsg).
+		SetError(&apiErrBody).
 		SetQueryParam("includeAll", strconv.FormatBool(includeAll))
 
 	// Execute request
@@ -163,7 +163,7 @@ func (c *client) GetMeteringPoints(includeAll bool) ([]MeteringPoints, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = apiError(apiErrorMsg, res.StatusCode()); err != nil {
+	if err = apiErrorFromBody(apiErrBody, res.StatusCode()); err != nil {
 		return nil, err
 	}
 
@@ -190,19 +190,19 @@ func (c *client) GetMeteringPointDetails(meteringPointIDs []string) ([]MeteringP
 	var result struct {
 		Result []MeteringPointDetailsResponse `json:"result"`
 	}
-	var apiErrorMsg string
+	var apiErrBody apiErrorBody
 
 	res, err := c.resty.R().
 		SetAuthToken(accessToken).
 		SetBody(meteringPointIDsToRequestStruct(meteringPointIDs)).
 		SetResult(&result).
-		SetError(&apiErrorMsg).
+		SetError(&apiErrBody).
 		Post(path)
 
 	if err != nil {
 		return nil, err
 	}
-	if err = apiError(apiErrorMsg, res.StatusCode()); err != nil {
+	if err = apiErrorFromBody(apiErrBody, res.StatusCode()); err != nil {
 		return nil, err
 	}
 

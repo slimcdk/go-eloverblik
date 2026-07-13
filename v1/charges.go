@@ -62,7 +62,7 @@ func (c *client) GetCustomerCharges(meteringPointIDs []string) ([]CustomerCharge
 		return nil, err
 	}
 
-	var apiErrorMsg string
+	var apiErrBody apiErrorBody
 	var result struct {
 		Result []CustomerChargeResponse `json:"result"`
 	}
@@ -70,14 +70,14 @@ func (c *client) GetCustomerCharges(meteringPointIDs []string) ([]CustomerCharge
 	res, err := c.resty.R().
 		SetAuthToken(accessToken).
 		SetBody(meteringPointIDsToRequestStruct(meteringPointIDs)).
-		SetError(&apiErrorMsg).
+		SetError(&apiErrBody).
 		SetResult(&result).
 		Post("/meteringpoints/meteringpoint/getcharges")
 
 	if err != nil {
 		return nil, err
 	}
-	if err = apiError(apiErrorMsg, res.StatusCode()); err != nil {
+	if err = apiErrorFromBody(apiErrBody, res.StatusCode()); err != nil {
 		return nil, err
 	}
 	return result.Result, nil
@@ -89,7 +89,7 @@ func (c *client) GetThirdPartyCharges(meteringPointIDs []string) ([]ThirdPartyCh
 		return nil, err
 	}
 
-	var apiErrorMsg string
+	var apiErrBody apiErrorBody
 	var result struct {
 		Result []ThirdPartyChargeResponse `json:"result"`
 	}
@@ -97,14 +97,14 @@ func (c *client) GetThirdPartyCharges(meteringPointIDs []string) ([]ThirdPartyCh
 	res, err := c.resty.R().
 		SetAuthToken(accessToken).
 		SetBody(meteringPointIDsToRequestStruct(meteringPointIDs)).
-		SetError(&apiErrorMsg).
+		SetError(&apiErrBody).
 		SetResult(&result).
 		Post("/meteringpoint/getcharges")
 
 	if err != nil {
 		return nil, err
 	}
-	if err = apiError(apiErrorMsg, res.StatusCode()); err != nil {
+	if err = apiErrorFromBody(apiErrBody, res.StatusCode()); err != nil {
 		return nil, err
 	}
 	return result.Result, nil

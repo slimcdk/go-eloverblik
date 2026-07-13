@@ -1,14 +1,173 @@
 package eloverblik
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 func ErrorClientConnection(status int) error {
 	return fmt.Errorf("could't connect to eloverblik: %d", status)
+}
+
+// apiErrorBody is the error body of a failed request. Eloverblik answers with two
+// different shapes and the same call can meet both, so both have to be read:
+//
+//   - a bare JSON string carrying the API error message, e.g. "[20010] Relation not found".
+//     This is the business error the API documents and the one the error codes come with.
+//   - an RFC 7807 problem document, e.g. {"type":"...","title":"Not Found","status":404,
+//     "traceId":"00-9c48...-01"}. Both OpenAPI specs declare it for 400, 401, 403 and 404,
+//     and it is what a request to an endpoint that is not deployed actually comes back with.
+//
+// Only one of the two is ever set. Unmarshalling never fails: a body that cannot be read
+// is left empty and judged by its HTTP status, rather than making resty log a warning and
+// drop the response on the floor.
+type apiErrorBody struct {
+	// Message is the API error message when the body is a bare JSON string.
+	Message string
+	// Problem is the problem document when the body is an object.
+	Problem *problemDetails
+}
+
+// problemDetails is the RFC 7807 problem document both APIs declare as their error schema.
+// TraceID is not part of the schema but is always present in practice, and is what
+// Energinet support asks for when an endpoint misbehaves, so it must survive.
+type problemDetails struct {
+	Type     string              `json:"type"`
+	Title    string              `json:"title"`
+	Status   int                 `json:"status"`
+	Detail   string              `json:"detail"`
+	Instance string              `json:"instance"`
+	TraceID  string              `json:"traceId"`
+	Errors   map[string][]string `json:"errors"`
+}
+
+// UnmarshalJSON tells the two error body shapes apart by their first character: a JSON
+// string opens with a quote, a problem document with a brace. Anything else is a body this
+// client has no use for, and is reported by its HTTP status alone.
+func (b *apiErrorBody) UnmarshalJSON(data []byte) error {
+	body := bytes.TrimSpace(data)
+	if len(body) == 0 {
+		return nil
+	}
+
+	switch body[0] {
+
+	case '"':
+		var msg string
+		if err := json.Unmarshal(body, &msg); err != nil {
+			return nil
+		}
+		b.Message = msg
+
+	case '{':
+		var problem problemDetails
+		if err := json.Unmarshal(body, &problem); err != nil {
+			return nil
+		}
+		b.Problem = &problem
+	}
+
+	return nil
+}
+
+// APIError reports a failed request Eloverblik answered with a problem document instead of
+// the usual "[code] message" string, which is what both APIs do for 400, 401, 403 and 404.
+// It keeps the parts worth having: the status, the title, the detail and the trace ID -
+// Energinet support asks for the trace ID, so it must reach the caller.
+//
+// Where the document does carry a known API error code, and for the statuses that have a
+// sentinel of their own, APIError unwraps to that sentinel, so errors.Is keeps working:
+//
+//	var apiErr *eloverblik.APIError
+//	if errors.As(err, &apiErr) {
+//		log.Printf("eloverblik %d %s, traceId %s", apiErr.StatusCode, apiErr.Title, apiErr.TraceID)
+//	}
+type APIError struct {
+	// StatusCode is the HTTP status of the response. The status the document reports takes
+	// precedence over the one the response arrived with, they only ever differ if the API
+	// contradicts itself.
+	StatusCode int
+	// Code is the API error code, e.g. 20010. Zero when the document carries none, which is
+	// the usual case.
+	Code uint64
+	// Type is the URI the problem document identifies the problem type with.
+	Type string
+	// Title is the short summary of the problem, e.g. "Not Found".
+	Title string
+	// Detail is the explanation specific to this occurrence. Often empty.
+	Detail string
+	// Instance is the URI of the occurrence. Often empty.
+	Instance string
+	// TraceID correlates the request with Energinet's own logs. Quote it in support requests.
+	TraceID string
+	// Errors holds the per field validation messages of a 400. Nil unless the API sent any.
+	Errors map[string][]string
+
+	// err is the sentinel this problem unwraps to, nil when it maps to none.
+	err error
+}
+
+// Error renders the problem in one line, e.g.
+// "eloverblik: 404 Not Found (traceId 00-9c485a3a3ed458eab22cab724111db63-ed7aa1e057161e52-01)".
+func (e *APIError) Error() string {
+	var msg strings.Builder
+
+	msg.WriteString("eloverblik: ")
+	msg.WriteString(strconv.Itoa(e.StatusCode))
+
+	if e.Title != "" {
+		msg.WriteString(" " + e.Title)
+	}
+	if e.Detail != "" {
+		msg.WriteString(": " + e.Detail)
+	}
+	if e.TraceID != "" {
+		msg.WriteString(" (traceId " + e.TraceID + ")")
+	}
+
+	return msg.String()
+}
+
+// Unwrap returns the sentinel error the problem maps to, so a caller can keep matching on
+// errors.Is(err, ErrorUnauthorized) no matter which of the two shapes the API answered with.
+func (e *APIError) Unwrap() error { return e.err }
+
+// newAPIError builds the error a problem document is reported with. statusCode is the
+// status the response arrived with, and is used when the document carries none of its own.
+func newAPIError(problem *problemDetails, statusCode int) *APIError {
+	status := problem.Status
+	if status == 0 {
+		status = statusCode
+	}
+
+	apiErr := &APIError{
+		StatusCode: status,
+		Type:       problem.Type,
+		Title:      problem.Title,
+		Detail:     problem.Detail,
+		Instance:   problem.Instance,
+		TraceID:    problem.TraceID,
+		Errors:     problem.Errors,
+	}
+
+	// A problem document has no field for an API error code, but nothing stops the API from
+	// writing one into the detail. Read it when it is there, so a code keeps mapping to the
+	// sentinel it always mapped to; otherwise fall back to what the status alone tells.
+	if code, ok := apiErrorCode(problem.Detail); ok {
+		if sentinel, known := apiErrorMap[code]; known && sentinel != nil {
+			apiErr.Code = code
+			apiErr.err = sentinel
+			return apiErr
+		}
+	}
+	apiErr.err = statusSentinel(status)
+
+	return apiErr
 }
 
 // isRetryableError reports whether a response is worth retrying. Only the two transient
@@ -32,14 +191,52 @@ func isSuccessStatus(statusCode int) bool {
 // statusError maps a response that carries no parseable API error message to an error
 // based on its HTTP status alone.
 func statusError(statusCode int) error {
+	if err := statusSentinel(statusCode); err != nil {
+		return err
+	}
+	return ErrorClientConnection(statusCode)
+}
+
+// statusSentinel returns the sentinel error a HTTP status has of its own, nil for a status
+// that has none.
+func statusSentinel(statusCode int) error {
 	switch statusCode {
 	case http.StatusTooManyRequests:
 		return ErrorTooManyRequests
 	case http.StatusUnauthorized:
 		return ErrorUnauthorized
 	default:
-		return ErrorClientConnection(statusCode)
+		return nil
 	}
+}
+
+// apiErrorCode reads the API error code out of a message, e.g. 20010 out of
+// "[20010] Relation not found". ok is false when the message carries no code.
+func apiErrorCode(msg string) (code uint64, ok bool) {
+	if len(msg) < 6 || msg[0] != '[' {
+		return 0, false
+	}
+
+	code, err := strconv.ParseUint(msg[1:6], 10, 64)
+	if err != nil {
+		return 0, false
+	}
+
+	return code, true
+}
+
+// apiErrorFromBody turns the error body of a response into an error. It is what every
+// request calls: apiErrorBody has already told the two shapes the API answers with apart,
+// and each is reported in the way that keeps the most of it.
+func apiErrorFromBody(body apiErrorBody, statusCode int) error {
+
+	// A problem document only ever accompanies a failure. On a success the result body is
+	// the one that matters, and resty never fills the error body in the first place.
+	if body.Problem != nil && !isSuccessStatus(statusCode) {
+		return newAPIError(body.Problem, statusCode)
+	}
+
+	return apiError(body.Message, statusCode)
 }
 
 func apiError(msg string, statusCode int) error {
@@ -55,14 +252,9 @@ func apiError(msg string, statusCode int) error {
 	}
 
 	// API error messages carry the code in their first characters, e.g.
-	// "[20010] Relation not found". A shorter message holds no code to read.
-	if len(msg) < 6 {
-		return fmt.Errorf("failed to parse error in api error message %s", msg)
-	}
-
-	// Parse API error code
-	code, err := strconv.ParseUint(msg[1:6], 10, 64)
-	if err != nil {
+	// "[20010] Relation not found". A message without one holds nothing to look up.
+	code, ok := apiErrorCode(msg)
+	if !ok {
 		return fmt.Errorf("failed to parse error in api error message %s", msg)
 	}
 

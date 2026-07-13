@@ -17,19 +17,19 @@ func (c *client) AddRelationByID(meteringPointIDs []string) ([]StringResponse, e
 	var result struct {
 		Result []StringResponse `json:"result"`
 	}
-	var apiErrorMsg string
+	var apiErrBody apiErrorBody
 
 	res, err := c.resty.R().
 		SetAuthToken(accessToken).
 		SetBody(meteringPointIDsToRequestStruct(meteringPointIDs)).
 		SetResult(&result).
-		SetError(&apiErrorMsg).
+		SetError(&apiErrBody).
 		Post("/meteringpoints/meteringpoint/relation/add")
 
 	if err != nil {
 		return nil, err
 	}
-	if err = apiError(apiErrorMsg, res.StatusCode()); err != nil {
+	if err = apiErrorFromBody(apiErrBody, res.StatusCode()); err != nil {
 		return nil, err
 	}
 
@@ -47,20 +47,20 @@ func (c *client) AddRelationByWebAccessCode(meteringPointID, webAccessCode strin
 	}
 
 	var result StringResponse
-	var apiErrorMsg string
+	var apiErrBody apiErrorBody
 
 	path := fmt.Sprintf("/meteringpoints/meteringpoint/relation/add/%s/%s", meteringPointID, webAccessCode)
 
 	res, err := c.resty.R().
 		SetAuthToken(accessToken).
 		SetResult(&result).
-		SetError(&apiErrorMsg).
+		SetError(&apiErrBody).
 		Put(path)
 
 	if err != nil {
 		return "", err
 	}
-	if err = apiError(apiErrorMsg, res.StatusCode()); err != nil {
+	if err = apiErrorFromBody(apiErrBody, res.StatusCode()); err != nil {
 		return "", err
 	}
 
@@ -83,20 +83,20 @@ func (c *client) DeleteRelation(meteringPointID string) (bool, error) {
 	var result struct {
 		Result *bool `json:"result"`
 	}
-	var apiErrorMsg string
+	var apiErrBody apiErrorBody
 
 	path := fmt.Sprintf("/meteringpoints/meteringpoint/relation/%s", meteringPointID)
 
 	res, err := c.resty.R().
 		SetAuthToken(accessToken).
 		SetResult(&result).
-		SetError(&apiErrorMsg).
+		SetError(&apiErrBody).
 		Delete(path)
 
 	if err != nil {
 		return false, err
 	}
-	if err = apiError(apiErrorMsg, res.StatusCode()); err != nil {
+	if err = apiErrorFromBody(apiErrBody, res.StatusCode()); err != nil {
 		return false, err
 	}
 	if result.Result != nil {

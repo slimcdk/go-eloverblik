@@ -57,21 +57,21 @@ func (c *client) authenticate() error {
 	var result struct {
 		AccessToken string `json:"result"`
 	}
-	var apiErrorMsg string
+	var apiErrBody apiErrorBody
 
 	// Request preflight
 	req := c.resty.R().
 		SetHeader("Accept", "application/json").
 		SetAuthToken(c.refreshToken).
 		SetResult(&result).
-		SetError(&apiErrorMsg)
+		SetError(&apiErrBody)
 
 	// Execute request
 	res, err := req.Get("/token")
 	if err != nil {
 		return err
 	}
-	if err = apiError(apiErrorMsg, res.StatusCode()); err != nil {
+	if err = apiErrorFromBody(apiErrBody, res.StatusCode()); err != nil {
 		return err
 	}
 
@@ -108,18 +108,18 @@ func (c *client) GetAuthorizations() ([]Authorization, error) {
 	var result struct {
 		Result []Authorization `json:"result"`
 	}
-	var apiErrorMsg string
+	var apiErrBody apiErrorBody
 
 	res, err := c.resty.R().
 		SetAuthToken(accessToken).
 		SetResult(&result).
-		SetError(&apiErrorMsg).
+		SetError(&apiErrBody).
 		Get("/authorization/authorizations")
 
 	if err != nil {
 		return nil, err
 	}
-	if err = apiError(apiErrorMsg, res.StatusCode()); err != nil {
+	if err = apiErrorFromBody(apiErrBody, res.StatusCode()); err != nil {
 		return nil, err
 	}
 
@@ -139,20 +139,20 @@ func (c *client) GetMeteringPointsForScope(scope AuthorizationScope, identifier 
 	var result struct {
 		Result []ThirdPartyMeteringPoint `json:"result"`
 	}
-	var apiErrorMsg string
+	var apiErrBody apiErrorBody
 
 	path := fmt.Sprintf("/authorization/authorization/meteringpoints/%s/%s", scope, identifier)
 
 	res, err := c.resty.R().
 		SetAuthToken(accessToken).
 		SetResult(&result).
-		SetError(&apiErrorMsg).
+		SetError(&apiErrBody).
 		Get(path)
 
 	if err != nil {
 		return nil, err
 	}
-	if err = apiError(apiErrorMsg, res.StatusCode()); err != nil {
+	if err = apiErrorFromBody(apiErrBody, res.StatusCode()); err != nil {
 		return nil, err
 	}
 
@@ -172,20 +172,20 @@ func (c *client) GetMeteringPointIDsForScope(scope AuthorizationScope, identifie
 	var result struct {
 		Result []string `json:"result"`
 	}
-	var apiErrorMsg string
+	var apiErrBody apiErrorBody
 
 	path := fmt.Sprintf("/authorization/authorization/meteringpointids/%s/%s", scope, identifier)
 
 	res, err := c.resty.R().
 		SetAuthToken(accessToken).
 		SetResult(&result).
-		SetError(&apiErrorMsg).
+		SetError(&apiErrBody).
 		Get(path)
 
 	if err != nil {
 		return nil, err
 	}
-	if err = apiError(apiErrorMsg, res.StatusCode()); err != nil {
+	if err = apiErrorFromBody(apiErrBody, res.StatusCode()); err != nil {
 		return nil, err
 	}
 

@@ -97,9 +97,11 @@ type ChargeSeriesPoint struct {
 // currently valid or take effect in the future, this endpoint returns the historic price
 // series as well, and is therefore the one to price past consumption with.
 //
-// Both OpenAPI specs declare the endpoint, but as of 2026-07-13 the live Third-Party API
-// answers 404 for it on every documented path, while its getcharges sibling answers
-// normally. Expect a connection error rather than data there until Energinet deploys it.
+// Both OpenAPI documents declare the endpoint, but as of 2026-07-13 the live API answers
+// 404 for it on BOTH the Customer and the Third-Party API, with valid tokens, on every
+// documented path, while its getcharges sibling answers normally on the same tokens.
+// Energinet has specified it but not deployed it: expect an error rather than data until
+// they do.
 func (c *client) GetChargeLinksWithCharges(meteringPointIDs []string, from, to time.Time) (*ChargeLinksWithChargesResponse, error) {
 
 	// Ensure access token is fresh
@@ -119,7 +121,7 @@ func (c *client) GetChargeLinksWithCharges(meteringPointIDs []string, from, to t
 	}
 
 	// Response structs
-	var apiErrorMsg string
+	var apiErrBody apiErrorBody
 	var result struct {
 		Result ChargeLinksWithChargesResponse `json:"result"`
 	}
@@ -130,7 +132,7 @@ func (c *client) GetChargeLinksWithCharges(meteringPointIDs []string, from, to t
 		SetAuthToken(accessToken).
 		SetBody(chargeLinksRequest(meteringPointIDs, from, to)).
 		SetResult(&result).
-		SetError(&apiErrorMsg).
+		SetError(&apiErrBody).
 		Post(path)
 
 	if err != nil {
@@ -138,7 +140,7 @@ func (c *client) GetChargeLinksWithCharges(meteringPointIDs []string, from, to t
 	}
 
 	// Handle API errors
-	if err = apiError(apiErrorMsg, res.StatusCode()); err != nil {
+	if err = apiErrorFromBody(apiErrBody, res.StatusCode()); err != nil {
 		return nil, err
 	}
 
