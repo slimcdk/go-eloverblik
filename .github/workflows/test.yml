@@ -25,7 +25,7 @@ jobs:
 
     steps:
     - name: Check out code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     # go-version-file keeps CI on exactly the toolchain go.mod requires, so the
     # workflow cannot drift from the module's own requirement.
@@ -73,7 +73,7 @@ jobs:
 
     steps:
     - name: Check out code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -91,7 +91,7 @@ jobs:
 
     steps:
     - name: Check out code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -128,7 +128,7 @@ jobs:
 
     steps:
     - name: Check out code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Set up Go
       uses: actions/setup-go@v5
