@@ -22,7 +22,7 @@ var thirdpartyCmd = &cobra.Command{
 		if token == "" {
 			return fmt.Errorf("required flag \"token\" not set")
 		}
-		clientInstance = eloverblik.NewThirdParty(token)
+		clientInstance = eloverblik.NewThirdParty(token, clientOptions(cmd)...)
 		return nil
 	},
 }

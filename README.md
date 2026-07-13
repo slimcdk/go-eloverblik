@@ -202,8 +202,9 @@ Available Commands:
     timeseries               Get time series for one or more metering points
 
 Flags:
-  -h, --help           help for go-eloverblik
-      --token string   Eloverblik Access Token (required)
+  -h, --help                     help for go-eloverblik
+      --print-response-headers   Print HTTP response headers from the Eloverblik API to stderr
+      --token string             Eloverblik Access Token (required)
 
 Use "go-eloverblik [command] --help" for more information about a command.
 ```
@@ -211,7 +212,21 @@ Use "go-eloverblik [command] --help" for more information about a command.
 ### Global Flags
 
 ```
---token string   Eloverblik API refresh token (required)
+--token string               Eloverblik API refresh token (required)
+--print-response-headers     Print HTTP response headers from the Eloverblik API to stderr
+```
+
+`--print-response-headers` is a debugging aid. The headers of every API call, including
+the token call, are written to stderr, so stdout stays clean, parseable output:
+
+```bash
+go-eloverblik customer details <metering-id> --token=$TOKEN --print-response-headers 2>headers.txt
+```
+
+```
+< GET https://api.eloverblik.dk/customerapi/api/token -> 200 OK
+< Content-Type: application/json; charset=utf-8
+< Date: Mon, 01 Jan 2024 00:00:00 GMT
 ```
 
 ### Customer Commands
@@ -304,6 +319,23 @@ customer := eloverblik.NewCustomer("refresh-token")
 
 // Third-Party API client
 thirdparty := eloverblik.NewThirdParty("refresh-token")
+```
+
+Both constructors accept optional options.
+
+### Debugging Response Headers
+
+`WithResponseHeaderOutput` writes the HTTP response headers of every API call, including
+the token call and the streamed exports, to the given `io.Writer`:
+
+```go
+customer := eloverblik.NewCustomer("refresh-token", eloverblik.WithResponseHeaderOutput(os.Stderr))
+```
+
+```
+< GET https://api.eloverblik.dk/customerapi/api/token -> 200 OK
+< Content-Type: application/json; charset=utf-8
+< Date: Mon, 01 Jan 2024 00:00:00 GMT
 ```
 
 ### Aggregation Levels

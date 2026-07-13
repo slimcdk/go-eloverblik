@@ -30,13 +30,21 @@ User obtains refresh token → NewCustomer/NewThirdParty creates client → Clie
 ```yaml
 Customer:
   purpose: Individual consumers accessing their own data
-  factory: eloverblik.NewCustomer(refreshToken string)
+  factory: eloverblik.NewCustomer(refreshToken string, opts ...Option)
   capabilities: [installations, timeseries, charges, relations, exports]
 
 ThirdParty:
   purpose: Businesses accessing multiple customers' data via authorization
-  factory: eloverblik.NewThirdParty(refreshToken string)
+  factory: eloverblik.NewThirdParty(refreshToken string, opts ...Option)
   capabilities: [authorizations, metering-points, timeseries, charges]
+```
+
+### 3. Client Options
+```yaml
+WithResponseHeaderOutput:
+  signature: eloverblik.WithResponseHeaderOutput(w io.Writer) Option
+  purpose: Debugging - write the HTTP response headers of every API call to w
+  covers: [token call, regular calls, streamed exports]
 ```
 
 ## Function Signatures with Complete Parameter Specifications
@@ -46,7 +54,9 @@ ThirdParty:
 ```go
 // FUNCTION: NewCustomer
 // PURPOSE: Create Customer API client
-// INPUT: refreshToken (string) - Obtained from eloverblik.dk portal
+// INPUTS:
+//   - refreshToken (string): Obtained from eloverblik.dk portal
+//   - opts (...Option): Optional client options
 // OUTPUT: Customer interface
 // EXAMPLE:
 client := eloverblik.NewCustomer("your-refresh-token-here")
@@ -55,10 +65,30 @@ client := eloverblik.NewCustomer("your-refresh-token-here")
 ```go
 // FUNCTION: NewThirdParty
 // PURPOSE: Create Third-Party API client
-// INPUT: refreshToken (string) - Obtained from eloverblik.dk portal
+// INPUTS:
+//   - refreshToken (string): Obtained from eloverblik.dk portal
+//   - opts (...Option): Optional client options
 // OUTPUT: ThirdParty interface
 // EXAMPLE:
 client := eloverblik.NewThirdParty("your-refresh-token-here")
+```
+
+```go
+// FUNCTION: WithResponseHeaderOutput
+// PURPOSE: Debugging - write the HTTP response headers of every API call to an io.Writer
+// INPUT: w (io.Writer) - Destination for the header blocks, e.g. os.Stderr
+// OUTPUT: Option (pass to NewCustomer or NewThirdParty)
+// NOTES:
+//   - Covers every call, including the token call and the streamed exports
+//   - Never consumes the response body, exports keep streaming
+//   - Write errors are ignored, debug output never breaks an API call
+// EXAMPLE:
+client := eloverblik.NewCustomer("your-refresh-token-here", eloverblik.WithResponseHeaderOutput(os.Stderr))
+
+// OUTPUT FORMAT (one block per response, header keys sorted alphabetically):
+// < GET https://api.eloverblik.dk/customerapi/api/token -> 200 OK
+// < Content-Type: application/json; charset=utf-8
+// < Date: Mon, 01 Jan 2024 00:00:00 GMT
 ```
 
 ### Customer API Methods
@@ -385,10 +415,30 @@ go-eloverblik --token=<refresh-token> <api-type> <command> [args] [flags]
 
 Components:
   --token: Global flag, required for all commands
+  --print-response-headers: Global flag, prints HTTP response headers to stderr (debugging)
   <api-type>: "customer" or "thirdparty"
   <command>: Action to perform
   [args]: Positional arguments (usually metering point IDs)
   [flags]: Optional command-specific flags
+```
+
+### Global Flags
+```yaml
+--token <string>:
+  required: true
+  purpose: Eloverblik API refresh token
+
+--print-response-headers:
+  required: false
+  default: false
+  purpose: Print HTTP response headers from the Eloverblik API to stderr
+  notes: Headers go to stderr, so stdout stays clean, parseable output
+  example: |
+    go-eloverblik customer details <metering-id> --token=$TOKEN --print-response-headers 2>headers.txt
+
+    < GET https://api.eloverblik.dk/customerapi/api/token -> 200 OK
+    < Content-Type: application/json; charset=utf-8
+    < Date: Mon, 01 Jan 2024 00:00:00 GMT
 ```
 
 ### Help Output (`go-eloverblik --help`)
@@ -426,8 +476,9 @@ Available Commands:
     timeseries               Get time series for one or more metering points
 
 Flags:
-  -h, --help           help for go-eloverblik
-      --token string   Eloverblik Access Token (required)
+  -h, --help                     help for go-eloverblik
+      --print-response-headers   Print HTTP response headers from the Eloverblik API to stderr
+      --token string             Eloverblik Access Token (required)
 ```
 
 ### Date Specification (--from / --to / --period)

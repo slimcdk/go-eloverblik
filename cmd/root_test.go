@@ -71,6 +71,16 @@ func TestRootCmd(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestPrintResponseHeadersFlag(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("print-response-headers")
+	assert.NotNil(t, flag, "rootCmd should have a persistent --print-response-headers flag")
+	assert.Equal(t, "false", flag.DefValue)
+
+	printHeaders, err := rootCmd.PersistentFlags().GetBool("print-response-headers")
+	assert.NoError(t, err)
+	assert.False(t, printHeaders)
+}
+
 func TestExecute(t *testing.T) {
 	// Reset state from previous tests
 	resetCommandFlags(rootCmd)

@@ -21,7 +21,7 @@ var customerCmd = &cobra.Command{
 		if token == "" {
 			return fmt.Errorf("required flag \"token\" not set")
 		}
-		clientInstance = eloverblik.NewCustomer(token)
+		clientInstance = eloverblik.NewCustomer(token, clientOptions(cmd)...)
 		return nil
 	},
 }

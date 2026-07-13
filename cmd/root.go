@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	eloverblik "github.com/slimcdk/go-eloverblik/v1"
@@ -10,6 +11,11 @@ import (
 
 // clientInstance will hold the instantiated client (either Customer or ThirdParty)
 var clientInstance eloverblik.Client
+
+// headerOutput is the destination for the HTTP response headers printed with
+// --print-response-headers (configurable for testing). It defaults to stderr so
+// stdout stays clean, parseable JSON.
+var headerOutput io.Writer = os.Stderr
 
 var rootCmd = &cobra.Command{
 	Use:   "go-eloverblik",
@@ -55,5 +61,6 @@ func rootHelpFunc(cmd *cobra.Command, _ []string) {
 func init() {
 	rootCmd.PersistentFlags().String("token", "", "Eloverblik Access Token (required)")
 	_ = rootCmd.MarkPersistentFlagRequired("token")
+	rootCmd.PersistentFlags().Bool("print-response-headers", false, "Print HTTP response headers from the Eloverblik API to stderr")
 	rootCmd.SetHelpFunc(rootHelpFunc)
 }
