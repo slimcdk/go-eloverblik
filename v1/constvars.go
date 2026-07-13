@@ -37,6 +37,14 @@ const (
 	PT1D  Resolution = "PT1D"
 	P1M   Resolution = "P1M"
 	PT1Y  Resolution = "PT1Y"
+
+	// The OpenAPI description documents the day and year resolutions with their ISO 8601
+	// spellings, P1D and P1Y, and adds PXD for profiled energy quantities covering a
+	// variable number of days. The live API sends PT1D and PT1Y, so both spellings are
+	// accepted when flattening a time series.
+	P1D Resolution = "P1D"
+	P1Y Resolution = "P1Y"
+	PXD Resolution = "PXD"
 )
 
 const (

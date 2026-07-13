@@ -136,6 +136,142 @@ func TestFlatten(t *testing.T) {
 	})
 }
 
+// TestFlattenResolutions covers every resolution. The live API sends PT1D and PT1Y where
+// the OpenAPI description documents P1D and P1Y, so both spellings must flatten the same
+// way; an unknown resolution must not collapse a point to a zero-width interval.
+func TestFlattenResolutions(t *testing.T) {
+	// The API expresses period boundaries in UTC. 2023-12-31T23:00Z is 2024-01-01 00:00
+	// in Copenhagen, and 2024-03-30T23:00Z is 2024-03-31 00:00 — a 23 hour day, because
+	// daylight saving time starts that night.
+	newYear := time.Date(2023, 12, 31, 23, 0, 0, 0, time.UTC)
+	dstDay := time.Date(2024, 3, 30, 23, 0, 0, 0, time.UTC)
+
+	local := func(year int, month time.Month, day, hour int) time.Time {
+		return time.Date(year, month, day, hour, 0, 0, 0, cph)
+	}
+
+	tests := []struct {
+		name       string
+		resolution string
+		interval   TimeInterval
+		points     int
+		wantFrom   []time.Time
+		wantTo     []time.Time
+	}{
+		{
+			name:       "quarter of an hour",
+			resolution: "PT15M",
+			interval:   TimeInterval{Start: newYear, End: newYear.Add(30 * time.Minute)},
+			points:     2,
+			wantFrom:   []time.Time{local(2024, 1, 1, 0), local(2024, 1, 1, 0).Add(15 * time.Minute)},
+			wantTo:     []time.Time{local(2024, 1, 1, 0).Add(15 * time.Minute), local(2024, 1, 1, 0).Add(30 * time.Minute)},
+		},
+		{
+			// PT1D is what the live API sends for Day.
+			name:       "day",
+			resolution: "PT1D",
+			interval:   TimeInterval{Start: newYear, End: newYear.Add(48 * time.Hour)},
+			points:     2,
+			wantFrom:   []time.Time{local(2024, 1, 1, 0), local(2024, 1, 2, 0)},
+			wantTo:     []time.Time{local(2024, 1, 2, 0), local(2024, 1, 3, 0)},
+		},
+		{
+			// P1D is the spelling the OpenAPI description documents.
+			name:       "day, spec spelling",
+			resolution: "P1D",
+			interval:   TimeInterval{Start: newYear, End: newYear.Add(48 * time.Hour)},
+			points:     2,
+			wantFrom:   []time.Time{local(2024, 1, 1, 0), local(2024, 1, 2, 0)},
+			wantTo:     []time.Time{local(2024, 1, 2, 0), local(2024, 1, 3, 0)},
+		},
+		{
+			name:       "day across the daylight saving transition",
+			resolution: "PT1D",
+			interval:   TimeInterval{Start: dstDay, End: dstDay.Add(47 * time.Hour)},
+			points:     2,
+			// The second day starts 23 hours after the first, not 24.
+			wantFrom: []time.Time{local(2024, 3, 31, 0), local(2024, 4, 1, 0)},
+			wantTo:   []time.Time{local(2024, 4, 1, 0), local(2024, 4, 2, 0)},
+		},
+		{
+			name:       "month",
+			resolution: "P1M",
+			interval:   TimeInterval{Start: newYear, End: time.Date(2024, 2, 29, 23, 0, 0, 0, time.UTC)},
+			points:     2,
+			wantFrom:   []time.Time{local(2024, 1, 1, 0), local(2024, 2, 1, 0)},
+			wantTo:     []time.Time{local(2024, 2, 1, 0), local(2024, 3, 1, 0)},
+		},
+		{
+			name:       "year",
+			resolution: "PT1Y",
+			interval:   TimeInterval{Start: newYear, End: time.Date(2025, 12, 31, 23, 0, 0, 0, time.UTC)},
+			points:     2,
+			wantFrom:   []time.Time{local(2024, 1, 1, 0), local(2025, 1, 1, 0)},
+			wantTo:     []time.Time{local(2025, 1, 1, 0), local(2026, 1, 1, 0)},
+		},
+		{
+			// The API sends one point per period for Day, Month and Year, and that period
+			// can be partial: a Year period may start in April and end on 31 December.
+			// A single point must take the interval the API states, not a calendar year.
+			name:       "single point takes the period interval verbatim",
+			resolution: "PT1Y",
+			interval: TimeInterval{
+				Start: time.Date(2025, 4, 26, 22, 0, 0, 0, time.UTC),
+				End:   time.Date(2025, 12, 30, 23, 0, 0, 0, time.UTC),
+			},
+			points:   1,
+			wantFrom: []time.Time{local(2025, 4, 27, 0)},
+			wantTo:   []time.Time{local(2025, 12, 31, 0)},
+		},
+		{
+			name:       "variable number of days is spread evenly",
+			resolution: "PXD",
+			interval:   TimeInterval{Start: newYear, End: newYear.Add(96 * time.Hour)},
+			points:     2,
+			wantFrom:   []time.Time{local(2024, 1, 1, 0), local(2024, 1, 1, 0).Add(48 * time.Hour)},
+			wantTo:     []time.Time{local(2024, 1, 1, 0).Add(48 * time.Hour), local(2024, 1, 1, 0).Add(96 * time.Hour)},
+		},
+		{
+			name:       "unknown resolution falls back to the whole period",
+			resolution: "P1W",
+			interval:   TimeInterval{Start: newYear, End: newYear.Add(168 * time.Hour)},
+			points:     1,
+			wantFrom:   []time.Time{local(2024, 1, 1, 0)},
+			wantTo:     []time.Time{local(2024, 1, 1, 0).Add(168 * time.Hour)},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			points := make([]PointResponse, 0, test.points)
+			for i := 1; i <= test.points; i++ {
+				points = append(points, PointResponse{Position: i, OutQuantityQuantity: float64(i)})
+			}
+
+			ts := TimeSeries{
+				MyEnergyDataMarketDocument: MyEnergyDataMarketDocumentResponse{
+					TimeSeries: []TimeSeriesTimeSeriesResponse{{
+						Periods: []PeriodResponse{{
+							Resolution:   test.resolution,
+							TimeInterval: test.interval,
+							Points:       points,
+						}},
+					}},
+				},
+			}
+
+			flattened := ts.Flatten()
+			assert.Len(t, flattened, test.points)
+
+			for i, point := range flattened {
+				assert.True(t, point.From.Equal(test.wantFrom[i]), "point %d from: got %s, want %s", i+1, point.From, test.wantFrom[i])
+				assert.True(t, point.To.Equal(test.wantTo[i]), "point %d to: got %s, want %s", i+1, point.To, test.wantTo[i])
+				assert.True(t, point.To.After(point.From), "point %d must cover a non-zero interval", i+1)
+			}
+		})
+	}
+}
+
 func TestExportTimeSeries(t *testing.T) {
 	mockResty := resty.New()
 	httpmock.ActivateNonDefault(mockResty.GetClient())

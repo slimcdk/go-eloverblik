@@ -1,7 +1,9 @@
 package eloverblik
 
 import (
+	"fmt"
 	"net/http"
+	"strconv"
 	"testing"
 
 	"github.com/go-resty/resty/v2"
@@ -55,6 +57,41 @@ func TestGetMeteringPoints(t *testing.T) {
 		assert.Equal(t, "Testvej", meteringPoints[0].StreetName)
 		assert.True(t, meteringPoints[0].HasRelation)
 	})
+}
+
+// TestGetMeteringPointsIncludeAll guards the includeAll query parameter. It used to be
+// passed as a path parameter to a path with no placeholder, so resty dropped it and the
+// API silently applied its default of false.
+func TestGetMeteringPointsIncludeAll(t *testing.T) {
+	mockResty := resty.New()
+	httpmock.ActivateNonDefault(mockResty.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	c := &client{
+		accessToken: "test-access-token",
+		resty:       mockResty,
+	}
+
+	for _, includeAll := range []bool{true, false} {
+		t.Run(fmt.Sprintf("includeAll=%t reaches the wire", includeAll), func(t *testing.T) {
+			httpmock.Reset()
+
+			var query string
+			httpmock.RegisterResponder("GET", "/MeteringPoints/MeteringPoints",
+				func(req *http.Request) (*http.Response, error) {
+					query = req.URL.Query().Get("includeAll")
+					resp := httpmock.NewStringResponse(200, `{"result": []}`)
+					resp.Header.Set("Content-Type", "application/json")
+					return resp, nil
+				},
+			)
+
+			_, err := c.GetMeteringPoints(includeAll)
+
+			assert.NoError(t, err)
+			assert.Equal(t, strconv.FormatBool(includeAll), query, "includeAll must be sent as a query parameter")
+		})
+	}
 }
 
 func TestGetMeteringPointDetails(t *testing.T) {

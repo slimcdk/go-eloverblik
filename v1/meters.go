@@ -141,9 +141,7 @@ func (c *client) GetMeteringPoints(includeAll bool) ([]MeteringPoints, error) {
 		SetHeader("Accept", "application/json").
 		SetAuthToken(accessToken).
 		SetResult(&result).
-		SetPathParams(map[string]string{
-			"includeAll": strconv.FormatBool(includeAll),
-		})
+		SetQueryParam("includeAll", strconv.FormatBool(includeAll))
 
 	// Execute request
 	res, err := req.Get("/MeteringPoints/MeteringPoints")

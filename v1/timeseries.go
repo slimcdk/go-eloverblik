@@ -113,33 +113,12 @@ func (ts *TimeSeries) Flatten() []FlatTimeSeriesPoint {
 
 	for _, ts := range ts.MyEnergyDataMarketDocument.TimeSeries {
 		for _, period := range ts.Periods {
-
-			var resolution time.Duration
-			switch Resolution(period.Resolution) {
-			case PT15M:
-				resolution = time.Minute * 15
-			case PT1H:
-				resolution = time.Hour
-			case PT1D:
-				resolution = time.Hour * 24
-			}
-
 			for _, point := range period.Points {
 
-				offset := time.Duration(point.Position-1) * resolution
-
-				var to time.Time
-				switch Resolution(period.Resolution) {
-				case P1M:
-					to = period.TimeInterval.End.In(cph)
-				case PT1Y:
-					to = period.TimeInterval.End.In(cph)
-				default:
-					to = period.TimeInterval.Start.In(cph).Add(offset).Add(resolution)
-				}
+				from, to := pointInterval(Resolution(period.Resolution), period.TimeInterval, point.Position, len(period.Points))
 
 				fts = append(fts, FlatTimeSeriesPoint{
-					From:         period.TimeInterval.Start.In(cph).Add(offset),
+					From:         from,
 					To:           to,
 					Measurement:  point.OutQuantityQuantity,
 					Quality:      point.OutQuantityQuality,
@@ -153,6 +132,65 @@ func (ts *TimeSeries) Flatten() []FlatTimeSeriesPoint {
 	}
 
 	return fts
+}
+
+// pointInterval returns the half-open [from, to) interval covered by the point at the
+// given 1-based position within a period, in Copenhagen local time.
+//
+// The API sends one period per day for Day, per month for Month and per year for Year,
+// each holding a single point, and one period per day holding 24 points for Hour. A
+// period with a single point therefore takes its interval verbatim, which also keeps a
+// partial period correct — a Year period may cover, say, only April to December.
+//
+// Periods with several points step by calendar unit rather than by a fixed duration, so
+// that a day containing a daylight saving transition (23 or 25 hours) and months of
+// unequal length still yield the correct boundaries.
+func pointInterval(resolution Resolution, interval TimeInterval, position, points int) (time.Time, time.Time) {
+
+	start := interval.Start.In(cph)
+	end := interval.End.In(cph)
+	index := position - 1
+
+	// The API already states the exact interval this point covers.
+	if points == 1 {
+		return start, end
+	}
+
+	switch resolution {
+	case PT15M:
+		from := start.Add(time.Duration(index) * 15 * time.Minute)
+		return from, from.Add(15 * time.Minute)
+
+	case PT1H:
+		from := start.Add(time.Duration(index) * time.Hour)
+		return from, from.Add(time.Hour)
+
+	// The live API sends PT1D and PT1Y; the spec documents P1D and P1Y. Accept both.
+	case PT1D, P1D:
+		from := start.AddDate(0, 0, index)
+		return from, from.AddDate(0, 0, 1)
+
+	case P1M:
+		from := start.AddDate(0, index, 0)
+		return from, from.AddDate(0, 1, 0)
+
+	case PT1Y, P1Y:
+		from := start.AddDate(index, 0, 0)
+		return from, from.AddDate(1, 0, 0)
+
+	case PXD:
+		// The period covers a variable number of days for profiled energy quantities.
+		// Its width is not implied by the resolution, so spread the points evenly.
+		if points > 0 {
+			width := end.Sub(start) / time.Duration(points)
+			from := start.Add(time.Duration(index) * width)
+			return from, from.Add(width)
+		}
+	}
+
+	// Unknown resolution: attribute the whole period to the point rather than
+	// silently collapsing it to a zero-width interval.
+	return start, end
 }
 
 func (c *client) ExportTimeSeries(meteringPointIDs []string, from, to time.Time, aggregation Aggregation) (io.ReadCloser, error) {
