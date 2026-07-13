@@ -16,10 +16,20 @@ func newChargeLinksCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "charge-links <metering-id> [metering-id ...]",
 		Aliases: []string{"chargelinks"},
-		Short:   "Get charge links with dated charge prices for one or more metering points",
+		Short:   "Get charge links with dated charge prices (Eloverblik has not deployed this endpoint: it answers 404)",
 		Long: "Get charge links with charges for one or more metering points.\n\n" +
-			"Unlike 'charges', which only returns currently valid and future charges, this returns\n" +
-			"the dated price series of every linked charge, so historic consumption can be priced.",
+			"NOT AVAILABLE YET. Eloverblik has not deployed getchargelinkswithcharges. Checked on\n" +
+			"2026-07-13 with valid Customer and Third-Party tokens, the live API answered 404 Not\n" +
+			"Found on BOTH the Customer API and the Third-Party API, on every documented path, while\n" +
+			"'charges' answered 200 with the same tokens. The endpoint is declared in both of\n" +
+			"Energinet's OpenAPI documents and this command implements it exactly as specified, so it\n" +
+			"is ready for the day Energinet deploys it. Until then every call returns 404.\n\n" +
+			"What it will return: the dated price series of every charge a metering point is linked\n" +
+			"to, the charge link periods and their factors, the VAT classification and the tax\n" +
+			"indicator, so historic consumption can be priced.\n\n" +
+			"What to use today: 'charges'. It returns the subscriptions, fees and tariffs of a\n" +
+			"metering point, but only those that are currently valid or take effect in the future,\n" +
+			"so it cannot price consumption that already happened.",
 		Args: meteringPointArgs,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			period, _ := cmd.Flags().GetString("period")

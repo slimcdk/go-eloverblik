@@ -63,7 +63,7 @@ func rootHelpFunc(cmd *cobra.Command, _ []string) {
 }
 
 func init() {
-	rootCmd.PersistentFlags().String("token", "", "Eloverblik Access Token (required)")
+	rootCmd.PersistentFlags().String("token", "", "Eloverblik refresh token (required)")
 	_ = rootCmd.MarkPersistentFlagRequired("token")
 	rootCmd.PersistentFlags().Bool("print-response-headers", false, "Print HTTP response headers from the Eloverblik API to stderr")
 	rootCmd.SetHelpFunc(rootHelpFunc)
