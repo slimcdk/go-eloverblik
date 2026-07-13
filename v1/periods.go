@@ -22,6 +22,11 @@ const (
 
 // GetDatesFromPeriod calculates the from and to time.Time values based on a Period.
 // This is useful for easily specifying common time ranges when calling API methods.
+//
+// The API treats the requested range as half-open: it returns data from dateFrom up to
+// but not including dateTo, and it rejects a request where the two dates are equal with
+// error 30002. The returned to is therefore the start of the period that follows, not
+// the last instant of the period itself.
 func GetDatesFromPeriod(period Period) (from time.Time, to time.Time, err error) {
 	return getDatesFromPeriod(period, time.Now())
 }
@@ -35,7 +40,7 @@ func getDatesFromPeriod(period Period, now time.Time) (from time.Time, to time.T
 	switch strings.ToLower(string(period)) {
 	case string(Yesterday):
 		from = startOfToday.AddDate(0, 0, -1)
-		to = startOfToday.Add(-1 * time.Nanosecond) // End of yesterday
+		to = startOfToday // Exclusive: the day that follows yesterday
 	case string(ThisWeek):
 		weekday := int(now.Weekday())
 		from = startOfToday.AddDate(0, 0, -weekday)
@@ -44,20 +49,20 @@ func getDatesFromPeriod(period Period, now time.Time) (from time.Time, to time.T
 		weekday := int(now.Weekday())
 		startOfThisWeek := startOfToday.AddDate(0, 0, -weekday)
 		from = startOfThisWeek.AddDate(0, 0, -7)
-		to = startOfThisWeek.Add(-1 * time.Nanosecond)
+		to = startOfThisWeek
 	case string(ThisMonth):
 		from = firstOfThisMonth
 		to = now
 	case string(LastMonth):
 		from = firstOfThisMonth.AddDate(0, -1, 0)
-		to = firstOfThisMonth.Add(-1 * time.Nanosecond) // End of last month
+		to = firstOfThisMonth // Exclusive: the first of this month
 	case string(ThisYear):
 		from = time.Date(year, 1, 1, 0, 0, 0, 0, now.Location())
 		to = now
 	case string(LastYear):
 		firstOfThisYear := time.Date(year, 1, 1, 0, 0, 0, 0, now.Location())
 		from = firstOfThisYear.AddDate(-1, 0, 0)
-		to = firstOfThisYear.Add(-1 * time.Nanosecond)
+		to = firstOfThisYear
 	default:
 		err = fmt.Errorf("invalid period: '%s'", period)
 	}
