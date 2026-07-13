@@ -70,11 +70,33 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # The CHANGELOG section for this tag becomes the header of the release, and
+      # GoReleaser appends its commit-derived changelog underneath. A tag with no
+      # section still releases; it just says so loudly rather than shipping notes
+      # that quietly omit what changed.
+      - name: Extract the release notes for this tag
+        id: notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          header="${RUNNER_TEMP}/release-header.md"
+          version="${TAG#v}"
+          awk -v heading="## [${version}]" '
+            $0 == heading { inside = 1; next }
+            inside && /^## \[/ { exit }
+            inside { print }
+          ' CHANGELOG.md > "${header}"
+          if [ ! -s "${header}" ]; then
+            echo "::warning::CHANGELOG.md has no '## [${version}]' section; this release gets no notes of its own"
+          fi
+          echo "header=${header}" >> "${GITHUB_OUTPUT}"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"
-          args: release --clean
+          args: release --clean --release-header=${{ steps.notes.outputs.header }}
         env:
           # The default job token; no PAT and no org secret involved.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
