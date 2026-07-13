@@ -94,6 +94,70 @@ func TestGetMeteringPointsIncludeAll(t *testing.T) {
 	}
 }
 
+// TestGetMeteringPointsFailure guards the metering point list. Every non-200 used to be
+// returned as (nil, nil), so an expired token or a rate limit looked exactly like an
+// account without metering points.
+func TestGetMeteringPointsFailure(t *testing.T) {
+	mockResty := resty.New()
+	httpmock.ActivateNonDefault(mockResty.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	c := &client{
+		accessToken: "test-access-token",
+		resty:       mockResty,
+		apiType:     CustomerApi,
+	}
+
+	tests := []struct {
+		name        string
+		status      int
+		body        string
+		contentType string
+		expected    error
+	}{
+		{
+			name:        "expired access token",
+			status:      http.StatusUnauthorized,
+			body:        `"[20012] Unauthorized"`,
+			contentType: "application/json",
+			expected:    ErrorUnauthorized,
+		},
+		{
+			// includeAll=true asks for CPR data, which requires consent
+			name:        "missing CPR consent",
+			status:      http.StatusForbidden,
+			body:        `"[10007] Missing consent for CPR lookup"`,
+			contentType: "application/json",
+			expected:    ErrorNoCprConsent,
+		},
+		{
+			name:     "rate limited without an API error message",
+			status:   http.StatusTooManyRequests,
+			expected: ErrorTooManyRequests,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			httpmock.Reset()
+			httpmock.RegisterResponder("GET", "/MeteringPoints/MeteringPoints",
+				func(req *http.Request) (*http.Response, error) {
+					resp := httpmock.NewStringResponse(test.status, test.body)
+					if test.contentType != "" {
+						resp.Header.Set("Content-Type", test.contentType)
+					}
+					return resp, nil
+				})
+
+			meteringPoints, err := c.GetMeteringPoints(true)
+
+			assert.Error(t, err)
+			assert.EqualError(t, err, test.expected.Error())
+			assert.Nil(t, meteringPoints)
+		})
+	}
+}
+
 func TestGetMeteringPointDetails(t *testing.T) {
 	// Setup mock client
 	mockResty := resty.New()

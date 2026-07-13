@@ -19,6 +19,14 @@ const (
 	ThirdPartyApi
 )
 
+const (
+	// apiVersionHeader pins the API contract. Every operation in both OpenAPI specs
+	// declares an "api-version" header with a default of "1.0". Sending it explicitly
+	// keeps the response shapes stable, should the server-side default ever move.
+	apiVersionHeader = "api-version"
+	apiVersion       = "1.0"
+)
+
 // NewCustomer creates and returns a new Eloverblik Customer client.
 // Zero or more options can be passed to configure the client.
 //
@@ -28,7 +36,7 @@ const (
 func NewCustomer(refreshToken string, opts ...Option) Customer {
 	c := &client{
 		refreshToken: refreshToken,
-		resty:        resty.New().SetBaseURL("https://" + prodModeHost + "/customerapi/api"),
+		resty:        newRestyClient("https://" + prodModeHost + "/customerapi/api"),
 		apiType:      CustomerApi,
 	}
 	applyOptions(c, opts)
@@ -44,11 +52,21 @@ func NewCustomer(refreshToken string, opts ...Option) Customer {
 func NewThirdParty(refreshToken string, opts ...Option) ThirdParty {
 	c := &client{
 		refreshToken: refreshToken,
-		resty:        resty.New().SetBaseURL("https://" + prodModeHost + "/thirdpartyapi/api"),
+		resty:        newRestyClient("https://" + prodModeHost + "/thirdpartyapi/api"),
 		apiType:      ThirdPartyApi,
 	}
 	applyOptions(c, opts)
 	return c
+}
+
+// newRestyClient creates the HTTP client shared by both APIs: the base URL, the pinned
+// api-version header and the default retry policy for the documented rate limits.
+func newRestyClient(baseURL string) *resty.Client {
+	client := resty.New().
+		SetBaseURL(baseURL).
+		SetHeader(apiVersionHeader, apiVersion)
+
+	return setRetryPolicy(client, DefaultRetryCount, DefaultRetryMaxWait)
 }
 
 // applyOptions applies the options to the client. It runs after the resty client has

@@ -107,10 +107,16 @@ func TestDeleteRelation(t *testing.T) {
 
 	meteringPointID := "571313180100000001"
 
+	path := fmt.Sprintf("/meteringpoints/meteringpoint/relation/%s", meteringPointID)
+
 	t.Run("successfully deletes relation", func(t *testing.T) {
 		httpmock.Reset()
-		path := fmt.Sprintf("/meteringpoints/meteringpoint/relation/%s", meteringPointID)
-		httpmock.RegisterResponder("DELETE", path, httpmock.NewStringResponder(200, `{"result": true}`))
+		httpmock.RegisterResponder("DELETE", path,
+			func(req *http.Request) (*http.Response, error) {
+				resp := httpmock.NewStringResponse(200, `{"result": true, "success": true}`)
+				resp.Header.Set("Content-Type", "application/json")
+				return resp, nil
+			})
 
 		success, err := c.DeleteRelation(meteringPointID)
 
@@ -118,14 +124,46 @@ func TestDeleteRelation(t *testing.T) {
 		assert.True(t, success)
 	})
 
-	t.Run("returns false on non-200 status", func(t *testing.T) {
+	// The response envelope used to be ignored: success was reported from the HTTP status
+	// alone, so a documented business error came back as (false, nil).
+	t.Run("handles API error response", func(t *testing.T) {
 		httpmock.Reset()
-		path := fmt.Sprintf("/meteringpoints/meteringpoint/relation/%s", meteringPointID)
-		httpmock.RegisterResponder("DELETE", path, httpmock.NewStringResponder(404, ""))
+		httpmock.RegisterResponder("DELETE", path,
+			func(req *http.Request) (*http.Response, error) {
+				resp := httpmock.NewStringResponse(404, `"[20010] Relation not found"`)
+				resp.Header.Set("Content-Type", "application/json")
+				return resp, nil
+			})
+
+		success, err := c.DeleteRelation(meteringPointID)
+
+		assert.Error(t, err)
+		assert.Equal(t, ErrorRelationNotFound, err)
+		assert.False(t, success)
+	})
+
+	t.Run("reports a body saying the relation was not deleted", func(t *testing.T) {
+		httpmock.Reset()
+		httpmock.RegisterResponder("DELETE", path,
+			func(req *http.Request) (*http.Response, error) {
+				resp := httpmock.NewStringResponse(200, `{"result": false, "success": false}`)
+				resp.Header.Set("Content-Type", "application/json")
+				return resp, nil
+			})
 
 		success, err := c.DeleteRelation(meteringPointID)
 
 		assert.NoError(t, err)
+		assert.False(t, success)
+	})
+
+	t.Run("returns an error on a non-200 status without a message", func(t *testing.T) {
+		httpmock.Reset()
+		httpmock.RegisterResponder("DELETE", path, httpmock.NewStringResponder(404, ""))
+
+		success, err := c.DeleteRelation(meteringPointID)
+
+		assert.Error(t, err)
 		assert.False(t, success)
 	})
 }

@@ -2,7 +2,6 @@ package eloverblik
 
 import (
 	"fmt"
-	"net/http"
 )
 
 func (c *client) AddRelationByID(meteringPointIDs []string) ([]StringResponse, error) {
@@ -78,15 +77,31 @@ func (c *client) DeleteRelation(meteringPointID string) (bool, error) {
 		return false, err
 	}
 
+	// The API answers with a boolean envelope, so a business error such as
+	// "[20010] Relation not found" has to be read out of the body: the HTTP status
+	// alone does not tell the relation was actually deleted.
+	var result struct {
+		Result *bool `json:"result"`
+	}
+	var apiErrorMsg string
+
 	path := fmt.Sprintf("/meteringpoints/meteringpoint/relation/%s", meteringPointID)
 
 	res, err := c.resty.R().
 		SetAuthToken(accessToken).
+		SetResult(&result).
+		SetError(&apiErrorMsg).
 		Delete(path)
 
 	if err != nil {
 		return false, err
 	}
+	if err = apiError(apiErrorMsg, res.StatusCode()); err != nil {
+		return false, err
+	}
+	if result.Result != nil {
+		return *result.Result, nil
+	}
 
-	return res.StatusCode() == http.StatusOK, nil
+	return res.IsSuccess(), nil
 }

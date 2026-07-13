@@ -2,7 +2,6 @@ package eloverblik
 
 import (
 	"fmt"
-	"net/http"
 )
 
 type AuthorizationScope string
@@ -46,17 +45,28 @@ func (c *client) authenticate() error {
 	var result struct {
 		AccessToken string `json:"result"`
 	}
+	var apiErrorMsg string
 
 	// Request preflight
 	req := c.resty.R().
 		SetHeader("Accept", "application/json").
 		SetAuthToken(c.refreshToken).
-		SetResult(&result)
+		SetResult(&result).
+		SetError(&apiErrorMsg)
 
 	// Execute request
 	res, err := req.Get("/token")
-	if err != nil || res.StatusCode() != http.StatusOK {
+	if err != nil {
 		return err
+	}
+	if err = apiError(apiErrorMsg, res.StatusCode()); err != nil {
+		return err
+	}
+
+	// A response without a token leaves the client unauthenticated, which would make
+	// every following call fail with a confusing 401 instead of the real cause
+	if result.AccessToken == "" {
+		return ErrorErrorCreatingToken
 	}
 
 	// Set access token on client

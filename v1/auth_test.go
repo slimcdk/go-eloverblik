@@ -57,6 +57,77 @@ func TestGetDataAccessToken(t *testing.T) {
 	})
 }
 
+// TestAuthenticateFailure guards the token endpoint. Any non-200 used to be swallowed:
+// authenticate() returned a nil error, the access token stayed empty and the caller went
+// on to make unauthenticated requests.
+func TestAuthenticateFailure(t *testing.T) {
+	mockResty := resty.New()
+	httpmock.ActivateNonDefault(mockResty.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	tests := []struct {
+		name        string
+		status      int
+		body        string
+		contentType string
+		expected    error
+	}{
+		{
+			name:        "expired or revoked refresh token",
+			status:      http.StatusUnauthorized,
+			body:        `"[50001] Token is invalid"`,
+			contentType: "application/json",
+			expected:    ErrorTokenNotValid,
+		},
+		{
+			name:     "unauthorized without an API error message",
+			status:   http.StatusUnauthorized,
+			expected: ErrorUnauthorized,
+		},
+		{
+			name:     "rate limited",
+			status:   http.StatusTooManyRequests,
+			expected: ErrorTooManyRequests,
+		},
+		{
+			name:     "datahub unavailable",
+			status:   http.StatusServiceUnavailable,
+			expected: ErrorClientConnection(http.StatusServiceUnavailable),
+		},
+		{
+			name:        "success without a token",
+			status:      http.StatusOK,
+			body:        `{"result": ""}`,
+			contentType: "application/json",
+			expected:    ErrorErrorCreatingToken,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			httpmock.Reset()
+			httpmock.RegisterResponder("GET", "/token",
+				func(req *http.Request) (*http.Response, error) {
+					resp := httpmock.NewStringResponse(test.status, test.body)
+					if test.contentType != "" {
+						resp.Header.Set("Content-Type", test.contentType)
+					}
+					return resp, nil
+				})
+
+			// Retrying is disabled so the transient statuses do not slow the test down
+			c := &client{refreshToken: "test-refresh-token", resty: mockResty}
+
+			token, err := c.GetDataAccessToken()
+
+			assert.Error(t, err)
+			assert.EqualError(t, err, test.expected.Error())
+			assert.Empty(t, token)
+			assert.Empty(t, c.accessToken, "no access token may be stored when authentication fails")
+		})
+	}
+}
+
 func TestGetAuthorizations(t *testing.T) {
 	mockResty := resty.New()
 	httpmock.ActivateNonDefault(mockResty.GetClient())

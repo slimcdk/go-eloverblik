@@ -3,7 +3,6 @@ package eloverblik
 import (
 	"fmt"
 	"io"
-	"net/http"
 	"strconv"
 )
 
@@ -135,20 +134,26 @@ func (c *client) GetMeteringPoints(includeAll bool) ([]MeteringPoints, error) {
 	var result struct {
 		Result []MeteringPoints `json:"result"`
 	}
+	var apiErrorMsg string
 
 	// Request preflight
 	req := c.resty.R().
 		SetHeader("Accept", "application/json").
 		SetAuthToken(accessToken).
 		SetResult(&result).
+		SetError(&apiErrorMsg).
 		SetQueryParam("includeAll", strconv.FormatBool(includeAll))
 
 	// Execute request
 	res, err := req.Get("/MeteringPoints/MeteringPoints")
-	if err != nil || res.StatusCode() != http.StatusOK {
+	if err != nil {
 		return nil, err
 	}
-	return result.Result, err
+	if err = apiError(apiErrorMsg, res.StatusCode()); err != nil {
+		return nil, err
+	}
+
+	return result.Result, nil
 }
 
 func (c *client) GetMeteringPointDetails(meteringPointIDs []string) ([]MeteringPointDetailsResponse, error) {

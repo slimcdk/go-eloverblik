@@ -11,18 +11,53 @@ func ErrorClientConnection(status int) error {
 	return fmt.Errorf("could't connect to eloverblik: %d", status)
 }
 
-func isRetryableError(status int, err error) bool {
+// isRetryableError reports whether a response is worth retrying. Only the two transient
+// conditions documented by the API qualify: 429 when a rate limit is exceeded and 503
+// when DataHub is unable to keep up. Everything else - 401, any other 4xx, 500 - is a
+// permanent answer and is handed to the caller right away. Transport errors are not
+// retried either, so a request is never sent twice by accident.
+func isRetryableError(statusCode int, err error) bool {
 
-	if err == nil || status == http.StatusOK {
+	if err != nil {
 		return false
 	}
-	return true
+	return statusCode == http.StatusTooManyRequests || statusCode == http.StatusServiceUnavailable
+}
+
+// isSuccessStatus reports whether a status code is a 2xx.
+func isSuccessStatus(statusCode int) bool {
+	return statusCode >= http.StatusOK && statusCode < http.StatusMultipleChoices
+}
+
+// statusError maps a response that carries no parseable API error message to an error
+// based on its HTTP status alone.
+func statusError(statusCode int) error {
+	switch statusCode {
+	case http.StatusTooManyRequests:
+		return ErrorTooManyRequests
+	case http.StatusUnauthorized:
+		return ErrorUnauthorized
+	default:
+		return ErrorClientConnection(statusCode)
+	}
 }
 
 func apiError(msg string, statusCode int) error {
 
+	// Not every failure carries an API error message: a 429 from the rate limiter or a
+	// 503 from DataHub can arrive with an empty or non-JSON body. Those are judged by
+	// their HTTP status alone and must never be reported as success.
 	if len(msg) == 0 {
-		return apiErrorMap[10000]
+		if isSuccessStatus(statusCode) {
+			return apiErrorMap[10000]
+		}
+		return statusError(statusCode)
+	}
+
+	// API error messages carry the code in their first characters, e.g.
+	// "[20010] Relation not found". A shorter message holds no code to read.
+	if len(msg) < 6 {
+		return fmt.Errorf("failed to parse error in api error message %s", msg)
 	}
 
 	// Parse API error code
@@ -32,9 +67,14 @@ func apiError(msg string, statusCode int) error {
 	}
 
 	// API Error lookup
-	errLookup := apiErrorMap[code]
-	if errLookup == nil && statusCode == 400 {
+	errLookup, known := apiErrorMap[code]
+	if !known {
 		return fmt.Errorf("unhandled error: '%s'", msg)
+	}
+
+	// A mapped-to-nil code (10000, "no error") on a failed response still is a failure
+	if errLookup == nil && !isSuccessStatus(statusCode) {
+		return statusError(statusCode)
 	}
 
 	return errLookup
@@ -46,6 +86,7 @@ var (
 	ErrorToManyRequestItems                             error = errors.New("to many request items")                                                         // status code 412 - api code 10002
 	ErrorInternalServerError                            error = errors.New("internal server error")                                                         // status code 500 - api code 10003
 	ErrorMaximumNumberOfMeteringPointsExceeded          error = errors.New("number of metering point exceeds maximum of {max} metering points per request") // status code 429 - api code 10004
+	ErrorNoCprConsent                                   error = errors.New("missing consent for CPR lookup")                                                // api code 10007
 	ErrorWrongMeteringPointIdOrWebAccessCode            error = errors.New("invalid meteringpoint ID or webaccess code")                                    // status code 404 - api code 20000
 	ErrorMeteringPointBlocked                           error = errors.New("meteringpoint blocked")                                                         // status code 403 - api code 20001
 	ErrorMeteringPointAlreadyAdded                      error = errors.New("meteringpoint relation already added")                                          // status code 208 - api code 20002
@@ -111,6 +152,7 @@ var apiErrorMap = map[uint64]error{
 	10002: ErrorToManyRequestItems,
 	10003: ErrorInternalServerError,
 	10004: ErrorMaximumNumberOfMeteringPointsExceeded,
+	10007: ErrorNoCprConsent,
 	20000: ErrorWrongMeteringPointIdOrWebAccessCode,
 	20001: ErrorMeteringPointBlocked,
 	20002: ErrorMeteringPointAlreadyAdded,
