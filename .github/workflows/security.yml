@@ -1,0 +1,91 @@
+name: Security
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    # Weekly, Monday 04:31 UTC. A dependency does not have to change for a
+    # vulnerability to be published against it, so the scan runs on a clock as
+    # well as on every change.
+    - cron: '31 4 * * 1'
+  workflow_dispatch:
+
+# Least privilege by default. Jobs that need more say so themselves.
+permissions:
+  contents: read
+
+# Superseded runs on the same ref are pointless work: cancel them.
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          # Track the newest patch release of the Go line declared in go.mod.
+          # govulncheck reports standard library vulnerabilities against the
+          # toolchain it runs with, so pinning an exact patch would keep
+          # reporting stdlib issues that a newer patch has already fixed.
+          go-version: '1.25'
+          check-latest: true
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      # Highest-signal check for a Go module: govulncheck does reachability
+      # analysis, so it only fails on vulnerabilities this code can actually
+      # reach, rather than on every advisory in the dependency tree.
+      # Exits non-zero (3) when a reachable vulnerability is found.
+      - name: Run govulncheck
+        run: govulncheck -show verbose ./...
+
+  codeql:
+    name: CodeQL (Go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      # Required to upload the results to the code scanning dashboard.
+      security-events: write
+      # Required by the CodeQL action to look up the workflow run status.
+      actions: read
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go
+          # autobuild resolves to `go build ./...` for this module; no separate
+          # autobuild step is needed once build-mode is set explicitly.
+          build-mode: autobuild
+          # security-extended adds the lower-precision security queries on top of
+          # the default suite. This repository is a few thousand lines of Go, so
+          # the extra analysis costs a couple of minutes, not an hour.
+          queries: security-extended
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:go"

@@ -1,0 +1,126 @@
+# GoReleaser configuration for the go-eloverblik CLI.
+# Docs: https://goreleaser.com
+#
+# Local dry run:
+#   goreleaser check
+#   goreleaser build --snapshot --clean --single-target
+#
+# A real release is cut by pushing a v* tag; see .github/workflows/release.yml.
+version: 2
+
+project_name: go-eloverblik
+
+before:
+  hooks:
+    # Fail early on a dirty/incomplete module graph rather than halfway through
+    # the build matrix. Deliberately not "go mod tidy": a release must build the
+    # code as tagged, never rewrite go.mod/go.sum underneath itself.
+    - go mod download
+    - go mod verify
+
+builds:
+  - id: go-eloverblik
+    # The CLI main package lives at the repo root; the library lives in v1/.
+    main: .
+    binary: go-eloverblik
+    env:
+      # Static binaries: no libc dependency, so the artifacts run on any distro
+      # and cross-compilation needs no C toolchain.
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # Mirrors the exclude in .github/workflows/test.yml's build matrix.
+      - goos: windows
+        goarch: arm64
+    flags:
+      # Strip local filesystem paths from the binary so the same commit produces
+      # the same bytes regardless of where it was built.
+      - -trimpath
+    ldflags:
+      # -s -w drop the symbol table and DWARF debug info.
+      #
+      # No -X version injection here on purpose: the source has no version
+      # variable to inject into (main.go only calls cmd.Execute(), and the cobra
+      # root command sets no Version field). GoReleaser's default ldflags would
+      # try to set main.version/main.commit/main.date, which the linker silently
+      # ignores for symbols that do not exist. Rather than carry four dead flags,
+      # we strip only. If a version variable is added later, add for example
+      #   -X github.com/slimcdk/go-eloverblik/cmd.version={{ .Version }}
+      # and wire it into the cobra root command.
+      - -s -w
+    # Reproducible builds: timestamp the binary from the commit, not from "now".
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: go-eloverblik
+    ids:
+      - go-eloverblik
+    # tar.gz everywhere, zip on Windows where tar.gz is awkward to open.
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      # Merge commits carry no information a reader of the changelog wants.
+      - "^Merge pull request"
+      - "^Merge branch"
+      - "^Merge remote-tracking branch"
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Documentation
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: CI
+      regexp: '^.*?ci(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    # Anything that does not follow the conventional-commit prefixes still shows
+    # up, so a release note is never silently incomplete.
+    - title: Other changes
+      order: 999
+
+release:
+  # The tag decides. A tag like v1.3.0-rc.1 is published as a pre-release.
+  prerelease: auto
+  draft: false
+  name_template: "v{{ .Version }}"
+  footer: |
+    ## Install
+
+    Download the archive for your platform below, verify it against
+    `checksums.txt`, unpack it and put `go-eloverblik` on your `PATH`.
+
+    Or install with Go:
+
+    ```sh
+    go install github.com/slimcdk/go-eloverblik@{{ .Tag }}
+    ```

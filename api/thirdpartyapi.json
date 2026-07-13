@@ -1,0 +1,2017 @@
+{
+  "components": {
+    "schemas": {
+      "AuthorizationDto": {
+        "additionalProperties": false,
+        "properties": {
+          "customerCVR": {
+            "description": "CVR number of the customer",
+            "nullable": true,
+            "type": "string"
+          },
+          "customerKey": {
+            "description": "Optional key that was applied to the authorization when it was requested from the customer. Can be used to identify the customer.",
+            "nullable": true,
+            "type": "string"
+          },
+          "customerName": {
+            "description": "Name of the customer extracted from the customer’s NemID certificate",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "description": "Identifier UUID of this power of attorney",
+            "nullable": true,
+            "type": "string"
+          },
+          "includeFutureMeteringPoints": {
+            "description": "Specifies whether the customer has accepted that future metering points that will be registered to his CVR will automatically be included in the authorization. If the customer has granted several authorizations with different includeFutureMeteringPoints values, then the value of most recent active authorization takes precedence",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "thirdPartyName": {
+            "description": "Name of the third party owning this power of attorney",
+            "nullable": true,
+            "type": "string"
+          },
+          "timeStamp": {
+            "description": "Date and time when the authorization was registered. The date/time is expressed in UTC as specified in ISO 8601",
+            "nullable": true,
+            "type": "string"
+          },
+          "validFrom": {
+            "description": "The earliest date allowed to request data on",
+            "nullable": true,
+            "type": "string"
+          },
+          "validTo": {
+            "description": "Max date allowed to request data on",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AuthorizationDtoListApiResponse": {
+        "additionalProperties": false,
+        "description": "Used as the 'root' class for all responses returned from the public API's. We need these to have a 'root' when the result is transformed to XML",
+        "properties": {
+          "result": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorizationDto"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ChargeIdentifierDto": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "nullable": true,
+            "type": "string"
+          },
+          "owner": {
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ChargeInformationDto": {
+        "additionalProperties": false,
+        "properties": {
+          "chargeIdentifier": {
+            "$ref": "#/components/schemas/ChargeIdentifierDto"
+          },
+          "chargeInformationPeriods": {
+            "items": {
+              "$ref": "#/components/schemas/ChargeInformationPeriodDto"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "chargeSeriesPoints": {
+            "items": {
+              "$ref": "#/components/schemas/ChargeSeriesPointDto"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "pricingCategory": {
+            "nullable": true,
+            "type": "string"
+          },
+          "resolution": {
+            "nullable": true,
+            "type": "string"
+          },
+          "taxIndicator": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "ChargeInformationPeriodDto": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "nullable": true,
+            "type": "string"
+          },
+          "from": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "nullable": true,
+            "type": "string"
+          },
+          "to": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "transparentInvoicing": {
+            "type": "boolean"
+          },
+          "vatClassification": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ChargeLinkDto": {
+        "additionalProperties": false,
+        "properties": {
+          "chargeIdentifier": {
+            "$ref": "#/components/schemas/ChargeIdentifierDto"
+          },
+          "chargeLinkPeriods": {
+            "items": {
+              "$ref": "#/components/schemas/ChargeLinkPeriodDto"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "meteringPointId": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ChargeLinkPeriodDto": {
+        "additionalProperties": false,
+        "properties": {
+          "factor": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "from": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "to": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ChargeSeriesPointDto": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "price": {
+            "format": "double",
+            "type": "number"
+          },
+          "to": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ChildMeteringPointDto": {
+        "additionalProperties": false,
+        "properties": {
+          "meterNumber": {
+            "nullable": true,
+            "type": "string"
+          },
+          "meterReadingOccurrence": {
+            "nullable": true,
+            "type": "string"
+          },
+          "meteringPointId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "parentMeteringPointId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "typeOfMP": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ContactAddressDto": {
+        "additionalProperties": false,
+        "properties": {
+          "addressCode": {
+            "description": "Code specifying the type of contact address\n            \nPossible values:\n            \nD01 (Technical address), D04 (Juridical address).",
+            "nullable": true,
+            "type": "string"
+          },
+          "attention": {
+            "description": "Specifies if there a person or a c/o address to attention.",
+            "nullable": true,
+            "type": "string"
+          },
+          "buildingNumber": {
+            "description": "Building number – part of the specific contact address.",
+            "nullable": true,
+            "type": "string"
+          },
+          "cityName": {
+            "description": "City name – part of the specific contact address.",
+            "nullable": true,
+            "type": "string"
+          },
+          "citySubDivisionName": {
+            "nullable": true,
+            "type": "string"
+          },
+          "contactEmailAddress": {
+            "description": "Contact e-mail address.",
+            "nullable": true,
+            "type": "string"
+          },
+          "contactMobileNumber": {
+            "description": "Contact mobile number.",
+            "nullable": true,
+            "type": "string"
+          },
+          "contactName1": {
+            "description": "Name of contact person 1",
+            "nullable": true,
+            "type": "string"
+          },
+          "contactName2": {
+            "description": "Name of contact person 2",
+            "nullable": true,
+            "type": "string"
+          },
+          "contactPhoneNumber": {
+            "description": "Contact phone number.",
+            "nullable": true,
+            "type": "string"
+          },
+          "contactType": {
+            "description": "Not used. Null is retuned. Will be removed in a later version of the API.",
+            "nullable": true,
+            "type": "string"
+          },
+          "countryName": {
+            "description": "Country name – part of the specific contact address.",
+            "nullable": true,
+            "type": "string"
+          },
+          "floorId": {
+            "description": "Floor id – part of the specific contact address.",
+            "nullable": true,
+            "type": "string"
+          },
+          "postBox": {
+            "description": "Specifies if there a postbox to attention.",
+            "nullable": true,
+            "type": "string"
+          },
+          "postcode": {
+            "description": "Postcode – part of the specific contact address.",
+            "nullable": true,
+            "type": "string"
+          },
+          "protectedAddress": {
+            "description": "Specifies if the Address is protected.",
+            "nullable": true,
+            "type": "string"
+          },
+          "roomId": {
+            "description": "Room id – part of the specific contact address.",
+            "nullable": true,
+            "type": "string"
+          },
+          "streetName": {
+            "description": "Street name – part of the specific contact address.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "EIC": {
+        "additionalProperties": false,
+        "properties": {
+          "codingScheme": {
+            "description": "The coding scheme used for the sender mRID.\nFixed value = A10\nThis code specifies that the coding scheme used is the\nGlobal Location Number (GLN 13) maintained by GS1",
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "description": "GLN (Global Location Number) of DataHub.\nFixed value = 5790001330583",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GetChargeLinksWithChargesQueryItem": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "meteringPointId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "to": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GetChargeLinksWithChargesRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "items": {
+              "$ref": "#/components/schemas/GetChargeLinksWithChargesQueryItem"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "GetChargeLinksWithChargesResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "chargeInformations": {
+            "items": {
+              "$ref": "#/components/schemas/ChargeInformationDto"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/GetChargeLinksWithChargesResultDto"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "GetChargeLinksWithChargesResponseApiResponse": {
+        "additionalProperties": false,
+        "description": "Used as the 'root' class for all responses returned from the public API's. We need these to have a 'root' when the result is transformed to XML",
+        "properties": {
+          "result": {
+            "$ref": "#/components/schemas/GetChargeLinksWithChargesResponse"
+          }
+        },
+        "type": "object"
+      },
+      "GetChargeLinksWithChargesResultDto": {
+        "additionalProperties": false,
+        "properties": {
+          "chargeLinks": {
+            "items": {
+              "$ref": "#/components/schemas/ChargeLinkDto"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "error": {
+            "nullable": true,
+            "type": "string"
+          },
+          "meteringPointId": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MarketEvaluationMeteringPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "codingScheme": {
+            "description": "The coding scheme used for the market evaluation\npoint mRID.\nFixed value = A10\nThis code specifies that the coding scheme used is the\nGlobal Service Relation Number (GSRN 18) maintained\nby GS1.",
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "description": "Unique metering point id consisting of 18 characters.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MarketEvaluationPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "mRID": {
+            "$ref": "#/components/schemas/MarketEvaluationMeteringPoint"
+          }
+        },
+        "type": "object"
+      },
+      "MeteringPointChargeDto": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "description": "Description of the fee.",
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "description": "Name of the fee.",
+            "nullable": true,
+            "type": "string"
+          },
+          "owner": {
+            "description": "Specifies a GLN (Global Location Number) representing the owner (grid operator).",
+            "nullable": true,
+            "type": "string"
+          },
+          "periodType": {
+            "description": "Type of period \"DAY\" or \"HOUR\".",
+            "nullable": true,
+            "type": "string"
+          },
+          "price": {
+            "description": "Price of the subscription in dkkr.",
+            "format": "double",
+            "type": "number"
+          },
+          "priceId": {
+            "description": "Identifier of the price/charge type.",
+            "nullable": true,
+            "type": "string"
+          },
+          "quantity": {
+            "description": "Quantity of the subscription.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "validFromDate": {
+            "description": "Date the fee starts.",
+            "nullable": true,
+            "type": "string"
+          },
+          "validToDate": {
+            "description": "Date the fee ends.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MeteringPointChargesDto": {
+        "additionalProperties": false,
+        "properties": {
+          "meteringPointId": {
+            "description": "Id of the metering point.",
+            "nullable": true,
+            "type": "string"
+          },
+          "subscriptions": {
+            "description": "A list of subscriptions for the metering point.",
+            "items": {
+              "$ref": "#/components/schemas/MeteringPointChargeDto"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "tariffs": {
+            "description": "A list of tariffs for the metering point.",
+            "items": {
+              "$ref": "#/components/schemas/MeteringPointTariffDto"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "MeteringPointChargesDtoResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "errorCode": {
+            "format": "int32",
+            "readOnly": true,
+            "type": "integer"
+          },
+          "errorText": {
+            "description": "Human readable description of the error",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "description": "Used to map requests to responses. Ex: data is requested for 10 metering points. The 'Id' will be the requested metering point id for which the reponse belong.",
+            "nullable": true,
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/MeteringPointChargesDto"
+          },
+          "stackTrace": {
+            "description": "Included stacktrace from exceptions",
+            "nullable": true,
+            "type": "string"
+          },
+          "success": {
+            "description": "True if the request succeded, False if not",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "MeteringPointChargesDtoResponseListApiResponse": {
+        "additionalProperties": false,
+        "description": "Used as the 'root' class for all responses returned from the public API's. We need these to have a 'root' when the result is transformed to XML",
+        "properties": {
+          "result": {
+            "items": {
+              "$ref": "#/components/schemas/MeteringPointChargesDtoResponse"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "MeteringPointDetailsDto": {
+        "additionalProperties": false,
+        "properties": {
+          "assetType": {
+            "description": "Energy type.\n            \nPossible values:\n            \nD01 (Steam backpressure turbine), D02 (Gas turbine), D03 (Combined cycle),\nD04 (Internal combustion engine Gas), D05 (Steam turbine condensation/steam), D06 (Boiler),\nD07 (Stirling engine), D08 (Permanently connected electrical energy storage facilities),\nD09 (Temporarily connected electrical energy storage facilities), D10 (Fuel cells),\nD11 (Photovoltaics), D12 (Wind turbines), D13 (Hydropower), D14 (Wave power),\nD15 (Mixed production), D16 (Production with electrical energy storage facilities),\nD17 (Power-to-X), D18 (Regenerative demand facility), D19 (Internal combustion engine diesel engine),\nD20 (Biocombustion engine), D99 (Unknown technology).",
+            "nullable": true,
+            "type": "string"
+          },
+          "buildingNumber": {
+            "description": "Building number – part of metering point location address",
+            "nullable": true,
+            "type": "string"
+          },
+          "childMeteringPoints": {
+            "items": {
+              "$ref": "#/components/schemas/ChildMeteringPointDto"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "cityName": {
+            "description": "City name – part of metering point location address.",
+            "nullable": true,
+            "type": "string"
+          },
+          "citySubDivisionName": {
+            "description": "City sub division name – part of metering point location address",
+            "nullable": true,
+            "type": "string"
+          },
+          "consumerCVR": {
+            "description": "CVR number of the registered consumer. Only available for metering points registered to business consumers.",
+            "nullable": true,
+            "type": "string"
+          },
+          "consumerCategory": {
+            "description": "Applies to all consumption metering points. Specifies the threedigit consumer category for the electricityconsumption category which applies to the metering point.",
+            "nullable": true,
+            "type": "string"
+          },
+          "consumerStartDate": {
+            "description": "Date when the current consumer was registered to the metering point. Not available for child metering points. The date is expressed in UTC as specified in ISO 8601.",
+            "nullable": true,
+            "type": "string"
+          },
+          "contactAddresses": {
+            "items": {
+              "$ref": "#/components/schemas/ContactAddressDto"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "darReference": {
+            "description": "Specifies the reference id to the public Danish Address Register.",
+            "nullable": true,
+            "type": "string"
+          },
+          "dataAccessCVR": {
+            "description": "Additional CVR number of the registered consumer. Only available for metering points registered to business consumers.",
+            "nullable": true,
+            "type": "string"
+          },
+          "disconnectionType": {
+            "description": "Specifies how the metering point can be disconnected by the grid operator.\n            \nPossible values:\n            \nD00 (For future usage), D01 (Remote disconnection), D02 (Manual disconnection).",
+            "nullable": true,
+            "type": "string"
+          },
+          "energyTimeSeriesMeasureUnit": {
+            "description": "Specifies the energy measurement unit relevant for the metering point.\n            \nPossible values:\n            \nAMP (Ampere), H87 (Count/Quantity), K3 (kVArh - KiloVolt-Ampere reactive hour),\nKWH (kWh - Kilowatt-hour), KWT (kW - Kilowatt), MAW (MW - Megawatt),\nMWH (MWh - Megawatt-hour), TNE (Tonne - metric ton), Z03 (MVAr - MegaVolt-Ampere reactive power),\nZ14 (Danish Tariff Code).",
+            "nullable": true,
+            "type": "string"
+          },
+          "estimatedAnnualVolume": {
+            "description": "Estimated annual consumption/production of the metering\npoint. Only required for profiled settled metering points. May\nexist for metering points with other settlement methods, but is\nnot necessarily maintained and should therefore not be used.",
+            "nullable": true,
+            "type": "string"
+          },
+          "firstConsumerPartyName": {
+            "description": "Name of consumer 1",
+            "nullable": true,
+            "type": "string"
+          },
+          "floorId": {
+            "description": "Floor id – part of metering point location address",
+            "nullable": true,
+            "type": "string"
+          },
+          "gridOperatorID": {
+            "description": "Id of the Grid Operator.",
+            "nullable": true,
+            "type": "string"
+          },
+          "gridOperatorID_SchemeAgencyIdentifier": {
+            "description": "Specifies which Agency the Balance supplier Identifier is associated with.\n            \nPossible values:\n            \nGLN: Global Location Number (https://www.gs1.org/standards/id-keys/gln)\n            \nEIC: The Energy Identification Coding (https://www.entsoe.eu/data/energy-identification-codes-eic/)",
+            "nullable": true,
+            "type": "string"
+          },
+          "gridOperatorName": {
+            "description": "Name of the grid operator",
+            "nullable": true,
+            "type": "string"
+          },
+          "locationDescription": {
+            "description": "Comment related to the location or nature of the metering\npoint. Will most often be a description regarding the location of\nthe physical meter.",
+            "nullable": true,
+            "type": "string"
+          },
+          "meterCounterDigits": {
+            "description": "Number of digits on the counting mechanism of a meter. Only applicable for metering points with a physical meter.",
+            "nullable": true,
+            "type": "string"
+          },
+          "meterCounterMultiplyFactor": {
+            "description": "The conversion factor on the counting mechanism of the meter. Only applicable for metering points with a physical meter.",
+            "nullable": true,
+            "type": "string"
+          },
+          "meterCounterType": {
+            "description": "Specifies whether the counter of a meter accumulates or balances consumption. Only applicable for metering points with a physical meter.\n            \nPossible values:\n            \nD01 (Accumulated), D02 (Balanced).",
+            "nullable": true,
+            "type": "string"
+          },
+          "meterCounterUnit": {
+            "description": "Unit in which the counting mechanism of a meter meters the\nenergy consumption. Only applicable for metering points with a\nphysical meter.",
+            "nullable": true,
+            "type": "string"
+          },
+          "meterNumber": {
+            "description": "Meter number identifying the physical meter. Only available if the metering point has a physical meter.",
+            "nullable": true,
+            "type": "string"
+          },
+          "meterReadingOccurrence": {
+            "description": "Specifies the meter reading resolution.\n            \nPossibles values:\n            \nANDET (Other), P1M (Monthly), PT15M (15 Minutes), PT1H (Hourly).\n            \nIf a metering point has meter reading occurrence = Other, only\nprofiled energy quantities (consumption statements) can be\nregistered for the metering point.\nIf a metering point has meter reading occurrence = P1M or\nPT15M, only non-profiled energy quantities can be registered\nfor the metering point.\nIf a metering point has meter reading occurrence = PT1H, profiled energy quantities (consumption statements) as well as\nnon-profiled energy quantities can be registered for the metering point depending on the settlement method (see further details elsewhere in this table).\nSee further details regarding profiled energy quantities versus\nnon-profiled energy quantities in the sec",
+            "nullable": true,
+            "type": "string"
+          },
+          "meteringGridAreaIdentification": {
+            "description": "Id of the grid area to which the metering point belongs.",
+            "nullable": true,
+            "type": "string"
+          },
+          "meteringPointAlias": {
+            "nullable": true,
+            "type": "string"
+          },
+          "meteringPointId": {
+            "description": "Unique metering point id consisting of 18 characters",
+            "nullable": true,
+            "type": "string"
+          },
+          "mpAddressWashInstructions": {
+            "description": "Specifies if the address can be washed against the public Danish address register.\n            \nPossible values:\n            \nD01 (Washable), D02 (Not washable).",
+            "nullable": true,
+            "type": "string"
+          },
+          "mpCapacity": {
+            "description": "Specifies the power in kW for the production facility.",
+            "nullable": true,
+            "type": "string"
+          },
+          "mpConnectionType": {
+            "description": "Specifies the connection type of a metering point for which net settlement is used.\n            \nPossible values:\n            \nD01 (Direct connected), D02 (Installation connected).",
+            "nullable": true,
+            "type": "string"
+          },
+          "mpReadingCharacteristics": {
+            "description": "Specifies how the metering point is read. Only applicable for profiled metering points.\n            \nPossible values:\n            \nD01 (Automatic meter reading), D02 (Manual meter reading).",
+            "nullable": true,
+            "type": "string"
+          },
+          "mpRelationType": {
+            "description": "Not used. No value is retuned. Will be removed in a later version of the API.",
+            "nullable": true,
+            "type": "string"
+          },
+          "municipalityCode": {
+            "description": "Municipality code – part of metering point location address.",
+            "nullable": true,
+            "type": "string"
+          },
+          "netSettlementGroup": {
+            "description": "Net settlement group to which the metering point belongs.\n            \nPossible values:\n            \n0 (No Net Settlement), 1 (Net Settlement Group 1), 2 (Net Settlement Group 2),\n3 (Net Settlement Group 3), 4 (Net Settlement Group 4), 5 (Net Settlement Group 5),\n6 (Net Settlement Group 6), 7 (Net Settlement Group 7), 99 (Net Settlement Group 99).",
+            "nullable": true,
+            "type": "string"
+          },
+          "occurrence": {
+            "description": "Date of the data request.",
+            "nullable": true,
+            "type": "string"
+          },
+          "parentMeteringPointId": {
+            "description": "The id of the related parent metering point. Only applicable for child metering points",
+            "nullable": true,
+            "type": "string"
+          },
+          "physicalStatusOfMP": {
+            "description": "Physical status of the metering point.\n            \nPossible values:\n            \nD03 (New), E22 (Connected), E23 (Disconnected).",
+            "nullable": true,
+            "type": "string"
+          },
+          "postcode": {
+            "description": "Postcode – part of metering point location address.",
+            "nullable": true,
+            "type": "string"
+          },
+          "powerLimitA": {
+            "description": "Specifies the actual maximum limit for current (in ampere)",
+            "nullable": true,
+            "type": "string"
+          },
+          "powerLimitKW": {
+            "description": "Specifies the actual maximum limit for power (in kW).",
+            "nullable": true,
+            "type": "string"
+          },
+          "powerLimitKWDecimal": {
+            "description": "Specifies the actual maximum limit for power (in kW) in decimal.",
+            "format": "double",
+            "nullable": true,
+            "type": "number"
+          },
+          "product": {
+            "description": "Product Id.\n            \nPossible values:\n            \nItem5790001330590 (Tariff), Item5790001330606 (Fuel quantity), Item8716867000016 (Active power),\nItem8716867000023 (Reactive power), Item8716867000030 (Active energy), Item8716867000047 (Reactive energy).",
+            "nullable": true,
+            "type": "string"
+          },
+          "productionObligation": {
+            "description": "Specifies for a production metering point that a production obligation applies to the metering point and that no change of supplier or move-in/move-out can be carried out for the metering point.",
+            "nullable": true,
+            "type": "string"
+          },
+          "roomId": {
+            "description": "Room id – part of metering point location address",
+            "nullable": true,
+            "type": "string"
+          },
+          "secondConsumerPartyName": {
+            "description": "Name of consumer 2",
+            "nullable": true,
+            "type": "string"
+          },
+          "settlementMethod": {
+            "description": "Settlement method of the metering point.\n            \nPossible values:\n            \nD01 (Flex settled), E01 (Profiled settled), E02 (Non-profiled settled).\n            \nIf a metering point is flex settled or non-profiled settled or has\nno settlement method, only non-profiled energy quantities are\nregistered for the metering point.\nIf a metering point is profiled settled, profiled energy quantities\n(consumption statements) as well as non-profiled energy quantities can be registered for the metering point depending on\nthe meter reading occurrence (see further details in the section\nregarding meterReadingOccurrence elsewhere in this table).\nProfiled settled metering points no longer exist, since all profiled settled metering points were converted to flex settled metering points before 01-01-2021.\nHowever, if a metering point used to be profiled settled, profiled energy quantities will still\nbe registered for the metering point in the period when the\nmetering point was profiled settled.",
+            "nullable": true,
+            "type": "string"
+          },
+          "streetCode": {
+            "description": "Street code – part of metering point location address.",
+            "nullable": true,
+            "type": "string"
+          },
+          "streetName": {
+            "description": "Street name – part of metering point location address",
+            "nullable": true,
+            "type": "string"
+          },
+          "subTypeOfMP": {
+            "description": "Specifies the sub type of the metering point.\n            \nPossibles values:\n            \nD01 (Physical - metering point has a physical meter),\nD02 (Virtual - energy volume calculated by grid operator),\nD03 (Calculated - energy volume calculated in DataHub).",
+            "nullable": true,
+            "type": "string"
+          },
+          "taxReduction": {
+            "description": "Specifies whether the consumer is entitled to a potential electricity tax reduction due to electric heating.",
+            "nullable": true,
+            "type": "string"
+          },
+          "taxSettlementDate": {
+            "description": "The date specifies either the commencement or termination of\nan electricity tax reduction. The date is expressed in UTC as\nspecified in ISO 8601.",
+            "nullable": true,
+            "type": "string"
+          },
+          "typeOfMP": {
+            "description": "Specifies the type of metering point.\n            \nPossible values:\n            \nD01 (VE Production), D02 (Analysis), D04 (Surplus production group 6), D05 (Net production),\nD06 (Supply to grid), D07 (Consumption from grid), D08 (Wholesale services), D09 (Own production),\nD10 (Net from grid), D11 (Net to grid), D12 (Total consumption), D14 (Electrical heating),\nD15 (Net consumption), D17 (Other consumption), D18 (Other production), D99 (Internal use),\nE17 (Consumption measurement point), E18 (Production measurement point).",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MeteringPointDetailsDtoResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "errorCode": {
+            "format": "int32",
+            "readOnly": true,
+            "type": "integer"
+          },
+          "errorText": {
+            "description": "Human readable description of the error",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "description": "Used to map requests to responses. Ex: data is requested for 10 metering points. The 'Id' will be the requested metering point id for which the reponse belong.",
+            "nullable": true,
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/MeteringPointDetailsDto"
+          },
+          "stackTrace": {
+            "description": "Included stacktrace from exceptions",
+            "nullable": true,
+            "type": "string"
+          },
+          "success": {
+            "description": "True if the request succeded, False if not",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "MeteringPointDetailsDtoResponseListApiResponse": {
+        "additionalProperties": false,
+        "description": "Used as the 'root' class for all responses returned from the public API's. We need these to have a 'root' when the result is transformed to XML",
+        "properties": {
+          "result": {
+            "items": {
+              "$ref": "#/components/schemas/MeteringPointDetailsDtoResponse"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "MeteringPointTariffDto": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "description": "Description of the fee.",
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "description": "Name of the fee.",
+            "nullable": true,
+            "type": "string"
+          },
+          "owner": {
+            "description": "Specifies a GLN (Global Location Number) representing the owner (grid operator).",
+            "nullable": true,
+            "type": "string"
+          },
+          "periodType": {
+            "description": "Type of period \"DAY\" or \"HOUR\".",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceId": {
+            "description": "Identifier of the price/charge type.",
+            "nullable": true,
+            "type": "string"
+          },
+          "prices": {
+            "description": "Price of the tariff in dkkr. and hour of tariff",
+            "items": {
+              "$ref": "#/components/schemas/MeteringPointTariffPriceDto"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "validFromDate": {
+            "description": "Date the fee starts.",
+            "nullable": true,
+            "type": "string"
+          },
+          "validToDate": {
+            "description": "Date the fee ends.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MeteringPointTariffPriceDto": {
+        "additionalProperties": false,
+        "properties": {
+          "position": {
+            "description": "Hour of tariff",
+            "nullable": true,
+            "type": "string"
+          },
+          "price": {
+            "description": "Price of the tariff in dkkr.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "MeteringPointThirdPartyDto": {
+        "additionalProperties": false,
+        "properties": {
+          "accessFrom": {
+            "description": "Earliest date which third party has access to the metering point",
+            "nullable": true,
+            "type": "string"
+          },
+          "accessTo": {
+            "description": "Last date which third party has access to the metering point",
+            "nullable": true,
+            "type": "string"
+          },
+          "buildingNumber": {
+            "nullable": true,
+            "type": "string"
+          },
+          "childMeteringPoints": {
+            "description": "List of child metering points to this meter.",
+            "items": {
+              "$ref": "#/components/schemas/ChildMeteringPointDto"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "cityName": {
+            "nullable": true,
+            "type": "string"
+          },
+          "citySubDivisionName": {
+            "nullable": true,
+            "type": "string"
+          },
+          "consumerCVR": {
+            "nullable": true,
+            "type": "string"
+          },
+          "consumerStartDate": {
+            "nullable": true,
+            "type": "string"
+          },
+          "dataAccessCVR": {
+            "nullable": true,
+            "type": "string"
+          },
+          "firstConsumerPartyName": {
+            "nullable": true,
+            "type": "string"
+          },
+          "floorId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "locationDescription": {
+            "nullable": true,
+            "type": "string"
+          },
+          "meterNumber": {
+            "nullable": true,
+            "type": "string"
+          },
+          "meterReadingOccurrence": {
+            "nullable": true,
+            "type": "string"
+          },
+          "meteringPointId": {
+            "description": "Identifier of the metering point, an 18 digits code.",
+            "nullable": true,
+            "type": "string"
+          },
+          "municipalityCode": {
+            "nullable": true,
+            "type": "string"
+          },
+          "postcode": {
+            "nullable": true,
+            "type": "string"
+          },
+          "roomId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "secondConsumerPartyName": {
+            "nullable": true,
+            "type": "string"
+          },
+          "settlementMethod": {
+            "nullable": true,
+            "type": "string"
+          },
+          "streetCode": {
+            "nullable": true,
+            "type": "string"
+          },
+          "streetName": {
+            "nullable": true,
+            "type": "string"
+          },
+          "typeOfMP": {
+            "description": "Examlpes: \"E17\" for consumption, \"E18\" for production.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MeteringPointThirdPartyDtoListApiResponse": {
+        "additionalProperties": false,
+        "description": "Used as the 'root' class for all responses returned from the public API's. We need these to have a 'root' when the result is transformed to XML",
+        "properties": {
+          "result": {
+            "items": {
+              "$ref": "#/components/schemas/MeteringPointThirdPartyDto"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "MeteringPoints": {
+        "additionalProperties": false,
+        "properties": {
+          "meteringPoint": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "MeteringPointsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "meteringPoints": {
+            "$ref": "#/components/schemas/MeteringPoints"
+          }
+        },
+        "type": "object"
+      },
+      "MyEnergyDataMarketDocument": {
+        "additionalProperties": false,
+        "properties": {
+          "TimeSeries": {
+            "items": {
+              "$ref": "#/components/schemas/TimeSeries"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "createdDateTime": {
+            "description": "The date and time of the creation of the document/message. The date/time is expressed in UTC as specified in ISO 8601.",
+            "nullable": true,
+            "type": "string"
+          },
+          "mRID": {
+            "description": "Identification of the market document. If several MarketDocument structures are contained in the same\nmessage, then all of them will have the same id.",
+            "nullable": true,
+            "type": "string"
+          },
+          "period.timeInterval": {
+            "$ref": "#/components/schemas/PeriodtimeInterval"
+          },
+          "sender_MarketParticipant.mRID": {
+            "$ref": "#/components/schemas/EIC"
+          },
+          "sender_MarketParticipant.name": {
+            "description": "Sender name.\nFixed value = Energinet",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MyEnergyDataMarketDocumentResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "MyEnergyData_MarketDocument": {
+            "$ref": "#/components/schemas/MyEnergyDataMarketDocument"
+          },
+          "errorCode": {
+            "format": "int32",
+            "readOnly": true,
+            "type": "integer"
+          },
+          "errorText": {
+            "description": "Human readable description of the error",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "description": "Used to map requests to responses. Ex: data is requested for 10 metering points. The 'Id' will be the requested metering point id for which the reponse belong.",
+            "nullable": true,
+            "type": "string"
+          },
+          "stackTrace": {
+            "description": "Included stacktrace from exceptions",
+            "nullable": true,
+            "type": "string"
+          },
+          "success": {
+            "description": "True if the request succeded, False if not",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "MyEnergyDataMarketDocumentResponseListApiResponse": {
+        "additionalProperties": false,
+        "description": "Used as the 'root' class for all responses returned from the public API's. We need these to have a 'root' when the result is transformed to XML",
+        "properties": {
+          "result": {
+            "items": {
+              "$ref": "#/components/schemas/MyEnergyDataMarketDocumentResponse"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "Period": {
+        "additionalProperties": false,
+        "properties": {
+          "Point": {
+            "items": {
+              "$ref": "#/components/schemas/Point"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "resolution": {
+            "description": "Specifies the resolution that the specific period covers.\n            \nPossible values:\n            \nPT15M (Quarter of an hour), PT1H (Hour), P1D (Day), P1M (Month), P1Y (Year),\nPXD (X days - where X is a variable for profiled energy quantities covering various period lengths).",
+            "nullable": true,
+            "type": "string"
+          },
+          "timeInterval": {
+            "$ref": "#/components/schemas/PeriodtimeInterval"
+          }
+        },
+        "type": "object"
+      },
+      "PeriodtimeInterval": {
+        "additionalProperties": false,
+        "properties": {
+          "end": {
+            "description": "End date of period. The date is expressed in UTC as specified in ISO 8601.",
+            "nullable": true,
+            "type": "string"
+          },
+          "start": {
+            "description": "Start date of period. The date is expressed in UTC as specified in ISO 8601.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Point": {
+        "additionalProperties": false,
+        "properties": {
+          "out_Quantity.quality": {
+            "description": "The quality of the quantity associated with a given point.\n            \nPossible values:\n            \nA01 (Adjusted - will no longer be used after February 2020, specifies energy quantities calculated by DataHub),\nA02 (Not available - grid operator submitted missing indicator, no quantity returned),\nA03 (Estimated - quantity submitted as estimate by grid operator),\nA04 (As provided/Measured - quantity submitted as measured by grid operator),\nA05 (Incomplete - aggregated quantity where at least one component has missing indicator).",
+            "nullable": true,
+            "type": "string"
+          },
+          "out_Quantity.quantity": {
+            "description": "The quantity value associated with a given point, with a maximum 3 decimals",
+            "nullable": true,
+            "type": "string"
+          },
+          "position": {
+            "description": "Possible values: 1-96",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ProblemDetails": {
+        "additionalProperties": {},
+        "properties": {
+          "detail": {
+            "nullable": true,
+            "type": "string"
+          },
+          "instance": {
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "format": "int32",
+            "nullable": true,
+            "type": "integer"
+          },
+          "title": {
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "StringApiResponse": {
+        "additionalProperties": false,
+        "description": "Used as the 'root' class for all responses returned from the public API's. We need these to have a 'root' when the result is transformed to XML",
+        "properties": {
+          "result": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "StringListApiResponse": {
+        "additionalProperties": false,
+        "description": "Used as the 'root' class for all responses returned from the public API's. We need these to have a 'root' when the result is transformed to XML",
+        "properties": {
+          "result": {
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "TimeSeries": {
+        "additionalProperties": false,
+        "properties": {
+          "MarketEvaluationPoint": {
+            "$ref": "#/components/schemas/MarketEvaluationPoint"
+          },
+          "Period": {
+            "items": {
+              "$ref": "#/components/schemas/Period"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "businessType": {
+            "description": "A code specifying the nature of the time series.\n            \nPossible values:\n            \nA01 (Production), A04 (Consumption), A64 (Consumption - profiled).",
+            "nullable": true,
+            "type": "string"
+          },
+          "curveType": {
+            "description": "The coded representation of the type of curve being\ndescribed. Will always be A01, specifying that the curve\nis made of successive Intervals of time (blocks) of constant duration (size), where the size of the blocks is\nequal to the resolution of the period.",
+            "nullable": true,
+            "type": "string"
+          },
+          "mRID": {
+            "description": "Unique metering point id consisting of 18 characters.",
+            "nullable": true,
+            "type": "string"
+          },
+          "measurement_Unit.name": {
+            "description": "The unit of measure that is applied to a quantity.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "bearerFormat": "JWT",
+        "description": "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "contact": {
+      "email": "datahub@energinet.dk",
+      "name": "Datahub support"
+    },
+    "description": "\n<p>\n    This API enables third parties to access customers' data from DataHub based on authorization (power of attorney) granted by the customer. To gain access to the API the third party must:\n<p/>\n\n<ul style=\"list-style-type:disc;\">\n    <li>Be registered as a third party to DataHub.</li>\n    <li>Be authorized by use of a token</li>\n</ul>\n\n<p>\n    You can apply for becoming a third party participant here:\n    <a href=\"https://en.energinet.dk/electricity/new-player/how-to-become-a-third-party/\">\n        https://en.energinet.dk/electricity/new-player/how-to-become-a-third-party/\n    </a>\n    / Link to danish version:\n    <a href=\"https://energinet.dk/el/elmarkedet/sadan-bliver-du-tredjepart/\">\n        https://energinet.dk/el/elmarkedet/sadan-bliver-du-tredjepart/\n    </a>\n<p/>\n\n<p>\n    Authentication and authorization are handled by using bearer tokens.\n    To get started you need a refresh token. You can generate a refresh token in the ElOverblik portal after logging in with MitID as a registered third party. The token is a long text string (JWT token), which must be copied and stored for use with the system that needs to access the API.\n    When you have obtained a refresh token, you can access the token endpoint to create a short-lived data access token (valid for 24 hours)\n    The data access token allows you to access the rest of the endpoints below.\n</p>\n\n<p>\n    This API only gives you access to data from active authorizations (powers of attorneys) granted by customers. Data regarding deleted or expired authorizations are not returned.\n</p>\n\n<p>\n    When requesting user authorizations (powers of attorney) from a third-party application via ElOverblik.dk using a \"Power of Attorney\" link, it is recommended to follow the technical reference guide for MitID Integration provided by the Signaturgruppen Broker:\n    <a href=\"https://signaturgruppen-a-s.github.io/signaturgruppen-broker-documentation/idps/app-mitid-integration.html\">https://signaturgruppen-a-s.github.io/signaturgruppen-broker-documentation/idps/app-mitid-integration.html\n    </a>\n</p>\n\n<p>\n    It is possible to set a correlation id in the request header using the 'X-User-Correlation-ID' (with an UUID). When provided this id will follow the request and finally end in the response header. This id can be used for tracking the request. Parallel to this id there is another internally id (Also a UUID), which also is returned in the response header as 'X-Correlation-ID'.\n<p/>\n\n<p>Please be aware that it is only possible to get time series data for the previous 5 years + current year.</p>\n\n<b><p>Please note: Submission of meter readings to DataHub is no longer mandatory since end of 2021. Therefore, data may not be available for all metering points.</p></b>\n\n<h3>1. Limitations</h3>\n<p>At times, we may experience higher loads than our underlying data provider, DataHub, can handle. Therefore we have enforced some limitations on the usage of this API:</p>\n\n<ul style=\"list-style-type:disc;\">\n    <li>Calls to GetToken are restricted to 2 per minute per IP address.</li>\n    <li>The total number of calls per IP address is restricted to 120 per minute.</li>\n    <li>The total number of calls for <b>all</b> users is restricted to 1200 per minute.</li>\n</ul>\n\n<p>If you exceed any one of these limits, you will get an http error 429 - Too many requests.</br>\nIf DataHub is not able to keep up with the demand - even if the above limits are not exceeded - you may get an http error 503 - DataHub unavailable.</p>\n\n<h3>2. Usage recommendations</h3>\n<ul style=\"list-style-type:disc;\">\n    <li>Bundle requests for 10 metering points at a time.</li>\n    <li>Spread out multiple requests over a longer period.</li>\n    <li>Don't request data for periods of several years repeatedly.</li>\n    <li>If you get an error 429 or 503, wait 1min. before retrying.</li>\n    <li>If you get an error, then try to reduce the amount of metering points or reduce the date period of the request.</li>\n    <li>The data access token is active for 24h and should not need to be refreshed more than once a day.</li>\n    <li>If you get an error or timeout on the /thirdpartyapi/api/authorization/authorization/meteringpoints/ then try to switch to /thirdpartyapi/api/authorization/authorization/meteringpointids/ and then split the meteringpoints into smaller bundles before requesting /thirdpartyapi/api/meteringpoint/getdetails</li>\n</ul>\n\n<h3>3. Possible system error codes</h3>\n\n<h4>General Error Codes</h4>\n\n<table>\n    <thead>\n        <tr>\n            <th>Code</th>\n            <th>Name</th>\n            <th>Description</th>\n        </tr>\n    </thead>\n    <tbody>\n        <tr>\n            <td>10000</td>\n            <td>NoError</td>\n            <td>No error – the operation was successful.</td>\n        </tr>\n        <tr>\n            <td>10001</td>\n            <td>WrongNumberOfArguments</td>\n            <td>The number of arguments is incorrect.</td>\n        </tr>\n    </tbody>\n</table>\n\n<h4>Metering Point</h4>\n\n<table>\n    <thead>\n        <tr>\n            <th>Code</th>\n            <th>Name</th>\n            <th>Description</th>\n        </tr>\n    </thead>\n    <tbody>\n        <tr>\n            <td>20000</td>\n            <td>WrongMeteringPointIdOrWebAccessCode</td>\n            <td>Invalid metering point ID or web access code.</td>\n        </tr>\n        <tr>\n            <td>20001</td>\n            <td>MeteringPointBlocked</td>\n            <td>The metering point is blocked.</td>\n        </tr>\n        <tr>\n            <td>20002</td>\n            <td>MeteringPointRelationAlreadyExist</td>\n            <td>Relation to the metering point already exists.</td>\n        </tr>\n        <tr>\n            <td>20003</td>\n            <td>MeteringPointIdNot18CharsLong</td>\n            <td>Metering point ID must be 18 characters long.</td>\n        </tr>\n        <tr>\n            <td>20005</td>\n            <td>MeteringPointAliasTooLong</td>\n            <td>Metering point alias is too long.</td>\n        </tr>\n        <tr>\n            <td>20006</td>\n            <td>WebAccessCodeNot8CharsLong</td>\n            <td>Web access code must be 8 characters long.</td>\n        </tr>\n        <tr>\n            <td>20007</td>\n            <td>WebAccessCodeContainsIllegalChars</td>\n            <td>Web access code contains invalid characters.</td>\n        </tr>\n        <tr>\n            <td>20008</td>\n            <td>MeteringPointNotFound</td>\n            <td>Metering point not found.</td>\n        </tr>\n        <tr>\n            <td>20009</td>\n            <td>MeteringPointIsChild</td>\n            <td>Metering point is a child point.</td>\n        </tr>\n        <tr>\n            <td>20010</td>\n            <td>RelationNotFound</td>\n            <td>Relation not found.</td>\n        </tr>\n        <tr>\n            <td>20011</td>\n            <td>UnknownError</td>\n            <td>Unknown error occurred.</td>\n        </tr>\n        <tr>\n            <td>20012</td>\n            <td>Unauthorized</td>\n            <td>Unauthorized access.</td>\n        </tr>\n    </tbody>\n</table>\n\n<h4>MeterData</h4>\n\n<table>\n    <thead>\n        <tr>\n            <th>Code</th>\n            <th>Name</th>\n            <th>Description</th>\n        </tr>\n    </thead>\n    <tbody>\n        <tr>\n            <td>30000</td>\n            <td>FromDateIsGreaterThanToday</td>\n            <td>From-date is later than today.</td>\n        </tr>\n        <tr>\n            <td>30001</td>\n            <td>FromDateIsGreaterThanToDate</td>\n            <td>From-date is later than to-date.</td>\n        </tr>\n        <tr>\n            <td>30002</td>\n            <td>ToDateCanNotBeEqualToFromDate</td>\n            <td>To-date cannot be equal to from-date.</td>\n        </tr>\n        <tr>\n            <td>30003</td>\n            <td>ToDateIsGreaterThanToday</td>\n            <td>To-date is later than today.</td>\n        </tr>\n        <tr>\n            <td>30004</td>\n            <td>InvalidDateFormat</td>\n            <td>Invalid date format.</td>\n        </tr>\n        <tr>\n            <td>30005</td>\n            <td>InvalidRequestParameters</td>\n            <td>Invalid request parameters.</td>\n        </tr>\n        <tr>\n            <td>30008</td>\n            <td>RequestedAggregationUnavaliable</td>\n            <td>Requested aggregation is not available.</td>\n        </tr>\n        <tr>\n            <td>30011</td>\n            <td>InternalServerError</td>\n            <td>Internal server error.</td>\n        </tr>\n    </tbody>\n</table>\n\n<h4>Authorization</h4>\n\n<table>\n    <thead>\n        <tr>\n            <th>Code</th>\n            <th>Name</th>\n            <th>Description</th>\n        </tr>\n    </thead>\n    <tbody>\n        <tr>\n            <td>40000</td>\n            <td>InvalidCVR</td>\n            <td>Invalid CVR number.</td>\n        </tr>\n        <tr>\n            <td>40001</td>\n            <td>InvalidIncludeFutureMeteringPointsRelatedToCVR</td>\n            <td>Invalid parameter for future metering points.</td>\n        </tr>\n        <tr>\n            <td>40002</td>\n            <td>InvalidMasterDataFields</td>\n            <td>Invalid master data fields.</td>\n        </tr>\n        <tr>\n            <td>40003</td>\n            <td>InvalidMeteringPointIds</td>\n            <td>Invalid metering point IDs.</td>\n        </tr>\n        <tr>\n            <td>40004</td>\n            <td>InvalidSignature</td>\n            <td>Invalid signature.</td>\n        </tr>\n        <tr>\n            <td>40005</td>\n            <td>InvalidSignedByNameId</td>\n            <td>Invalid signed-by name ID.</td>\n        </tr>\n        <tr>\n            <td>40006</td>\n            <td>InvalidSignedDate</td>\n            <td>Invalid signed date.</td>\n        </tr>\n        <tr>\n            <td>40007</td>\n            <td>InvalidSignedText</td>\n            <td>Invalid signed text.</td>\n        </tr>\n        <tr>\n            <td>40008</td>\n            <td>InvalidThirdPartyId</td>\n            <td>Invalid third-party ID.</td>\n        </tr>\n        <tr>\n            <td>40009</td>\n            <td>InvalidFromDate</td>\n            <td>Invalid from-date.</td>\n        </tr>\n        <tr>\n            <td>40010</td>\n            <td>InvalidToDate</td>\n            <td>Invalid to-date.</td>\n        </tr>\n        <tr>\n            <td>40011</td>\n            <td>ValidToBeforeValidFrom</td>\n            <td>Valid-to date is before valid-from date.</td>\n        </tr>\n        <tr>\n            <td>40012</td>\n            <td>ValidToOutOfRange</td>\n            <td>Valid-to date is out of range.</td>\n        </tr>\n        <tr>\n            <td>40013</td>\n            <td>ValidFromOutOfRange</td>\n            <td>Valid-from date is out of range.</td>\n        </tr>\n        <tr>\n            <td>40014</td>\n            <td>NoAuthorizationsFound</td>\n            <td>No authorizations found.</td>\n        </tr>\n    </tbody>\n</table>\n\n<h4>Token</h4>\n\n<table>\n    <thead>\n        <tr>\n            <th>Code</th>\n            <th>Name</th>\n            <th>Description</th>\n        </tr>\n    </thead>\n    <tbody>\n        <tr>\n            <td>50000</td>\n            <td>WrongTokenType</td>\n            <td>Invalid token type.</td>\n        </tr>\n        <tr>\n            <td>50001</td>\n            <td>TokenNotValid</td>\n            <td>Token is not valid.</td>\n        </tr>\n        <tr>\n            <td>50002</td>\n            <td>ErrorCreatingToken</td>\n            <td>Error occurred while creating token.</td>\n        </tr>\n        <tr>\n            <td>50003</td>\n            <td>TokenRegistrationFailed</td>\n            <td>Token registration failed.</td>\n        </tr>\n        <tr>\n            <td>50004</td>\n            <td>TokenAlreadyActive</td>\n            <td>Token is already active.</td>\n        </tr>\n        <tr>\n            <td>50005</td>\n            <td>TokenAlreadyDeactivaed</td>\n            <td>Token is already deactivated.</td>\n        </tr>\n    </tbody>\n</table>",
+    "title": "Eloverblik.Api.ThirdPartyApi",
+    "version": "V1.0"
+  },
+  "openapi": "3.0.4",
+  "paths": {
+    "/thirdpartyapi/api/authorization/authorization/meteringpointids/{scope}/{identifier}": {
+      "get": {
+        "description": "This request is used for retrieving a list of metering point IDs for which access has been granted.\nA filter value must be supplied to limit the result.\n            \nThe following filter options are available:\n`authorizationId`: Returns a list of metering point IDs included in a specific customer authorization.\n            \n`customerCVR`: Returns a list of metering point IDs for which access has been granted by a specific customer\n  (based on the CVR of the customer/granting party).\n            \n`customerKey`: Returns a list of metering point IDs linked to a specific customer key.\n  The customer key can be supplied by the third party during the process of granting access.",
+        "parameters": [
+          {
+            "description": "Define what kind of authorization id to filter on. Possible values are: 'authorizationId', 'customerCVR', 'customerKey'",
+            "in": "path",
+            "name": "scope",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Identification key",
+            "in": "path",
+            "name": "identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "api-version",
+            "schema": {
+              "default": "1.0",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringListApiResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringListApiResponse"
+                }
+              }
+            },
+            "description": "When successfully"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "When the provided token doesn't meet the requirements"
+          }
+        },
+        "summary": "Get metering point ids",
+        "tags": [
+          "Authorization"
+        ]
+      }
+    },
+    "/thirdpartyapi/api/authorization/authorization/meteringpoints/{scope}/{identifier}": {
+      "get": {
+        "description": "This request is used for retrieving a list of metering points for which access has been granted.\nA filter value must be supplied to limit the result.\n            \nThe following filter options are available:\n            \n`authorizationId`: Returns a list of metering points included in a specific customer authorization.\n            \n`customerCVR`: Returns a list of metering points for which access has been granted by a specific customer\n  (based on the CVR of the customer/granting party).\n            \n`customerKey`: Returns a list of metering points linked to a specific customer key.\n  The customer key can be supplied by the third party during the process of granting data access.",
+        "parameters": [
+          {
+            "description": "Define what kind of authorization id to filter on. Possible values are: 'authorizationId', 'customerCVR', 'customerKey'",
+            "in": "path",
+            "name": "scope",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Identification key",
+            "in": "path",
+            "name": "identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "api-version",
+            "schema": {
+              "default": "1.0",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeteringPointThirdPartyDtoListApiResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeteringPointThirdPartyDtoListApiResponse"
+                }
+              }
+            },
+            "description": "When successfully"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "When the provided token doesn't meet the requirements"
+          }
+        },
+        "summary": "Get metering points",
+        "tags": [
+          "Authorization"
+        ]
+      }
+    },
+    "/thirdpartyapi/api/authorization/authorizations": {
+      "get": {
+        "description": "This request is used for retrieving details about authorizations (powers of attorney) granted by customers.\n            \nOnly data regarding valid or active authorizations is returned.\nData related to deleted or expired authorizations is not included in the response.",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "api-version",
+            "schema": {
+              "default": "1.0",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorizationDtoListApiResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorizationDtoListApiResponse"
+                }
+              }
+            },
+            "description": "When successfully"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "When the provided token dont meet the requirements"
+          }
+        },
+        "summary": "Get authorizations",
+        "tags": [
+          "Authorization"
+        ]
+      }
+    },
+    "/thirdpartyapi/api/isalive": {
+      "get": {
+        "description": "Call this endpoint to verify whether we are currently operating normally.\n            \nIf we are experiencing more traffic than we can handle, this endpoint may return HTTP 503.\nThe status currently refreshes every 60 seconds.",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "api-version",
+            "schema": {
+              "default": "1.0",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "type": "boolean"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "boolean"
+                }
+              },
+              "text/xml": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Get IsAlive status",
+        "tags": [
+          "IsAlive"
+        ]
+      }
+    },
+    "/thirdpartyapi/api/meterdata/gettimeseries/{dateFrom}/{dateTo}/{aggregation}": {
+      "post": {
+        "description": "This request is used for querying time series data for one or more metering points\nfor which access has been granted, for a specified period and with a specified aggregation level.\n            \nPlease note that it is only possible to retrieve time series data for the previous five years plus the current year.",
+        "parameters": [
+          {
+            "description": "Date from filter in format: 'YYYY-MM-DD'",
+            "in": "path",
+            "name": "dateFrom",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Date to filter in format: 'YYYY-MM-DD'",
+            "in": "path",
+            "name": "dateTo",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Time aggregation. Possible values are: 'Actual', 'Quarter', 'Hour', 'Day', 'Month', 'Year'",
+            "in": "path",
+            "name": "aggregation",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "api-version",
+            "schema": {
+              "default": "1.0",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeteringPointsRequest"
+              }
+            },
+            "application/xml": {
+              "schema": {
+                "$ref": "#/components/schemas/MeteringPointsRequest"
+              }
+            }
+          },
+          "description": "List of metering point ids."
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyEnergyDataMarketDocumentResponseListApiResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyEnergyDataMarketDocumentResponseListApiResponse"
+                }
+              }
+            },
+            "description": "When successfully"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "If you do not have access"
+          }
+        },
+        "summary": "Get timeseries",
+        "tags": [
+          "MeterData"
+        ]
+      }
+    },
+    "/thirdpartyapi/api/meteringpoint/getchargelinkswithcharges": {
+      "post": {
+        "description": "This request is used for querying charge links, charge information, and charge series for one or more\nmetering points and date intervals for which access has been granted.",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "api-version",
+            "schema": {
+              "default": "1.0",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetChargeLinksWithChargesRequest"
+              }
+            },
+            "application/xml": {
+              "schema": {
+                "$ref": "#/components/schemas/GetChargeLinksWithChargesRequest"
+              }
+            }
+          },
+          "description": ""
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetChargeLinksWithChargesResponseApiResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetChargeLinksWithChargesResponseApiResponse"
+                }
+              }
+            },
+            "description": "When successfully"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "If you do not have access to one or more of the listed metering point id(s)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "When the Charges integration feature is disabled"
+          }
+        },
+        "summary": "Get charge links with charges",
+        "tags": [
+          "MeteringPoint"
+        ]
+      }
+    },
+    "/thirdpartyapi/api/meteringpoint/getcharges": {
+      "post": {
+        "description": "This request is used for querying charge data—such as subscriptions and tariffs—for one or more metering points\nfor which access has been granted.\n            \nCharges linked to the metering point at the time of the request or on any future date will be returned.\n            \nHowever, past and future changes to an existing charge are not included in the response.",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "api-version",
+            "schema": {
+              "default": "1.0",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeteringPointsRequest"
+              }
+            },
+            "application/xml": {
+              "schema": {
+                "$ref": "#/components/schemas/MeteringPointsRequest"
+              }
+            }
+          },
+          "description": ""
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeteringPointChargesDtoResponseListApiResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeteringPointChargesDtoResponseListApiResponse"
+                }
+              }
+            },
+            "description": "When successfully"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "If you do not have access to one or more of the listed metering point id(s)"
+          }
+        },
+        "summary": "Get charges",
+        "tags": [
+          "MeteringPoint"
+        ]
+      }
+    },
+    "/thirdpartyapi/api/meteringpoint/getdetails": {
+      "post": {
+        "description": "This request is used for querying details (master data) for one or more metering points (for which access has been granted).",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "api-version",
+            "schema": {
+              "default": "1.0",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeteringPointsRequest"
+              }
+            },
+            "application/xml": {
+              "schema": {
+                "$ref": "#/components/schemas/MeteringPointsRequest"
+              }
+            }
+          },
+          "description": ""
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeteringPointDetailsDtoResponseListApiResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeteringPointDetailsDtoResponseListApiResponse"
+                }
+              }
+            },
+            "description": "When successfully"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "If you do not have access to one or more of the listed metering point id(s)"
+          }
+        },
+        "summary": "Get metering point details",
+        "tags": [
+          "MeteringPoint"
+        ]
+      }
+    },
+    "/thirdpartyapi/api/token": {
+      "get": {
+        "description": "In order to get an access token you will need\na valid refresh token. This token can be fetched from the portal.\nThe token is a JWT token. There are tools that can read the content eg: https://jwt.io/\nThe token must be submittet in the request header like \"Authorization: Bearer eyJhbGciOi...\"",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "api-version",
+            "schema": {
+              "default": "1.0",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringApiResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringApiResponse"
+                }
+              }
+            },
+            "description": "When successfully"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "When the provided token don't meet the requirements"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "When a non-refresh token is used"
+          }
+        },
+        "summary": "Get data access token",
+        "tags": [
+          "Token"
+        ]
+      }
+    }
+  },
+  "security": [
+    {
+      "Bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Authorization"
+    },
+    {
+      "name": "IsAlive"
+    },
+    {
+      "name": "MeterData"
+    },
+    {
+      "name": "MeteringPoint"
+    },
+    {
+      "name": "Token"
+    }
+  ]
+}

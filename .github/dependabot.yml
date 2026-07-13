@@ -1,12 +1,86 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for more information:
-# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
-# https://containers.dev/guide/dependabot
+# Dependabot configuration.
+#
+# This file previously tracked devcontainers only, which meant nothing watched the
+# Go modules or the GitHub Actions used by the workflows. That is how the lint job
+# was allowed to rot silently: golangci-lint-action drifted several major versions
+# and no PR was ever opened to say so. Every ecosystem the repository actually uses
+# is now covered.
+#
+# Docs: https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
+#       https://containers.dev/guide/dependabot
 
 version: 2
+
 updates:
- - package-ecosystem: "devcontainers"
-   directory: "/"
-   schedule:
-     interval: weekly
+  # Go module dependencies for the library (v1/) and the CLI (repository root).
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Copenhagen"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "go"
+    commit-message:
+      # Conventional commits: "fix(deps): bump ..." for runtime dependencies.
+      prefix: "fix"
+      prefix-development: "chore"
+      include: "scope"
+    groups:
+      # Collapse the routine churn into a single PR per week. Major bumps still
+      # arrive as individual PRs, because those are the ones that need reading.
+      go-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # The actions referenced by the workflows in .github/workflows.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Copenhagen"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # The development container definition.
+  - package-ecosystem: "devcontainers"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Copenhagen"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "devcontainer"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      devcontainers:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"

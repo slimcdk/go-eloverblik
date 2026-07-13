@@ -1,0 +1,320 @@
+# API drift detection.
+#
+# This library's whole job is to track an API that has already been caught
+# disagreeing with its own specification: the published document says time
+# series resolutions are P1D/P1Y while the live API sends PT1D/PT1Y, and it
+# declares `getchargelinkswithcharges` on both APIs while the live API answers
+# 404 for it. So neither the spec nor the live service can be trusted on its
+# own, and this workflow watches both.
+#
+# Three independent jobs, in decreasing order of "how sure are we that a failure
+# means something":
+#
+#   drift       Did Energinet change the published OpenAPI documents?
+#   isalive     Is the platform up and still where we left it? (no secret)
+#   live-probe  Does a real, authenticated read still work? (skipped without a secret)
+#
+# ---------------------------------------------------------------------------
+# REFRESHING THE SNAPSHOTS WHEN A CHANGE IS INTENTIONAL
+# ---------------------------------------------------------------------------
+# The `drift` job fails whenever the documents Energinet serves differ from the
+# copies committed in api/. That failure is a prompt to look, not a verdict —
+# the point is that a human decides what the change means.
+#
+# Once you have looked and the change is expected (or simply real and now
+# understood), accept it by refreshing the snapshots:
+#
+#     scripts/check-api-drift.sh update    # re-fetch and re-normalise api/*.json
+#     git add api/
+#     git commit -m "chore(api): refresh OpenAPI snapshots"
+#
+# Then open a PR. Review the diff on api/*.json as part of it — that diff is the
+# record of what upstream changed, and it is the thing that tells you whether
+# v1/ has to follow. Push the commit and the next run goes green.
+#
+# Do NOT hand-edit api/*.json. The files are written by `jq -S` (recursively
+# sorted keys, two-space indent) so that the byte layout depends only on content
+# and the diffs stay readable; an edit by hand will churn on the next refresh.
+#
+# And be careful about "fixing" the client to match a new document: the spec has
+# been wrong before. Confirm against the live API before changing v1/.
+# ---------------------------------------------------------------------------
+
+name: API drift
+
+on:
+  schedule:
+    # Weekly, Monday 06:17 UTC. Deliberately off the hour: GitHub delays
+    # scheduled runs that pile up on popular cron minutes.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+# Read-only by default. The one job that needs more asks for it itself.
+permissions:
+  contents: read
+
+concurrency:
+  group: api-drift
+  # Do not cancel a run in progress: it may be part-way through filing the
+  # drift issue, and a half-filed issue is worse than a queued run.
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    name: OpenAPI drift
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write # to open, update and comment on the drift issue
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      # jq and curl are preinstalled on ubuntu-latest; the script checks anyway.
+      - name: Compare the published documents against api/*.json
+        id: drift
+        run: |
+          set -uo pipefail
+
+          status=0
+          scripts/check-api-drift.sh check --summary "${RUNNER_TEMP}/drift.md" || status=$?
+
+          case "${status}" in
+            0)
+              echo "drift=false" >> "${GITHUB_OUTPUT}"
+              # Backticks below are markdown code spans, so the string has to stay
+              # single-quoted. shellcheck reads them as command substitution (SC2016).
+              # shellcheck disable=SC2016
+              echo 'The published OpenAPI documents match the snapshots in `api/`.' >> "${GITHUB_STEP_SUMMARY}"
+              ;;
+            1)
+              echo "drift=true" >> "${GITHUB_OUTPUT}"
+              # The fingerprint identifies *this* upstream change, so a rerun
+              # that sees the same change can recognise its own issue.
+              fingerprint="$(sed -n 's/^<!-- api-drift-fingerprint: \(.*\) -->$/\1/p' "${RUNNER_TEMP}/drift.md" | head -n 1)"
+              echo "fingerprint=${fingerprint}" >> "${GITHUB_OUTPUT}"
+              cat "${RUNNER_TEMP}/drift.md" >> "${GITHUB_STEP_SUMMARY}"
+              ;;
+            *)
+              # Exit 2 means the check could not be carried out — the fetch
+              # failed, or what came back was not a plausible OpenAPI document.
+              # That is an outage, not drift, and it must not open an issue
+              # claiming every endpoint was deleted.
+              echo "::error::the drift check could not run (exit ${status}); this is a fetch/validation failure, not drift"
+              exit 1
+              ;;
+          esac
+
+      - name: Open or update the drift issue
+        if: steps.drift.outputs.drift == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BODY_FILE: ${{ runner.temp }}/drift.md
+          FINGERPRINT: ${{ steps.drift.outputs.fingerprint }}
+        run: |
+          set -euo pipefail
+
+          title='API drift: the published Eloverblik OpenAPI documents changed'
+
+          # The label is what makes the search below reliable, so make sure it
+          # exists. Already-exists is not an error we care about.
+          gh label create api-drift \
+            --description 'The published Eloverblik OpenAPI documents no longer match api/*.json' \
+            --color 'D93F0B' 2>/dev/null || true
+
+          existing="$(gh issue list --state open --label api-drift \
+            --limit 1 --json number --jq '.[0].number // empty')"
+
+          if [ -z "${existing}" ]; then
+            url="$(gh issue create --title "${title}" --label api-drift --body-file "${BODY_FILE}")"
+            echo "opened ${url}"
+            exit 0
+          fi
+
+          # An issue is already open. If it describes the same upstream change,
+          # say nothing — a weekly "still drifted!" comment on an issue nobody
+          # has actioned yet is noise, and noise is how a real signal gets
+          # ignored. Only speak up when what upstream is doing has changed.
+          if gh issue view "${existing}" --json body --jq '.body' \
+              | grep -qF "api-drift-fingerprint: ${FINGERPRINT}"; then
+            echo "issue #${existing} already tracks this exact change; leaving it alone"
+            exit 0
+          fi
+
+          gh issue edit "${existing}" --body-file "${BODY_FILE}"
+          # Markdown code span in the body; must stay single-quoted (SC2016).
+          # shellcheck disable=SC2016
+          gh issue comment "${existing}" --body \
+            'The published documents have changed **again** since this issue was filed. The description above has been updated to describe the current difference from `api/*.json`.'
+          echo "updated issue #${existing}"
+
+      - name: Fail on drift
+        if: steps.drift.outputs.drift == 'true'
+        run: |
+          echo '::error::the published OpenAPI documents no longer match api/*.json — see the job summary and the api-drift issue'
+          exit 1
+
+  isalive:
+    name: Live health check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    # Deliberately separate from the drift job, and deliberately dependency-free:
+    # no checkout, no secret, no token. It answers exactly one question — is the
+    # platform up and still at the host we expect — so that a moved host or an
+    # outage is distinguishable at a glance from a specification change.
+    steps:
+      - name: GET /isalive on both APIs
+        run: |
+          set -uo pipefail
+
+          failed=0
+          for api in customerapi thirdpartyapi; do
+            url="https://api.eloverblik.dk/${api}/api/isalive"
+            body_file="$(mktemp)"
+
+            # No --retry-all-errors here: a 5xx from a health endpoint is the
+            # answer, not a glitch to paper over. Connection-level failures are
+            # retried, since those really can be transient on a hosted runner.
+            code="$(curl --silent --show-error --location --max-time 30 \
+              --retry 2 --retry-delay 5 --retry-connrefused \
+              --write-out '%{http_code}' --output "${body_file}" "${url}" || true)"
+            body="$(tr -d '[:space:]' < "${body_file}")"
+
+            if [ "${code}" = "200" ] && [ "${body}" = "true" ]; then
+              echo "ok    ${url} -> HTTP ${code} ${body}"
+            else
+              echo "::error::${url} -> HTTP ${code:-<none>} body=${body:-<empty>} (expected HTTP 200 and 'true')"
+              failed=1
+            fi
+          done
+
+          exit "${failed}"
+
+  live-probe:
+    name: Authenticated probe
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    # ---------------------------------------------------------------------
+    # OPTIONAL. Skipped entirely unless the repository secret
+    # ELOVERBLIK_REFRESH_TOKEN is set, so forks and clones do not fail here.
+    #
+    # The secret must contain a **customer API refresh token** — the long-lived
+    # JWT you generate at https://eloverblik.dk under "Datadeling" /
+    # "Datatilgang" after logging in with MitID. Just the raw token string, with
+    # no "Bearer " prefix. A third-party API token will not work: this job talks
+    # to /customerapi.
+    #
+    # The token is what a *user* of this library would hold, so this job is the
+    # only check here that exercises the same path they do.
+    # ---------------------------------------------------------------------
+    env:
+      # The `secrets` context is not available in an `if:` condition, so the
+      # value is lifted into the environment and the guard is a step that reads
+      # it. Job-level `env` may reference `secrets`; `if:` may not.
+      ELOVERBLIK_REFRESH_TOKEN: ${{ secrets.ELOVERBLIK_REFRESH_TOKEN }}
+
+    steps:
+      - name: Is the refresh token configured?
+        id: secret
+        run: |
+          set -euo pipefail
+          if [ -n "${ELOVERBLIK_REFRESH_TOKEN:-}" ]; then
+            echo 'present=true' >> "${GITHUB_OUTPUT}"
+          else
+            echo 'present=false' >> "${GITHUB_OUTPUT}"
+            echo 'ELOVERBLIK_REFRESH_TOKEN is not configured; the authenticated probe was skipped.' >> "${GITHUB_STEP_SUMMARY}"
+            echo 'ELOVERBLIK_REFRESH_TOKEN is not configured; skipping the authenticated probe.'
+          fi
+
+      # One step on purpose. The data access token never leaves this shell — it
+      # is not written to a step output, where it would outlive the step that
+      # needs it for no benefit.
+      #
+      # Call budget: exactly 1 call to /token (the API allows 2 per minute per
+      # IP, so there is no retry on that call, none, not even one) plus 2
+      # ordinary reads (limit: 120 per minute).
+      - name: Exchange the refresh token and make one read-only call
+        if: steps.secret.outputs.present == 'true'
+        run: |
+          set -euo pipefail
+
+          base='https://api.eloverblik.dk/customerapi/api'
+
+          # --- 1/3: token exchange. Exactly one attempt. ---
+          resp="$(mktemp)"
+          code="$(curl --silent --show-error --max-time 60 \
+            --header "Authorization: Bearer ${ELOVERBLIK_REFRESH_TOKEN}" \
+            --write-out '%{http_code}' --output "${resp}" \
+            "${base}/token" || true)"
+
+          if [ "${code}" != '200' ]; then
+            echo "::error::token exchange returned HTTP ${code:-<none>} (expected 200). The refresh token may have expired, or it may be a third-party token rather than a customer one."
+            exit 1
+          fi
+
+          access_token="$(jq -r '.result // empty' "${resp}")"
+          if [ -z "${access_token}" ]; then
+            echo '::error::the token response parsed as JSON but carried no .result'
+            exit 1
+          fi
+          # Belt and braces: the value is derived from a secret, not the secret
+          # itself, so Actions will not mask it automatically.
+          echo "::add-mask::${access_token}"
+          echo 'ok    token exchange -> HTTP 200, .result present'
+
+          # --- 2/3: one read-only call. Does the response still parse? ---
+          mp="$(mktemp)"
+          code="$(curl --silent --show-error --max-time 60 \
+            --header "Authorization: Bearer ${access_token}" \
+            --write-out '%{http_code}' --output "${mp}" \
+            "${base}/meteringpoints/meteringpoints?includeAll=false" || true)"
+
+          if [ "${code}" != '200' ]; then
+            echo "::error::GET /meteringpoints/meteringpoints returned HTTP ${code:-<none>} (expected 200)"
+            exit 1
+          fi
+          if ! jq -e '(.result | type) == "array"' "${mp}" > /dev/null 2>&1; then
+            echo '::error::GET /meteringpoints/meteringpoints did not return an object with a .result array'
+            jq -C '.' "${mp}" 2>/dev/null | head -n 20 || head -c 500 "${mp}"
+            exit 1
+          fi
+          count="$(jq -r '.result | length' "${mp}")"
+          echo "ok    GET /meteringpoints/meteringpoints -> HTTP 200, ${count} metering point(s), response parses"
+
+          # --- 3/3: is getchargelinkswithcharges deployed yet? ---
+          #
+          # Both published documents declare this endpoint. The live API answers
+          # 404 for it on both, with a valid token, while getcharges answers 200.
+          # It is documented but not deployed. The day Energinet deploys it, this
+          # tells us, instead of us finding out by accident.
+          #
+          # The assertion is only on the status code, so it holds whether or not
+          # the account has any metering points: a deployed endpoint cannot
+          # answer 404, whatever it thinks of the body.
+          body="$(jq -c -n --argjson ids "$(jq -c '[.result[].meteringPointId] | .[0:1]' "${mp}")" \
+            '{meteringPoints: {meteringPoint: $ids}}')"
+
+          probe="$(mktemp)"
+          code="$(curl --silent --show-error --max-time 60 \
+            --request POST \
+            --header "Authorization: Bearer ${access_token}" \
+            --header 'Content-Type: application/json' \
+            --data "${body}" \
+            --write-out '%{http_code}' --output "${probe}" \
+            "${base}/meteringpoints/meteringpoint/getchargelinkswithcharges" || true)"
+
+          if [ "${code}" = '404' ]; then
+            echo 'ok    POST /meteringpoints/meteringpoint/getchargelinkswithcharges -> HTTP 404 (documented, still not deployed — as expected)'
+            exit 0
+          fi
+
+          # Not a 404. Something changed. This fails the job on purpose: a
+          # warning on a green run is a warning nobody reads.
+          echo "::error::POST getchargelinkswithcharges returned HTTP ${code:-<none>}, not the 404 it has always returned. Energinet may have deployed it. Verify by hand, then implement it in v1/ and update this probe."
+          head -c 1000 "${probe}" || true
+          exit 1

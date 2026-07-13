@@ -6,22 +6,33 @@ on:
   pull_request:
     branches: [ master, main, develop ]
 
+# Least privilege by default. No job in this workflow writes to the repository,
+# so nothing widens this. Codecov uploads over its own upload endpoint and needs
+# no GitHub write scope.
+permissions:
+  contents: read
+
+# One run per ref. Pushing twice to a PR cancels the older, still-running matrix
+# instead of paying for both.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: ['1.25']
 
     steps:
     - name: Check out code
       uses: actions/checkout@v4
 
+    # go-version-file keeps CI on exactly the toolchain go.mod requires, so the
+    # workflow cannot drift from the module's own requirement.
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: ${{ matrix.go-version }}
+        go-version-file: go.mod
 
     - name: Cache Go modules
       uses: actions/cache@v4
@@ -29,9 +40,9 @@ jobs:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+        key: ${{ runner.os }}-go-${{ hashFiles('go.mod', '**/go.sum') }}
         restore-keys: |
-          ${{ runner.os }}-go-${{ matrix.go-version }}-
+          ${{ runner.os }}-go-
 
     - name: Download dependencies
       run: go mod download
@@ -42,17 +53,37 @@ jobs:
     - name: Run tests
       run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
 
+    # Forks do not get repository secrets, so CODECOV_TOKEN is empty there and the
+    # action falls back to tokenless upload. fail_ci_if_error stays false so a
+    # missing token or a Codecov outage never fails an otherwise green build.
     - name: Upload coverage to Codecov
-      if: matrix.go-version == '1.25'
       uses: codecov/codecov-action@v4
       with:
         file: ./coverage.out
         flags: unittests
         fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
 
     - name: Generate coverage report
-      if: matrix.go-version == '1.25'
       run: go tool cover -func=coverage.out
+
+  tidy:
+    name: Tidy
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+
+    # Fails, and prints the diff it would have applied, if go.mod/go.sum are not
+    # what `go mod tidy` would produce. Keeps committed dependency metadata honest.
+    - name: Check go mod tidy
+      run: go mod tidy -diff
 
   lint:
     name: Lint
@@ -65,7 +96,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.25'
+        go-version-file: go.mod
 
     # golangci-lint v2 rejects the v1 config format, so the action and the config
     # have to move together. Pin the minor version rather than tracking latest, so a
@@ -80,6 +111,14 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     strategy:
+      # Compilation check only: proves every shipped target still compiles, and
+      # catches a break on a target the developer never builds locally (windows,
+      # arm64) before it reaches a tag.
+      #
+      # This job deliberately produces no artifacts. Release binaries are built and
+      # published by release.yml on tags via GoReleaser; uploading them here as well
+      # would only duplicate that and cost artifact storage.
+      fail-fast: false
       matrix:
         os: [linux, darwin, windows]
         arch: [amd64, arm64]
@@ -94,15 +133,10 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.25'
+        go-version-file: go.mod
 
     - name: Build binary
-      run: |
-        GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -v -o dist/go-eloverblik-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }} .
-
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: go-eloverblik-${{ matrix.os }}-${{ matrix.arch }}
-        path: dist/*
-        retention-days: 7
+      env:
+        GOOS: ${{ matrix.os }}
+        GOARCH: ${{ matrix.arch }}
+      run: go build -v -o /dev/null .
