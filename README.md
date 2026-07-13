@@ -978,26 +978,42 @@ GOOS=windows GOARCH=amd64 go build -o go-eloverblik-windows-amd64.exe .
 ```
 .
 ├── cmd/                    # CLI command implementations
-│   ├── measurements.go     # Timeseries and export commands
+│   ├── alive.go            # Health check commands
+│   ├── authorizations.go   # Authorization commands
+│   ├── chargelinks.go      # Charge links commands
 │   ├── charges.go          # Charges commands
 │   ├── customer.go         # Customer-specific commands
+│   ├── helpers.go          # Flag handling shared by the commands
+│   ├── installations.go    # Metering point commands
+│   ├── measurements.go     # Timeseries and export commands
+│   ├── relations.go        # Relation commands
+│   ├── root.go             # Root command and initialization
 │   ├── thirdparty.go       # Third-party specific commands
-│   └── root.go             # Root command and initialization
+│   └── token.go            # Token inspection command
 ├── v1/                     # Library implementation
 │   ├── auth.go             # Authentication
+│   ├── chargelinks.go      # Charge links endpoints
 │   ├── charges.go          # Charges endpoints
+│   ├── constvars.go        # Aggregations, resolutions and other constants
 │   ├── eloverblik.go       # Client initialization
 │   ├── errors.go           # Error handling
 │   ├── interfaces.go       # API interfaces
+│   ├── jwt.go              # Token claim decoding
 │   ├── meters.go           # Metering point endpoints
 │   ├── models.go           # Data models
+│   ├── options.go          # Client options
+│   ├── periods.go          # Relative period helpers
 │   ├── relations.go        # Relations endpoints
 │   ├── timeseries.go       # Timeseries endpoints
+│   ├── utils.go            # Internal helpers
 │   └── *_test.go           # Unit tests
 ├── .github/
 │   └── workflows/
-│       └── test.yml        # CI/CD pipeline
+│       ├── release.yml     # Tag-triggered GoReleaser build
+│       ├── security.yml    # govulncheck and CodeQL
+│       └── test.yml        # Test, lint, tidy and build
 ├── .golangci.yml           # Linter configuration
+├── .goreleaser.yaml        # Release build configuration
 ├── go.mod                  # Go module definition
 ├── go.sum                  # Dependency checksums
 └── main.go                 # CLI entry point
