@@ -29,6 +29,7 @@ type ThirdPartyCharges struct {
 }
 
 type Charge struct {
+	PriceID       string       `json:"priceId"`
 	Name          string       `json:"name"`
 	Description   string       `json:"description"`
 	Owner         string       `json:"owner"`
@@ -40,6 +41,7 @@ type Charge struct {
 }
 
 type TariffCharge struct {
+	PriceID       string        `json:"priceId"`
 	Name          string        `json:"name"`
 	Description   string        `json:"description"`
 	Owner         string        `json:"owner"`

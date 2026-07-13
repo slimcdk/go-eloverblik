@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jarcoal/httpmock"
@@ -224,6 +225,205 @@ func TestGetMeteringPointDetails(t *testing.T) {
 		assert.Equal(t, ErrorAccessToMeteringPointDenied, err)
 	})
 }
+
+// TestGetMeteringPointDetailsFullPayload decodes a payload shaped like a real
+// /meteringpoint/getdetails response. The struct used to model only a subset of the
+// masterdata the API returns, so fields like assetType, darReference, gridOperatorID,
+// meteringPointAlias, mpAddressWashInstructions, occurrence, powerLimitKWDecimal and the
+// customer-only balanceSupplier/protectedName fields were silently dropped.
+func TestGetMeteringPointDetailsFullPayload(t *testing.T) {
+	mockResty := resty.New()
+	httpmock.ActivateNonDefault(mockResty.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	c := &client{
+		accessToken: "test-access-token",
+		resty:       mockResty,
+		apiType:     CustomerApi,
+	}
+
+	httpmock.Reset()
+	mockResponse := `{
+		"result": [
+			{
+				"result": {
+					"meteringPointId": "571313113162842251",
+					"parentMeteringPointId": "",
+					"typeOfMP": "E17",
+					"energyTimeSeriesMeasureUnit": "KWH",
+					"settlementMethod": "D01",
+					"meterNumber": "30203518",
+					"gridOperatorName": "N1 A/S - 131",
+					"gridOperatorID": "5790001089030",
+					"gridOperatorID_SchemeAgencyIdentifier": "GLN",
+					"meteringGridAreaIdentification": "131",
+					"netSettlementGroup": "0",
+					"physicalStatusOfMP": "E22",
+					"powerLimitKW": "",
+					"powerLimitKWDecimal": 25.5,
+					"powerLimitA": "",
+					"subTypeOfMP": "D01",
+					"disconnectionType": "D02",
+					"product": "Item8716867000030",
+					"consumerCVR": "42703087",
+					"dataAccessCVR": "42703087",
+					"consumerStartDate": "2025-04-27T22:00:00.000Z",
+					"meterReadingOccurrence": "PT1H",
+					"meterCounterDigits": "7.0",
+					"meterCounterMultiplyFactor": "1.0",
+					"meterCounterUnit": "KWH",
+					"meterCounterType": "D01",
+					"balanceSupplierName": "Test Supplier",
+					"balanceSupplierId": "5790000000001",
+					"balanceSupplierId_SchemeAgencyIdentifier": "GLN",
+					"balanceSupplierStartDate": "2024-01-01T00:00:00.000Z",
+					"taxReduction": "False",
+					"taxSettlementDate": "",
+					"mpRelationType": "",
+					"firstConsumerPartyName": "John Sisk & Son ApS",
+					"secondConsumerPartyName": "",
+					"protectedName": "False",
+					"occurrence": "2026-07-12T22:00:00.000Z",
+					"meteringPointAlias": "Main meter",
+					"assetType": "D01",
+					"mpAddressWashInstructions": "D01",
+					"darReference": "0a3f5098-ac77-32b8-e044-0003ba298018",
+					"streetCode": "0116",
+					"streetName": "Blichers Alle",
+					"buildingNumber": "1",
+					"postcode": "8830",
+					"cityName": "Tjele",
+					"citySubDivisionName": "Foulum",
+					"municipalityCode": "791",
+					"contactAddresses": [
+						{
+							"contactName1": "John Sisk & Son ApS",
+							"addressCode": "D01",
+							"streetName": "Ørestads Boulevard",
+							"buildingNumber": "73",
+							"postcode": "2300",
+							"cityName": "København S",
+							"countryName": "DK",
+							"contactPhoneNumber": "00353873349334",
+							"contactEmailAddress": "T.Kelly@SISK.ie",
+							"attention": "Accounts payable",
+							"postBox": "1234",
+							"protectedAddress": "False"
+						}
+					],
+					"childMeteringPoints": [
+						{
+							"parentMeteringPointId": "571313113162842251",
+							"meteringPointId": "571313113162842268",
+							"typeOfMP": "D01",
+							"meterReadingOccurrence": "PT1H",
+							"meterNumber": "30203519"
+						}
+					]
+				},
+				"success": true,
+				"errorCode": 10000,
+				"errorText": "NoError",
+				"id": "571313113162842251"
+			}
+		]
+	}`
+	httpmock.RegisterResponder("POST", "/meteringpoints/meteringpoint/getdetails",
+		func(req *http.Request) (*http.Response, error) {
+			resp := httpmock.NewStringResponse(200, mockResponse)
+			resp.Header.Set("Content-Type", "application/json")
+			return resp, nil
+		},
+	)
+
+	details, err := c.GetMeteringPointDetails([]string{"571313113162842251"})
+
+	assert.NoError(t, err)
+	if !assert.Len(t, details, 1) {
+		return
+	}
+	detail := details[0].Result
+
+	// Fields the struct used to drop entirely
+	assert.Equal(t, "5790001089030", detail.GridOperatorID)
+	assert.Equal(t, "GLN", detail.GridOperatorIDSchemeAgencyID)
+	assert.Equal(t, "D01", detail.AssetType)
+	assert.Equal(t, "D01", detail.MpAddressWashInstructions)
+	assert.Equal(t, "0a3f5098-ac77-32b8-e044-0003ba298018", detail.DarReference)
+	assert.Equal(t, "Main meter", detail.MeteringPointAlias)
+	assert.Equal(t, "False", detail.ProtectedName)
+	assert.Equal(t, "5790000000001", detail.BalanceSupplierID)
+	assert.Equal(t, "GLN", detail.BalanceSupplierIDSchemeAgencyID)
+
+	// occurrence is a timestamp, not a plain string
+	assert.Equal(t, "2026-07-12T22:00:00Z", detail.Occurrence.UTC().Format(time.RFC3339))
+
+	// powerLimitKW stays a string, powerLimitKWDecimal is a number
+	assert.Equal(t, "", detail.PowerLimitKW)
+	if assert.NotNil(t, detail.PowerLimitKWDecimal) {
+		assert.InDelta(t, 25.5, *detail.PowerLimitKWDecimal, 0.0001)
+	}
+
+	// Contact address fields the struct used to drop
+	if assert.Len(t, detail.ContactAddresses, 1) {
+		address := detail.ContactAddresses[0]
+		assert.Equal(t, "Accounts payable", address.Attention)
+		assert.Equal(t, "1234", address.PostBox)
+		assert.Equal(t, "False", address.ProtectedAddress)
+	}
+
+	if assert.Len(t, detail.ChildMeteringPoints, 1) {
+		assert.Equal(t, "571313113162842268", detail.ChildMeteringPoints[0].MeteringPointID)
+		assert.Equal(t, "30203519", detail.ChildMeteringPoints[0].MeterNumber)
+	}
+}
+
+// TestGetMeteringPointDetailsNullPowerLimit guards the nullable powerLimitKWDecimal. The
+// API sends null for most metering points, which must not be confused with a limit of 0.
+func TestGetMeteringPointDetailsNullPowerLimit(t *testing.T) {
+	mockResty := resty.New()
+	httpmock.ActivateNonDefault(mockResty.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	c := &client{
+		accessToken: "test-access-token",
+		resty:       mockResty,
+		apiType:     ThirdPartyApi,
+	}
+
+	httpmock.Reset()
+	httpmock.RegisterResponder("POST", "/meteringpoint/getdetails",
+		func(req *http.Request) (*http.Response, error) {
+			resp := httpmock.NewStringResponse(200, `{
+				"result": [
+					{
+						"result": {
+							"meteringPointId": "571313113162842251",
+							"powerLimitKW": "",
+							"powerLimitKWDecimal": null,
+							"occurrence": "",
+							"consumerStartDate": "",
+							"taxSettlementDate": "",
+							"balanceSupplierStartDate": ""
+						},
+						"success": true
+					}
+				]
+			}`)
+			resp.Header.Set("Content-Type", "application/json")
+			return resp, nil
+		})
+
+	details, err := c.GetMeteringPointDetails([]string{"571313113162842251"})
+
+	assert.NoError(t, err)
+	if !assert.Len(t, details, 1) {
+		return
+	}
+	assert.Nil(t, details[0].Result.PowerLimitKWDecimal, "a null power limit must stay unset")
+	assert.True(t, details[0].Result.Occurrence.IsZero(), "an empty occurrence must decode to the zero time")
+}
+
 func TestExportMasterdata(t *testing.T) {
 	mockResty := resty.New()
 	httpmock.ActivateNonDefault(mockResty.GetClient())

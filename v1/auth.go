@@ -25,17 +25,29 @@ type Authorization struct {
 }
 
 type ThirdPartyMeteringPoint struct {
-	MeteringPointID string `json:"meteringPointId"`
-	TypeOfMP        string `json:"typeOfMP"`
-	AccessFrom      string `json:"accessFrom"`
-	AccessTo        string `json:"accessTo"`
-	StreetCode      string `json:"streetCode"`
-	StreetName      string `json:"streetName"`
-	BuildingNumber  string `json:"buildingNumber"`
-	FloorID         string `json:"floorId"`
-	RoomID          string `json:"roomId"`
-	Postcode        string `json:"postcode"`
-	CityName        string `json:"cityName"`
+	MeteringPointID         string               `json:"meteringPointId"`
+	TypeOfMP                string               `json:"typeOfMP"`
+	AccessFrom              string               `json:"accessFrom"`
+	AccessTo                string               `json:"accessTo"`
+	StreetCode              string               `json:"streetCode"`
+	StreetName              string               `json:"streetName"`
+	BuildingNumber          string               `json:"buildingNumber"`
+	FloorID                 string               `json:"floorId"`
+	RoomID                  string               `json:"roomId"`
+	Postcode                string               `json:"postcode"`
+	CityName                string               `json:"cityName"`
+	CitySubDivisionName     string               `json:"citySubDivisionName"`
+	MunicipalityCode        string               `json:"municipalityCode"`
+	LocationDescription     string               `json:"locationDescription"`
+	SettlementMethod        string               `json:"settlementMethod"`
+	MeterReadingOccurrence  string               `json:"meterReadingOccurrence"`
+	FirstConsumerPartyName  string               `json:"firstConsumerPartyName"`
+	SecondConsumerPartyName string               `json:"secondConsumerPartyName"`
+	ConsumerCVR             string               `json:"consumerCVR"`
+	DataAccessCVR           string               `json:"dataAccessCVR"`
+	MeterNumber             string               `json:"meterNumber"`
+	ConsumerStartDate       FlexibleTime         `json:"consumerStartDate"`
+	ChildMeteringPoints     []ChildMeteringPoint `json:"childMeteringPoints"`
 }
 
 // Fetches and sets a access token on the base client

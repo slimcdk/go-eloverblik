@@ -3,6 +3,7 @@ package eloverblik
 import (
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jarcoal/httpmock"
@@ -247,6 +248,98 @@ func TestGetMeteringPointsForScope(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "only available for ThirdParty API")
 	})
+}
+
+// TestGetMeteringPointsForScopeFullPayload decodes a payload shaped like a real
+// /authorization/authorization/meteringpoints response. The struct used to model only the
+// identity and address of a metering point, dropping the meter number, the CVR numbers, the
+// consumer names, the settlement method, the reading occurrence, the location description
+// and the child metering points the API actually returns.
+func TestGetMeteringPointsForScopeFullPayload(t *testing.T) {
+	mockResty := resty.New()
+	httpmock.ActivateNonDefault(mockResty.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	c := &client{
+		accessToken: "test-access-token",
+		resty:       mockResty,
+		apiType:     ThirdPartyApi,
+	}
+
+	httpmock.Reset()
+	mockResponse := `{
+		"result": [
+			{
+				"meteringPointId": "571313113162842251",
+				"typeOfMP": "E17",
+				"accessFrom": "2024-10-31T23:00:00.000Z",
+				"accessTo": "2026-07-31T22:00:00.000Z",
+				"streetCode": "0116",
+				"streetName": "Blichers Alle",
+				"buildingNumber": "1",
+				"floorId": "",
+				"roomId": "",
+				"postcode": "8830",
+				"cityName": "Tjele",
+				"citySubDivisionName": "Foulum",
+				"municipalityCode": "791",
+				"locationDescription": "Bag ved laden",
+				"settlementMethod": "D01",
+				"meterReadingOccurrence": "PT1H",
+				"firstConsumerPartyName": "John Sisk & Son ApS",
+				"secondConsumerPartyName": "",
+				"consumerCVR": "42703087",
+				"dataAccessCVR": "42703087",
+				"meterNumber": "30203518",
+				"consumerStartDate": "2025-04-27T22:00:00.000Z",
+				"childMeteringPoints": [
+					{
+						"parentMeteringPointId": "571313113162842251",
+						"meteringPointId": "571313113162842268",
+						"typeOfMP": "D01",
+						"meterReadingOccurrence": "PT1H",
+						"meterNumber": "30203519"
+					}
+				]
+			}
+		]
+	}`
+	path := "/authorization/authorization/meteringpoints/authorizationId/725809"
+	httpmock.RegisterResponder("GET", path,
+		func(req *http.Request) (*http.Response, error) {
+			resp := httpmock.NewStringResponse(200, mockResponse)
+			resp.Header.Set("Content-Type", "application/json")
+			return resp, nil
+		})
+
+	meteringPoints, err := c.GetMeteringPointsForScope(AuthScopeID, "725809")
+
+	assert.NoError(t, err)
+	if !assert.Len(t, meteringPoints, 1) {
+		return
+	}
+	meteringPoint := meteringPoints[0]
+
+	assert.Equal(t, "571313113162842251", meteringPoint.MeteringPointID)
+	assert.Equal(t, "Foulum", meteringPoint.CitySubDivisionName)
+	assert.Equal(t, "791", meteringPoint.MunicipalityCode)
+	assert.Equal(t, "Bag ved laden", meteringPoint.LocationDescription)
+	assert.Equal(t, "D01", meteringPoint.SettlementMethod)
+	assert.Equal(t, "PT1H", meteringPoint.MeterReadingOccurrence)
+	assert.Equal(t, "John Sisk & Son ApS", meteringPoint.FirstConsumerPartyName)
+	assert.Equal(t, "", meteringPoint.SecondConsumerPartyName)
+	assert.Equal(t, "42703087", meteringPoint.ConsumerCVR)
+	assert.Equal(t, "42703087", meteringPoint.DataAccessCVR)
+	assert.Equal(t, "30203518", meteringPoint.MeterNumber)
+	assert.Equal(t, "2025-04-27T22:00:00Z", meteringPoint.ConsumerStartDate.UTC().Format(time.RFC3339))
+
+	if assert.Len(t, meteringPoint.ChildMeteringPoints, 1) {
+		child := meteringPoint.ChildMeteringPoints[0]
+		assert.Equal(t, "571313113162842268", child.MeteringPointID)
+		assert.Equal(t, "571313113162842251", child.ParentMeteringPointID)
+		assert.Equal(t, "D01", child.TypeOfMP)
+		assert.Equal(t, "30203519", child.MeterNumber)
+	}
 }
 
 func TestGetMeteringPointIDsForScope(t *testing.T) {
