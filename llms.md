@@ -20,10 +20,16 @@ apis:
 ### 1. Authentication Flow
 ```
 User obtains refresh token → NewCustomer/NewThirdParty creates client → Client automatically:
-  1. Uses refresh token to get access token
-  2. Caches access token
-  3. Auto-refreshes when expired
-  4. Adds Authorization header to all requests
+  1. Uses refresh token to get an access token on the first call that needs one
+  2. Caches the access token on the client
+  3. Adds the Authorization header to all requests
+```
+Note: the cached access token is fetched once and kept for the life of the client. It is
+NOT re-fetched when it expires (a data access token lasts about 24 hours), so a long
+running process should create a new client, or check the expiry itself:
+```go
+claims, _ := client.DataAccessTokenClaims()
+if claims.IsExpired() { /* build a new client */ }
 ```
 
 ### 2. Client Types
@@ -45,6 +51,37 @@ WithResponseHeaderOutput:
   signature: eloverblik.WithResponseHeaderOutput(w io.Writer) Option
   purpose: Debugging - write the HTTP response headers of every API call to w
   covers: [token call, regular calls, streamed exports]
+
+WithRetry:
+  signature: eloverblik.WithRetry(count int, maxWait time.Duration) Option
+  purpose: Override the retry policy for the documented rate limits
+  default: 2 retries on HTTP 429 and 503 only, honouring Retry-After, capped at 60s
+
+WithoutRetry:
+  signature: eloverblik.WithoutRetry() Option
+  purpose: Fail immediately instead of retrying a 429 or 503
+```
+
+### 4. Token Claims
+```yaml
+ParseToken:
+  signature: eloverblik.ParseToken(token string) (TokenClaims, error)
+  purpose: Decode the claims of a refresh or data access token. No request, no signature
+           verification (only Energinet holds the key).
+  fields: [TokenType, TokenName, TokenID, Name, Subject, Company, CVR, UserID,
+           ThirdPartyID, Roles, LoginType, WebApp, Issuer, Audience, ExpiresAt]
+  methods: [IsExpired() bool, ExpiresIn() time.Duration, IsRefreshToken() bool,
+            IsDataAccessToken() bool, APIType() (apiType, error)]
+
+Client.RefreshTokenClaims:
+  signature: client.RefreshTokenClaims() (TokenClaims, error)
+  purpose: Claims of the refresh token the client was created with. No request.
+
+Client.DataAccessTokenClaims:
+  signature: client.DataAccessTokenClaims() (TokenClaims, error)
+  purpose: Claims of the data access token, fetching one first if the client has none.
+
+CLI: go-eloverblik token --token=$TOKEN [--data-access]
 ```
 
 ## Function Signatures with Complete Parameter Specifications

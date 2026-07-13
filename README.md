@@ -239,6 +239,36 @@ go-eloverblik customer details <metering-id> --token=$TOKEN --print-response-hea
 < Date: Mon, 01 Jan 2024 00:00:00 GMT
 ```
 
+### Inspecting a Token
+
+`token` decodes the claims of the token in `--token` and makes no request, which answers
+the questions that otherwise cost a failed call: which API is this token for, which roles
+does it carry, and has it expired?
+
+```bash
+go-eloverblik token --token=$TOKEN
+```
+
+```json
+{
+  "tokenType": "THIRDPARTYAPI_Refresh",
+  "tokenName": "christian local testing",
+  "name": "Christian Silas Skjerning",
+  "company": "Styr paa ApS",
+  "cvr": "44341603",
+  "roles": ["ReadPrivate", "ReadBusiness"],
+  "expiresAt": "2027-02-10T13:33:10+01:00"
+}
+```
+
+Add `--data-access` to exchange the refresh token for a short lived data access token and
+decode that one instead. That does make a request, and the client to use is taken from the
+token itself:
+
+```bash
+go-eloverblik token --data-access --token=$TOKEN
+```
+
 ### Customer Commands
 
 ```bash
@@ -358,6 +388,31 @@ customer := eloverblik.NewCustomer("refresh-token", eloverblik.WithResponseHeade
 < Content-Type: application/json; charset=utf-8
 < Date: Mon, 01 Jan 2024 00:00:00 GMT
 ```
+
+### Reading Token Claims
+
+Both Eloverblik tokens are JWTs. `ParseToken` decodes the claims of any of them, and the
+client can read its own:
+
+```go
+claims, err := eloverblik.ParseToken(refreshToken)
+
+claims.TokenName    // the name given to the token in the portal
+claims.Roles        // []string{"ReadPrivate", "ReadBusiness"}
+claims.Company      // "Styr paa ApS"
+claims.ExpiresAt    // time.Time, in Copenhagen time
+claims.IsExpired()  // no request needed to find out
+claims.APIType()    // eloverblik.ThirdPartyApi, taken from the token itself
+
+customer := eloverblik.NewCustomer(refreshToken)
+claims, err = customer.RefreshTokenClaims()     // no request
+claims, err = customer.DataAccessTokenClaims()  // fetches a data access token first
+```
+
+The claims are decoded, not verified: only Energinet holds the signing key, so a token can
+still only be authenticated by using it. Read the claims to tell tokens apart, to check an
+expiry before a batch job, or to see which roles a token was granted — not as a security
+check.
 
 ### Pricing Historic Consumption
 

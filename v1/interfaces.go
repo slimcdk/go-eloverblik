@@ -7,6 +7,8 @@ import (
 
 type Client interface {
 	GetDataAccessToken() (string, error)
+	RefreshTokenClaims() (TokenClaims, error)
+	DataAccessTokenClaims() (TokenClaims, error)
 	GetMeteringPointDetails(meteringPointIDs []string) ([]MeteringPointDetailsResponse, error)
 	GetTimeSeries(meteringPointIDs []string, from, to time.Time, aggregation Aggregation) ([]TimeSeries, error)
 	GetChargeLinksWithCharges(meteringPointIDs []string, from, to time.Time) (*ChargeLinksWithChargesResponse, error)
