@@ -30,10 +30,10 @@ func (ft *FlexibleTime) UnmarshalJSON(b []byte) error {
 }
 
 func (ft FlexibleTime) MarshalJSON() ([]byte, error) {
-	if ft.Time.IsZero() {
+	if ft.IsZero() {
 		return []byte("null"), nil
 	}
-	return []byte(`"` + ft.Time.Format(time.RFC3339) + `"`), nil
+	return []byte(`"` + ft.Format(time.RFC3339) + `"`), nil
 }
 
 type meteringPointIDs struct {

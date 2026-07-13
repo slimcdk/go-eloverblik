@@ -52,9 +52,9 @@ func TestFlexibleTime_UnmarshalJSON(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				if tt.expectZero {
-					assert.True(t, ft.Time.IsZero())
+					assert.True(t, ft.IsZero())
 				} else {
-					assert.False(t, ft.Time.IsZero())
+					assert.False(t, ft.IsZero())
 				}
 			}
 		})
@@ -99,7 +99,7 @@ func TestFlexibleTime_InStruct(t *testing.T) {
 		var ts TestStruct
 		err := json.Unmarshal([]byte(jsonData), &ts)
 		assert.NoError(t, err)
-		assert.True(t, ts.Date.Time.IsZero())
+		assert.True(t, ts.Date.IsZero())
 		assert.Equal(t, "test", ts.Name)
 	})
 
@@ -108,7 +108,7 @@ func TestFlexibleTime_InStruct(t *testing.T) {
 		var ts TestStruct
 		err := json.Unmarshal([]byte(jsonData), &ts)
 		assert.NoError(t, err)
-		assert.False(t, ts.Date.Time.IsZero())
+		assert.False(t, ts.Date.IsZero())
 		assert.Equal(t, 2024, ts.Date.Year())
 		assert.Equal(t, "test", ts.Name)
 	})

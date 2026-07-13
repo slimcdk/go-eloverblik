@@ -1,64 +1,58 @@
+version: "2"
 run:
-  timeout: 5m
-  tests: true
   modules-download-mode: readonly
-
+  tests: true
 linters:
   enable:
-    - errcheck      # Check for unchecked errors
-    - gosimple      # Simplify code
-    - govet         # Vet examines Go source code
-    - ineffassign   # Detect ineffectual assignments
-    - staticcheck   # Staticcheck is go vet on steroids
-    - unused        # Check for unused code
-    - gofmt         # Check whether code was gofmt-ed
-    - goimports     # Check import statements are formatted
-    - misspell      # Finds commonly misspelled English words
-    - revive        # Fast, configurable, extensible, flexible, and beautiful linter for Go
-    - gosec         # Inspects source code for security problems
-
-linters-settings:
-  errcheck:
-    check-type-assertions: false
-    check-blank: false
-
-  govet:
-    enable-all: true
-    disable:
-      - shadow  # Can be overly strict
-      - fieldalignment  # Optimization not always necessary
-
-  revive:
+    - gosec
+    - misspell
+    - revive
+  settings:
+    errcheck:
+      check-type-assertions: false
+      check-blank: false
+    gosec:
+      excludes:
+        - G401
+        - G501
+        - G505
+    govet:
+      disable:
+        - shadow
+        - fieldalignment
+      enable-all: true
+    revive:
+      rules:
+        - name: exported
+          arguments:
+            - checkPrivateReceivers
+            - sayRepetitiveInsteadOfStutters
+          disabled: true
+  exclusions:
+    generated: lax
     rules:
-      - name: exported
-        disabled: true
-        arguments:
-          - "checkPrivateReceivers"
-          - "sayRepetitiveInsteadOfStutters"
-
-  gosec:
-    excludes:
-      - G401  # Detect the usage of DES, RC4, MD5 or SHA1
-      - G501  # Import blocklist: crypto/md5
-      - G505  # Import blocklist: crypto/sha1
-
+      - linters:
+          - errcheck
+          - gosec
+          - revive
+        path: _test\.go
+      - linters:
+          - lll
+        path: (.*)?_gen\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-use-default: false
   max-issues-per-linter: 0
   max-same-issues: 0
-
-  exclude-rules:
-    # Exclude some linters from running on tests files
-    - path: _test\.go
-      linters:
-        - errcheck
-        - gosec
-        - revive
-
-    # Ignore long lines in generated files
-    - path: (.*)?_gen\.go
-      linters:
-        - lll
-
-output:
-  sort-results: true
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

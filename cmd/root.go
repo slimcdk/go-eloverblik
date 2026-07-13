@@ -35,27 +35,31 @@ func Execute() {
 
 func rootHelpFunc(cmd *cobra.Command, _ []string) {
 	w := cmd.OutOrStdout()
-	fmt.Fprintf(w, "%s\n\nUsage:\n  %s [command]\n\nAvailable Commands:\n", cmd.Short, cmd.CommandPath())
+	printf := func(format string, args ...any) {
+		_, _ = fmt.Fprintf(w, format, args...)
+	}
+
+	printf("%s\n\nUsage:\n  %s [command]\n\nAvailable Commands:\n", cmd.Short, cmd.CommandPath())
 	for _, sub := range cmd.Commands() {
 		if !sub.IsAvailableCommand() || sub.Name() == "help" {
 			continue
 		}
 		if sub.HasAvailableSubCommands() {
-			fmt.Fprintf(w, "\n  %s\n", sub.Name())
+			printf("\n  %s\n", sub.Name())
 			for _, subsub := range sub.Commands() {
 				if !subsub.IsAvailableCommand() {
 					continue
 				}
-				fmt.Fprintf(w, "    %-24s %s\n", subsub.Name(), subsub.Short)
+				printf("    %-24s %s\n", subsub.Name(), subsub.Short)
 			}
 		} else {
-			fmt.Fprintf(w, "  %-26s %s\n", sub.Name(), sub.Short)
+			printf("  %-26s %s\n", sub.Name(), sub.Short)
 		}
 	}
 	if flags := cmd.LocalFlags().FlagUsages(); flags != "" {
-		fmt.Fprintf(w, "\nFlags:\n%s", flags)
+		printf("\nFlags:\n%s", flags)
 	}
-	fmt.Fprintf(w, "\nUse \"%s [command] --help\" for more information about a command.\n", cmd.CommandPath())
+	printf("\nUse \"%s [command] --help\" for more information about a command.\n", cmd.CommandPath())
 }
 
 func init() {
