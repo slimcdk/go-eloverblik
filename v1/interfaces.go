@@ -9,6 +9,7 @@ type Client interface {
 	GetDataAccessToken() (string, error)
 	GetMeteringPointDetails(meteringPointIDs []string) ([]MeteringPointDetailsResponse, error)
 	GetTimeSeries(meteringPointIDs []string, from, to time.Time, aggregation Aggregation) ([]TimeSeries, error)
+	GetChargeLinksWithCharges(meteringPointIDs []string, from, to time.Time) (*ChargeLinksWithChargesResponse, error)
 	IsAlive() (bool, error)
 }
 

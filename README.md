@@ -144,6 +144,7 @@ func main() {
 | `/meteringpoints/meteringpoint/getdetails` | `customer details` | `GetMeteringPointDetails()` | Get detailed info |
 | `/meterdata/gettimeseries/{from}/{to}/{aggregation}` | `customer timeseries` | `GetTimeSeries()` | Get consumption data |
 | `/meteringpoints/meteringpoint/getcharges` | `customer charges` | `GetCustomerCharges()` | Get charges/tariffs |
+| `/meteringpoints/meteringpoint/getchargelinkswithcharges` | `customer charge-links` | `GetChargeLinksWithCharges()` | Get charge links with dated prices |
 | `/meteringpoints/meteringpoint/relation/add` | `customer add-relation` | `AddRelationByID()` | Link metering point |
 | `/meteringpoints/meteringpoint/relation/add/{id}/{code}` | `customer add-relation-by-code` | `AddRelationByWebAccessCode()` | Link via code |
 | `/meteringpoints/meteringpoint/relation/{id}` | `customer delete-relation` | `DeleteRelation()` | Unlink metering point |
@@ -163,7 +164,14 @@ func main() {
 | `/meteringpoints/meteringpoint/getdetails` | `thirdparty details` | `GetMeteringPointDetails()` | Get detailed info |
 | `/meterdata/gettimeseries/{from}/{to}/{aggregation}` | `thirdparty timeseries` | `GetTimeSeries()` | Get consumption data |
 | `/meteringpoints/meteringpoint/getcharges` | `thirdparty charges` | `GetThirdPartyCharges()` | Get charges |
+| `/meteringpoint/getchargelinkswithcharges` | `thirdparty charge-links` | `GetChargeLinksWithCharges()` | Get charge links with dated prices (see note) |
 | `/api/isalive` | `thirdparty alive` | `IsAlive()` | Health check |
+
+> **Note on `thirdparty charge-links`:** the endpoint is declared in Eloverblik's
+> Third-Party OpenAPI document, but the live API answered `404 Not Found` for it on every
+> documented path when this was last checked (2026-07-13), while `thirdparty charges`
+> answered normally. The client implements it per the specification; expect it to start
+> working once Energinet deploys it. It is unaffected on the Customer API.
 
 ## CLI Reference
 
@@ -183,6 +191,7 @@ Available Commands:
     add-relation             Link one or more metering points to the authenticated user by ID
     add-relation-by-code     Link a metering point to the authenticated user via a web access code
     alive                    Check if the API is operational
+    charge-links             Get charge links with dated charge prices for one or more metering points
     charges                  Get charges (subscriptions, fees, tariffs) for one or more metering points
     delete-relation          Unlink a metering point from the authenticated user
     details                  Get metering point details
@@ -195,6 +204,7 @@ Available Commands:
   thirdparty
     alive                    Check if the API is operational
     authorizations           Get authorizations (powers of attorney) granted by customers
+    charge-links             Get charge links with dated charge prices for one or more metering points
     charges                  Get charges (subscriptions, tariffs) for one or more metering points
     details                  Get metering point details
     metering-point-ids       Get metering point IDs accessible under a specific authorization scope
@@ -262,6 +272,13 @@ go-eloverblik customer timeseries <metering-id>... \
 
 go-eloverblik customer charges <metering-id>...         # Get charges and tariffs
 
+# Charge links with the dated price series of every linked charge.
+# 'charges' only returns currently valid and future charges, so it cannot price historic
+# consumption. 'charge-links' returns the actual price series for the requested interval,
+# the charge link periods and factors, the VAT classification and the tax indicator.
+go-eloverblik customer charge-links <metering-id>... --period=last_month
+go-eloverblik customer charge-links <metering-id>... --from=YYYY-MM-DD --to=YYYY-MM-DD
+
 # Data Export (CSV or JSON)
 go-eloverblik customer export-timeseries <metering-id>... --period=last_year
 
@@ -303,6 +320,10 @@ go-eloverblik thirdparty timeseries <metering-id>... \
 
 go-eloverblik thirdparty charges <metering-id>...
 
+# Charge links with the dated price series of every linked charge
+go-eloverblik thirdparty charge-links <metering-id>... --period=last_month
+go-eloverblik thirdparty charge-links <metering-id>... --from=YYYY-MM-DD --to=YYYY-MM-DD
+
 # Health Check
 go-eloverblik thirdparty alive
 ```
@@ -337,6 +358,50 @@ customer := eloverblik.NewCustomer("refresh-token", eloverblik.WithResponseHeade
 < Content-Type: application/json; charset=utf-8
 < Date: Mon, 01 Jan 2024 00:00:00 GMT
 ```
+
+### Pricing Historic Consumption
+
+`GetCustomerCharges` and `GetThirdPartyCharges` only return charges that are currently
+valid or take effect in the future, so they cannot price consumption that already
+happened. `GetChargeLinksWithCharges` returns the missing half: the dated price series of
+every charge a metering point is linked to, along with the charge link periods and their
+factors, the VAT classification and the tax indicator. It is available on both APIs.
+
+```go
+from, to, err := eloverblik.GetDatesFromPeriod(eloverblik.LastMonth)
+if err != nil {
+    log.Fatal(err)
+}
+
+// client is either a Customer or a ThirdParty client
+links, err := client.GetChargeLinksWithCharges([]string{"571313180400000001"}, from, to)
+if err != nil {
+    log.Fatal(err)
+}
+
+// The charges are returned once, next to the links, keyed by their charge identifier
+charges := make(map[eloverblik.ChargeIdentifier]eloverblik.ChargeInformation, len(links.ChargeInformations))
+for _, info := range links.ChargeInformations {
+    charges[info.ChargeIdentifier] = info
+}
+
+for _, result := range links.Results {
+    if result.Error != "" { // errors are reported per metering point
+        log.Printf("%s: %s", result.MeteringPointID, result.Error)
+        continue
+    }
+    for _, link := range result.ChargeLinks {
+        info := charges[link.ChargeIdentifier]
+        for _, point := range info.ChargeSeriesPoints {
+            fmt.Printf("%s  %s  %.4f DKK  tax=%t\n",
+                link.ChargeIdentifier.Code, point.From.Format(time.RFC3339), point.Price, info.TaxIndicator)
+        }
+    }
+}
+```
+
+Multiply a price point by the consumption in the same interval and by the `Factor` of the
+charge link period covering it to get the amount charged.
 
 ### Aggregation Levels
 

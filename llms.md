@@ -31,12 +31,12 @@ User obtains refresh token → NewCustomer/NewThirdParty creates client → Clie
 Customer:
   purpose: Individual consumers accessing their own data
   factory: eloverblik.NewCustomer(refreshToken string, opts ...Option)
-  capabilities: [installations, timeseries, charges, relations, exports]
+  capabilities: [installations, timeseries, charges, charge-links, relations, exports]
 
 ThirdParty:
   purpose: Businesses accessing multiple customers' data via authorization
   factory: eloverblik.NewThirdParty(refreshToken string, opts ...Option)
-  capabilities: [authorizations, metering-points, timeseries, charges]
+  capabilities: [authorizations, metering-points, timeseries, charges, charge-links]
 ```
 
 ### 3. Client Options
@@ -225,6 +225,53 @@ for _, charge := range charges {
 ```
 
 ```go
+// FUNCTION: GetChargeLinksWithCharges
+// AVAILABLE ON: both the Customer and the Third-Party client (eloverblik.Client)
+// PURPOSE: Get the charge links of metering points together with the dated price series
+//          of every charge they link to. GetCustomerCharges/GetThirdPartyCharges only
+//          return currently valid and future charges, so they cannot price historic
+//          consumption. This is the endpoint to price past consumption with.
+// INPUTS:
+//   - meteringPointIDs ([]string): 1-10 metering point IDs
+//   - from, to (time.Time): Date range, applied to every metering point
+// OUTPUTS:
+//   - *ChargeLinksWithChargesResponse: Charge links plus the charges they refer to
+//   - error: API/HTTP/network errors
+// RETURNS:
+//   - Results ([]ChargeLinksWithChargesResult): One per metering point
+//     Fields: MeteringPointID, Error (per metering point, empty on success), ChargeLinks
+//   - ChargeInformations ([]ChargeInformation): The charges, returned once, not nested
+//     Fields: ChargeIdentifier, TaxIndicator (bool), Resolution (e.g. PT1H),
+//             PricingCategory, ChargeInformationPeriods, ChargeSeriesPoints
+// KEY TYPES:
+//   ChargeLink:              MeteringPointID, ChargeIdentifier, ChargeLinkPeriods
+//   ChargeIdentifier:        Code, Owner, Type (joins a ChargeLink to a ChargeInformation)
+//   ChargeLinkPeriod:        Factor (int, e.g. number of subscriptions), From, To (zero if open ended)
+//   ChargeInformationPeriod: Name, Description, TransparentInvoicing, From, To, VATClassification
+//   ChargeSeriesPoint:       From, To, Price (the price is valid in [From, To))
+// EXAMPLE:
+from, to, _ := eloverblik.GetDatesFromPeriod(eloverblik.LastMonth)
+links, err := client.GetChargeLinksWithCharges([]string{"571313155411053087"}, from, to)
+if err != nil { /* handle error */ }
+
+charges := make(map[eloverblik.ChargeIdentifier]eloverblik.ChargeInformation)
+for _, info := range links.ChargeInformations {
+    charges[info.ChargeIdentifier] = info
+}
+for _, result := range links.Results {
+    if result.Error != "" { continue } // errors are reported per metering point
+    for _, link := range result.ChargeLinks {
+        info := charges[link.ChargeIdentifier]
+        for _, point := range info.ChargeSeriesPoints {
+            // multiply by the consumption in [point.From, point.To) and by the Factor of
+            // the charge link period covering it to get the amount charged
+            _ = point.Price
+        }
+    }
+}
+```
+
+```go
 // FUNCTION: ExportTimeSeries
 // PURPOSE: Export time series data as CSV stream
 // INPUTS:
@@ -405,6 +452,8 @@ points, err := client.GetMeteringPointsForScope(
 //   - []ThirdPartyChargeResponse: Similar to CustomerChargeResponse
 //   - error: HTTP/network errors
 // DIFFERENCE FROM CUSTOMER: May have different charge structures
+// NOTE: Only returns currently valid and future charges. To price historic consumption,
+//       use GetChargeLinksWithCharges, which is available on this client as well.
 ```
 
 ## CLI Command Patterns
@@ -457,6 +506,7 @@ Available Commands:
     add-relation             Link one or more metering points to the authenticated user by ID
     add-relation-by-code     Link a metering point to the authenticated user via a web access code
     alive                    Check if the API is operational
+    charge-links             Get charge links with dated charge prices for one or more metering points
     charges                  Get charges (subscriptions, fees, tariffs) for one or more metering points
     delete-relation          Unlink a metering point from the authenticated user
     details                  Get metering point details
@@ -469,6 +519,7 @@ Available Commands:
   thirdparty
     alive                    Check if the API is operational
     authorizations           Get authorizations (powers of attorney) granted by customers
+    charge-links             Get charge links with dated charge prices for one or more metering points
     charges                  Get charges (subscriptions, tariffs) for one or more metering points
     details                  Get metering point details
     metering-point-ids       Get metering point IDs accessible under a specific authorization scope
@@ -483,7 +534,7 @@ Flags:
 
 ### Date Specification (--from / --to / --period)
 
-The `timeseries` and `export-timeseries` commands support two mutually exclusive ways to specify date ranges:
+The `timeseries`, `export-timeseries` and `charge-links` commands support two mutually exclusive ways to specify date ranges:
 
 ```yaml
 Option A - Explicit dates with --from and --to:
@@ -544,6 +595,13 @@ Library: |
   stream, _ := client.ExportTimeSeries(...)
   // Then convert CSV to JSON
 Returns: JSON array of consumption records
+
+CLI: go-eloverblik customer charge-links 571313155411053087 --period=last_month
+Library: |
+  from, to, _ := eloverblik.GetDatesFromPeriod(eloverblik.LastMonth)
+  client.GetChargeLinksWithCharges([]string{"571313155411053087"}, from, to)
+Returns: JSON with charge links per metering point and the dated price series of the charges
+Note: also available as 'go-eloverblik thirdparty charge-links'
 
 CLI: go-eloverblik thirdparty authorizations
 Library: client.GetAuthorizations()
@@ -1065,10 +1123,18 @@ data := ts[0].Flatten()
 stream, _ := client.ExportTimeSeries([]string{id}, from, to, eloverblik.Hour)
 // Convert CSV to JSON using cli: --format=json
 
-// Get current charges
+// Get current charges (currently valid and future charges only)
 charges, _ := client.GetCustomerCharges([]string{id})
 for _, tariff := range charges[0].Result.Tariffs {
     // Process hourly rates
+}
+
+// Get the dated price series, needed to price historic consumption
+links, _ := client.GetChargeLinksWithCharges([]string{id}, from, to)
+for _, info := range links.ChargeInformations {
+    for _, point := range info.ChargeSeriesPoints {
+        // point.From, point.To, point.Price, info.TaxIndicator
+    }
 }
 
 // Third-party: Access all customers
