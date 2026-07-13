@@ -102,7 +102,7 @@ jobs:
     # have to move together. Pin the minor version rather than tracking latest, so a
     # new release cannot break the build without a commit.
     - name: Run golangci-lint
-      uses: golangci/golangci-lint-action@v8
+      uses: golangci/golangci-lint-action@v9
       with:
         version: v2.12
         args: --timeout=5m
