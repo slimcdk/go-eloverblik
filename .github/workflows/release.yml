@@ -93,7 +93,7 @@ jobs:
           echo "header=${header}" >> "${GITHUB_OUTPUT}"
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
           args: release --clean --release-header=${{ steps.notes.outputs.header }}
@@ -123,13 +123,13 @@ jobs:
           cache: true
 
       - name: Validate GoReleaser configuration
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
           args: check
 
       - name: Build release artifacts (no publish)
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
           args: release --snapshot --clean --skip=publish
