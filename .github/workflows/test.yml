@@ -57,7 +57,7 @@ jobs:
     # action falls back to tokenless upload. fail_ci_if_error stays false so a
     # missing token or a Codecov outage never fails an otherwise green build.
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v7
       with:
         file: ./coverage.out
         flags: unittests
