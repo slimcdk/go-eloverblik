@@ -188,6 +188,72 @@ func TestGetDatesFromPeriodAcrossDaylightSavingTime(t *testing.T) {
 	}
 }
 
+// TestGetDatesFromPeriodFailsOnFirstDayOfPeriod covers the this_* periods on their
+// first day in Copenhagen: from and to fall on the same date, which the API rejects
+// with error 30002, so there is no range to return.
+func TestGetDatesFromPeriodFailsOnFirstDayOfPeriod(t *testing.T) {
+	tokyo := loadLocation(t, "Asia/Tokyo")
+	losAngeles := loadLocation(t, "America/Los_Angeles")
+
+	tests := []struct {
+		name    string
+		now     time.Time
+		period  Period
+		message string
+	}{
+		{name: "this_week on a Monday", now: time.Date(2026, 3, 16, 9, 0, 0, 0, cph), period: ThisWeek,
+			message: "this_week: period started today and has no complete day yet"},
+		{name: "this_week at Monday 00:00", now: time.Date(2026, 3, 16, 0, 0, 0, 0, cph), period: ThisWeek,
+			message: "this_week: period started today and has no complete day yet"},
+		{name: "this_week at Monday 23:59", now: time.Date(2026, 3, 16, 23, 59, 59, 0, cph), period: ThisWeek,
+			message: "this_week: period started today and has no complete day yet"},
+		{name: "this_week on the Monday after spring forward", now: time.Date(2026, 3, 30, 12, 0, 0, 0, cph), period: ThisWeek,
+			message: "this_week: period started today and has no complete day yet"},
+		{name: "this_month on the 1st", now: time.Date(2026, 3, 1, 12, 0, 0, 0, cph), period: ThisMonth,
+			message: "this_month: period started today and has no complete day yet"},
+		{name: "this_month on 1 January", now: time.Date(2026, 1, 1, 12, 0, 0, 0, cph), period: ThisMonth,
+			message: "this_month: period started today and has no complete day yet"},
+		{name: "this_year on 1 January", now: time.Date(2026, 1, 1, 12, 0, 0, 0, cph), period: ThisYear,
+			message: "this_year: period started today and has no complete day yet"},
+		{name: "upper case name", now: time.Date(2026, 1, 1, 12, 0, 0, 0, cph), period: "THIS_YEAR",
+			message: "this_year: period started today and has no complete day yet"},
+		// Tuesday 06:00 in Tokyo is Monday 22:00 in Copenhagen.
+		{name: "this_week on a Tokyo Tuesday", now: time.Date(2026, 3, 17, 6, 0, 0, 0, tokyo), period: ThisWeek,
+			message: "this_week: period started today and has no complete day yet"},
+		// Sunday 17:00 in Los Angeles is Monday 01:00 in Copenhagen.
+		{name: "this_week on a Los Angeles Sunday", now: time.Date(2026, 3, 22, 17, 0, 0, 0, losAngeles), period: ThisWeek,
+			message: "this_week: period started today and has no complete day yet"},
+		// New Year's Eve 16:30 in Los Angeles is 1 January 01:30 in Copenhagen.
+		{name: "this_year on a Los Angeles New Year's Eve", now: time.Date(2025, 12, 31, 16, 30, 0, 0, losAngeles), period: ThisYear,
+			message: "this_year: period started today and has no complete day yet"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			from, to, err := getDatesFromPeriod(test.period, test.now)
+			require.ErrorIs(t, err, ErrorPeriodHasNoCompleteDay)
+			require.EqualError(t, err, test.message)
+			assert.True(t, from.IsZero(), "from")
+			assert.True(t, to.IsZero(), "to")
+		})
+	}
+}
+
+// TestGetDatesFromPeriodSecondDayOfPeriod is the day after the first-day error: the
+// first day is complete, so the this_* periods return it.
+func TestGetDatesFromPeriodSecondDayOfPeriod(t *testing.T) {
+	for _, c := range []periodCase{
+		{name: "this_week at Tuesday 00:00", now: time.Date(2026, 3, 17, 0, 0, 0, 0, cph), period: ThisWeek,
+			from: "2026-03-16T00:00:00+01:00", to: "2026-03-17T00:00:00+01:00"},
+		{name: "this_month on the 2nd", now: time.Date(2026, 3, 2, 8, 0, 0, 0, cph), period: ThisMonth,
+			from: "2026-03-01T00:00:00+01:00", to: "2026-03-02T08:00:00+01:00"},
+		{name: "this_year on 2 January", now: time.Date(2026, 1, 2, 8, 0, 0, 0, cph), period: ThisYear,
+			from: "2026-01-01T00:00:00+01:00", to: "2026-01-02T08:00:00+01:00"},
+	} {
+		c.run(t)
+	}
+}
+
 // TestGetDatesFromPeriodReturnsCopenhagenTime goes through the exported function, which
 // reads the clock in the host's zone (time.Local). Whatever that zone is, the bounds of
 // the complete periods are midnights in Copenhagen. Run it with TZ=Asia/Tokyo or
