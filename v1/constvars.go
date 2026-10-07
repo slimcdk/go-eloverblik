@@ -22,10 +22,11 @@ type Resolution string
 type APIType string
 
 const (
-	testModeHost      string  = "apipreprod.eloverblik.dk"
-	prodModeHost      string  = "api.eloverblik.dk"
-	customerApiAtype  APIType = "customer"
-	thirdPartyApiType APIType = "thirdparty"
+	// prodModeHost serves both APIs. NewCustomer and NewThirdParty always call it.
+	prodModeHost string = "api.eloverblik.dk"
+
+	// customerApiAtype is the default of the deprecated ApiType, and goes with it in v2.
+	customerApiAtype APIType = "customer"
 )
 
 var (
