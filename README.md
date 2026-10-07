@@ -24,6 +24,7 @@ A comprehensive Go client library and CLI tool for the Danish energy data platfo
   - [CLI Usage](#cli-usage)
   - [Library Usage](#library-usage)
 - [API Coverage](#api-coverage)
+  - [DataHub 3.0](#datahub-3)
 - [CLI Reference](#cli-reference)
 - [Library Reference](#library-reference)
   - [Dates Are Half-Open](#dates-are-half-open)
@@ -167,8 +168,8 @@ func main() {
 | `/meteringpoints/meteringpoint/getcharges` | `customer charges` | `GetCustomerCharges()` | Get charges/tariffs |
 | `/meteringpoints/meteringpoint/getchargelinkswithcharges` | `customer charge-links` | `GetChargeLinksWithCharges()` | Get charge links with dated prices — **not deployed by Energinet, answers 404** ([note](#note-on-charge-links)) |
 | `/meteringpoints/meteringpoint/relation/add` | `customer add-relation` | `AddRelationByID()` | Link metering point |
-| `/meteringpoints/meteringpoint/relation/add/{id}/{code}` | `customer add-relation-by-code` | `AddRelationByWebAccessCode()` | Link via code |
-| `/meteringpoints/meteringpoint/relation/{id}` | `customer delete-relation` | `DeleteRelation()` | Unlink metering point |
+| `/meteringpoints/meteringpoint/relation/add/{id}/{code}` | `customer add-relation-by-code` | `AddRelationByWebAccessCode()` | Link via code — **retired by Energinet with DataHub 3.0, answers 410** ([note](#datahub-3)) |
+| `/meteringpoints/meteringpoint/relation/{id}` | `customer delete-relation` | `DeleteRelation()` | Unlink metering point — **retired by Energinet with DataHub 3.0, answers 410** ([note](#datahub-3)) |
 | `/meterdata/export` | `customer export-timeseries` | `ExportTimeSeries()` | Export timeseries |
 | `/meteringpoints/masterdata/export` | `customer export-masterdata` | `ExportMasterdata()` | Export masterdata |
 | `/meteringpoints/charges/export` | `customer export-charges` | `ExportCharges()` | Export charges |
@@ -211,6 +212,34 @@ func main() {
 > the future**, so they cannot price consumption that already happened. That gap is exactly
 > what `charge-links` is meant to close, and there is no other endpoint that closes it.
 
+<a id="datahub-3"></a>
+
+### DataHub 3.0
+
+Energinet put DataHub 3.0 into operation on 18 September 2026. The Eloverblik API kept its
+endpoints and its `api-version` of 1.0, but what it answers changed in places:
+
+- **Two Customer API endpoints are retired** and answer `410 Gone`: linking a metering point
+  with a web access code, and deleting a relation. The client reports both as
+  `ErrorEndpointRetired`. Web access codes are replaced by
+  [data sharing](https://docs.eloverblik.dk/docs/guides/data-sharing) in ElOverblik, which
+  has no API. `AddRelationByWebAccessCode` and `DeleteRelation` are deprecated; the
+  `add-relation-by-code` and `delete-relation` commands are hidden and no longer call the API.
+- **A metering point can fail on its own** inside a successful time series response: 30015
+  when there is no data, 30016 when the relation has expired, 30018 when the period lies
+  outside the metering point's data, e.g. because it starts before the metering point was
+  registered in DataHub. Check every result with `Err()`, see
+  [Error Handling](#error-handling).
+- **The same metering point can come back more than once**, once per access period, when
+  Energinet enables more than the latest one. Do not key results by metering point ID alone.
+- **Several master data fields are retired or unavailable** according to Energinet's
+  [field descriptions](https://docs.eloverblik.dk/docs/guides/metering-point-data-field-descriptions),
+  among them the settlement method, the consumer category, the meter reading occurrence and
+  the estimated annual volume, and, for now, the consumer, balance supplier and tax reduction
+  start dates. Expect them to be empty.
+- The metering point list gained `isMovedOut` (`IsMovedOut`), and the type of metering point
+  gained the value `D19` (capacity settlement).
+
 ## CLI Reference
 
 ### Help Output
@@ -227,11 +256,9 @@ Available Commands:
 
   customer
     add-relation             Link one or more metering points to the authenticated user by ID
-    add-relation-by-code     Link a metering point to the authenticated user via a web access code
     alive                    Check if the API is operational
     charge-links             Get charge links with dated charge prices (Eloverblik has not deployed this endpoint: it answers 404)
     charges                  Get charges (subscriptions, fees, tariffs) for one or more metering points
-    delete-relation          Unlink a metering point from the authenticated user
     details                  Get metering point details
     export-charges           Export charges (customer API only)
     export-masterdata        Export metering point masterdata (customer API only)
@@ -322,8 +349,8 @@ go-eloverblik customer details <metering-id>...         # Get detailed informati
 
 # Relations
 go-eloverblik customer add-relation <metering-id>...    # Add relation by ID
-go-eloverblik customer add-relation-by-code <id> <code> # Add relation by web code
-go-eloverblik customer delete-relation <metering-id>    # Remove relation
+# add-relation-by-code and delete-relation are retired: Energinet's endpoints answer 410
+# since DataHub 3.0. The commands are hidden and say so without calling the API.
 
 # Data Retrieval
 go-eloverblik customer timeseries <metering-id>... --period=last_month
@@ -600,8 +627,9 @@ timeseries, err := client.GetTimeSeries(ids, from, to, eloverblik.Day)
 // ThisYear, LastYear
 ```
 
-The API only holds time series for the previous five years plus the current one, and
-refuses a `to` in the future (error 30003), so today's consumption is never available.
+The API only holds time series for the previous five years plus the current one. It
+refuses a `to` later than tomorrow (error 30003) and moves a `to` of tomorrow back to
+today, so today's consumption is never available.
 
 ### Rate Limits and Retries
 
@@ -704,8 +732,8 @@ if err != nil {
 }
 
 for _, detail := range details {
-    if !detail.Success {
-        log.Printf("Error for %s: %s", detail.ID, detail.ErrorText)
+    if err := detail.Err(); err != nil {
+        log.Printf("skipping: %v", err)
         continue
     }
     fmt.Printf("Grid Operator: %s\n", detail.Result.GridOperatorName)
@@ -722,6 +750,12 @@ timeseries, err := client.GetTimeSeries(
 )
 
 for _, ts := range timeseries {
+    // A metering point that failed on its own has nothing to flatten
+    if err := ts.Err(); err != nil {
+        log.Printf("skipping: %v", err)
+        continue
+    }
+
     // Flatten the nested market document into one record per measured interval
     points := ts.Flatten()
 
@@ -906,30 +940,44 @@ case errors.Is(err, eloverblik.ErrorNoCprConsent):
     // GetMeteringPoints(true) needs CPR consent, granted once in the portal
 case errors.Is(err, eloverblik.ErrorToDateCanNotBeEqualToFromDate):
     // the range is half-open: ask for the day AND the next one
+case errors.Is(err, eloverblik.ErrorPeriodNotAllowed):
+    // more than 730 days, or a to that is not after from once a future to is moved to today
 case err != nil:
     log.Fatal(err)
 }
 ```
 
+A call to an endpoint Energinet has retired, such as `AddRelationByWebAccessCode`, fails
+with `ErrorEndpointRetired`.
+
 **Individual metering points** can fail inside an otherwise successful response — one
-missing relation does not fail the batch, it fails that item:
+missing relation does not fail the batch, it fails that item. `Err()` reports it, nil when
+the metering point succeeded, and unwraps to the same sentinels:
 
 ```go
-details, err := client.GetMeteringPointDetails(meteringPoints)
+timeseries, err := client.GetTimeSeries(meteringPoints, from, to, eloverblik.Day)
 if err != nil {
     log.Fatal(err)
 }
 
-for _, detail := range details {
-    if !detail.Success {
-        // e.g. 20010 RelationNotFound: this metering point is not linked to the token
-        log.Printf("%s: error %d: %s", detail.ID, detail.ErrorCode, detail.ErrorText)
+for _, ts := range timeseries {
+    if err := ts.Err(); err != nil {
+        // e.g. "eloverblik: metering point 571313155411053087: 30018
+        // MeteringPointDataNotAvailableForTheRequestedPeriod" when the period starts
+        // before the metering point was registered in DataHub
+        log.Printf("skipping: %v", err)
         continue
     }
 
-    processDetail(detail.Result)
+    process(ts.Flatten())
 }
 ```
+
+A metering point fails on its own with 20003/20004 (invalid ID), 20008 (not found), 20010
+(no relation), 20011 (unexpected error), 30010 (period not covered by the authorization),
+30014 (period not allowed), 30015 (no data), 30016 (relation expired), 30018 (period
+outside the metering point's data) or 40014 (no authorization). `Err()` works the same on
+metering point details, charges and relation results.
 
 A 429 or a 503 is retried for you (twice, honouring `Retry-After`) before it ever becomes
 an error. Everything else — a 401, a 404, a rejected date range — is returned straight

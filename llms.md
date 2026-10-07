@@ -138,7 +138,9 @@ worked example:
   returns: exactly 1 July, 2 July and 3 July. 4 July is NOT returned.
 implication:
   to include a final day D, pass to = D + 1 day.
-maximum span: 730 days (API error 30014 beyond it; see MaximumDayRequestLeap)
+maximum span: 730 days (API error 30014 PeriodNotAllowed beyond it; see MaximumDayRequestLeap)
+future to: a to later than tomorrow is rejected (30003); a to of tomorrow is moved back to
+  today, so today's consumption is never returned
 ```
 
 `GetDatesFromPeriod` follows the same rule and returns an **exclusive** `to`, i.e. the start
@@ -209,6 +211,34 @@ client policy:  429 and 503 are retried DefaultRetryCount (2) times, honouring R
                 capped at DefaultRetryMaxWait (60s). Nothing else is retried - a 401, any
                 other 4xx and a 500 are returned to the caller immediately. Transport errors
                 are not retried either, so a request is never sent twice by accident.
+```
+
+### 8. DataHub 3.0 (in operation since 18 September 2026)
+
+Energinet replaced DataHub 2 with DataHub 3.0. The Eloverblik API kept its endpoints and its
+api-version of 1.0; what changed:
+
+```yaml
+retired endpoints (Customer API, HTTP 410 Gone -> ErrorEndpointRetired):
+  - PUT    /meteringpoints/meteringpoint/relation/add/{id}/{webAccessCode}
+           AddRelationByWebAccessCode, CLI add-relation-by-code. Web access codes are gone;
+           ElOverblik's data sharing replaces them and has no API.
+  - DELETE /meteringpoints/meteringpoint/relation/{id}
+           DeleteRelation, CLI delete-relation. A relation can no longer be deleted.
+  Both methods are deprecated. Both commands are hidden and fail without calling the API.
+per metering point failures (inside a 200, no market document; check ts.Err()):
+  30014 PeriodNotAllowed, 30015 NoDataAvailable, 30016 RelationHasExpired,
+  30018 MeteringPointDataNotAvailableForTheRequestedPeriod (also when dateFrom is before the
+  metering point was registered in DataHub: a long period no longer returns partial data),
+  besides 20003/20004, 20008, 20010, 20011, 30010 and 40014
+request level: 30017 ToDateCutOff (to on or before the oldest date held)
+repeated IDs: with more than the latest access period enabled by Energinet, details and time
+  series return the same metering point ID once per access period
+master data: Energinet lists SettlementMethod, ConsumerCategory, MeterReadingOccurrence,
+  EstimatedAnnualVolume and MeterCounterDigits/MultiplyFactor/Unit as retired, and
+  ConsumerStartDate, BalanceSupplierStartDate and TaxSettlementDate as unavailable for now:
+  expect them empty. Balance supplier fields are not shared with third parties.
+new: MeteringPoints.IsMovedOut (bool); typeOfMP D19 (Capacity Settlement)
 ```
 
 ## Function Signatures with Complete Parameter Specifications
@@ -311,7 +341,7 @@ fmt.Println(claims.TokenName, claims.Roles, claims.ExpiresAt, claims.IsExpired()
 //   FloorID, RoomID, Postcode, CityName, CitySubDivisionName, MunicipalityCode,
 //   LocationDescription, SettlementMethod, MeterReadingOccurrence, FirstConsumerPartyName,
 //   SecondConsumerPartyName, ConsumerCVR, DataAccessCVR, MeterNumber,
-//   ConsumerStartDate (FlexibleTime), HasRelation (bool),
+//   ConsumerStartDate (FlexibleTime), HasRelation (bool), IsMovedOut (bool),
 //   ChildMeteringPoints ([]ChildMeteringPoints)
 // EXAMPLE:
 points, err := client.GetMeteringPoints(false)
@@ -334,6 +364,7 @@ for _, point := range points {
 //   - Success (bool): true if this specific point succeeded
 //   - ErrorCode (int): 10000 = success, other = error
 //   - ErrorText (string), ID (string), StackTrace (string)
+//   - Err() error: nil on success, else an error that unwraps to the code's sentinel
 // MeteringPointDetail FIELDS (54, all string unless noted):
 //   MeteringPointID, ParentMeteringPointID, TypeOfMP, EnergyTimeSeriesMeasureUnit,
 //   EstimatedAnnualVolume, SettlementMethod, MeterNumber,
@@ -351,15 +382,21 @@ for _, point := range points {
 //   LocationDescription, FirstConsumerPartyName, SecondConsumerPartyName, ProtectedName,
 //   Occurrence (FlexibleTime), MeteringPointAlias, AssetType, MpAddressWashInstructions,
 //   DarReference, ContactAddresses ([]ContactAddress), ChildMeteringPoints ([]ChildMeteringPoint)
+// EXPECT EMPTY (Energinet lists them as retired or, for now, unavailable):
+//   SettlementMethod, ConsumerCategory, MeterReadingOccurrence, EstimatedAnnualVolume,
+//   MeterCounterDigits, MeterCounterMultiplyFactor, MeterCounterUnit, ConsumerStartDate,
+//   BalanceSupplierStartDate, TaxSettlementDate. Balance supplier fields are never shared
+//   with a third party.
 // ERROR HANDLING:
-//   Always check the per-result Success field, not just the error return
+//   Always check every result with detail.Err(), not just the error return. The same
+//   metering point ID can appear more than once, once per access period.
 // EXAMPLE:
 ids := []string{"571313155411053087", "571313155411782079"}
 details, err := client.GetMeteringPointDetails(ids)
 if err != nil { /* handle network / API error */ }
 for _, detail := range details {
-    if !detail.Success {
-        log.Printf("Failed for %s: [%d] %s", detail.ID, detail.ErrorCode, detail.ErrorText)
+    if err := detail.Err(); err != nil {
+        log.Printf("skipping: %v", err) // eloverblik: metering point <id>: <code> <name>
         continue
     }
     gridOp := detail.Result.GridOperatorName
@@ -381,14 +418,19 @@ for _, detail := range details {
 //   - aggregation (Aggregation): Actual, Quarter, Hour, Day, Month, Year
 // DATE HANDLING:
 //   - Both bounds are converted to Europe/Copenhagen and formatted as YYYY-MM-DD
-//   - Maximum span 730 days (error 30014 beyond it)
+//   - Maximum span 730 days (error 30014 PeriodNotAllowed beyond it)
 // OUTPUTS:
-//   - []TimeSeries (one per metering point), error
+//   - []TimeSeries (one per metering point and access period: an ID can repeat), error
 // DATA STRUCTURE:
 //   TimeSeries.MyEnergyDataMarketDocument.TimeSeries[].Periods[].Points[]
 //   PeriodResponse: Resolution (string), TimeInterval {Start, End}, Points
 //   PointResponse:  Position (int), OutQuantityQuantity (float64), OutQuantityQuality (string)
 //   TimeSeries also embeds StatusResponse (Success, ErrorCode, ErrorText, ID, StackTrace)
+// ERROR HANDLING:
+//   A metering point can fail on its own inside a 200, without a market document:
+//   30014, 30015 NoDataAvailable, 30016 RelationHasExpired, 30018 data not available for
+//   the period (e.g. dateFrom before the metering point was registered in DataHub), 20010,
+//   40014 and others. ts.Err() reports it, nil on success. Check it before Flatten().
 // HELPER METHOD: ts.Flatten() []FlatTimeSeriesPoint - resolves each point to its real
 //   [From, To) interval in Copenhagen local time. See "Resolutions".
 // EXAMPLE:
@@ -401,6 +443,10 @@ ts, err := client.GetTimeSeries(
 )
 if err != nil { /* handle error */ }
 for _, series := range ts {
+    if err := series.Err(); err != nil {
+        log.Printf("skipping: %v", err)
+        continue
+    }
     for _, p := range series.Flatten() {
         fmt.Printf("%s -> %s: %.3f %s (%s)\n",
             p.From.Format(time.RFC3339), p.To.Format(time.RFC3339),
@@ -415,7 +461,7 @@ type FlatTimeSeriesPoint struct {
     From         time.Time  `json:"from"`         // inclusive, Europe/Copenhagen
     To           time.Time  `json:"to"`           // exclusive, Europe/Copenhagen
     Measurement  float64    `json:"measurement"`  // the quantity, e.g. kWh
-    Quality      string     `json:"quality"`      // e.g. A04 (estimated), A05 (measured)
+    Quality      string     `json:"quality"`      // A04 measured, A03 estimated, A02 not available, A05 incomplete
     Unit         string     `json:"unit"`         // e.g. KWH
     CurveType    string     `json:"curvetype"`
     BusinessType string     `json:"businesstype"`
@@ -603,25 +649,19 @@ for _, resp := range responses {
 ```
 
 ```go
-// FUNCTION: AddRelationByWebAccessCode  (Customer only)
-// PURPOSE: Link a metering point using a web access code
+// FUNCTION: AddRelationByWebAccessCode  (Customer only) - DEPRECATED, DO NOT USE
+// STATUS: Energinet retired the endpoint with DataHub 3.0. It answers 410 Gone, returned as
+//   ErrorEndpointRetired. Web access codes are gone; ElOverblik's data sharing replaces
+//   them and has no API (https://docs.eloverblik.dk/docs/guides/data-sharing).
 // SIGNATURE: AddRelationByWebAccessCode(meteringPointID, webAccessCode string) (string, error)
-// INPUTS:
-//   - meteringPointID (string): Single 18-digit ID
-//   - webAccessCode (string): 8-digit code from letter/email
-// EXAMPLE:
-result, err := client.AddRelationByWebAccessCode("571313155411053087", "12345678")
+// Use AddRelationByID to link metering points registered to the user's CPR or CVR.
 ```
 
 ```go
-// FUNCTION: DeleteRelation  (Customer only)
-// PURPOSE: Unlink a metering point from the authenticated user
+// FUNCTION: DeleteRelation  (Customer only) - DEPRECATED, DO NOT USE
+// STATUS: Energinet retired the endpoint with DataHub 3.0. It answers 410 Gone, returned as
+//   ErrorEndpointRetired, and no longer deletes anything. There is no replacement.
 // SIGNATURE: DeleteRelation(meteringPointID string) (bool, error)
-// OUTPUTS:
-//   - bool: the boolean the API returns in its envelope; falls back to the HTTP status
-//   - error: e.g. ErrorRelationNotFound (API code 20010), which the API reports in the body
-// NOTE: the HTTP status alone does not tell whether the relation was deleted, so the body
-//       is read. Always check the error, not just the bool.
 ```
 
 ```go
@@ -766,11 +806,9 @@ Available Commands:
 
   customer
     add-relation             Link one or more metering points to the authenticated user by ID
-    add-relation-by-code     Link a metering point to the authenticated user via a web access code
     alive                    Check if the API is operational
     charge-links             Get charge links with dated charge prices (Eloverblik has not deployed this endpoint: it answers 404)
     charges                  Get charges (subscriptions, fees, tariffs) for one or more metering points
-    delete-relation          Unlink a metering point from the authenticated user
     details                  Get metering point details
     export-charges           Export charges (customer API only)
     export-masterdata        Export metering point masterdata (customer API only)
@@ -794,6 +832,10 @@ Flags:
       --print-response-headers   Print HTTP response headers from the Eloverblik API to stderr
       --token string             Eloverblik refresh token (required)
 ```
+
+`customer add-relation-by-code` and `customer delete-relation` still exist but are hidden:
+Energinet retired their endpoints with DataHub 3.0, and both fail with ErrorEndpointRetired
+without calling the API.
 
 ### Command Flags
 
@@ -896,8 +938,10 @@ Library: |
   from := time.Now().AddDate(0, 0, -30)
   to := time.Now()
   tss, _ := client.GetTimeSeries([]string{"571313155411053087"}, from, to, eloverblik.Hour)
-  flat := tss[0].Flatten()
-Returns: JSON object, metering point ID -> []FlatTimeSeriesPoint
+  flat := tss[0].Flatten() // after checking tss[0].Err()
+Returns: JSON object, metering point ID -> []FlatTimeSeriesPoint. A metering point that
+         failed on its own is left out and reported as a warning on stderr; one that comes
+         back once per access period gets the points of every period.
 
 CLI: go-eloverblik customer timeseries 571313155411053087 --period=last_month
 Library: |
@@ -1292,14 +1336,16 @@ from, to, _ := eloverblik.GetDatesFromPeriod(eloverblik.Yesterday)
 ### How errors surface
 ```yaml
 transport failure: returned as-is from the http client
-non-2xx status:    ALWAYS an error. A response with no parseable API message is judged by its
-                   status: 429 -> ErrorTooManyRequests, 401 -> ErrorUnauthorized,
-                   anything else -> ErrorClientConnection(status)
+non-2xx status:    ALWAYS an error. A status with a sentinel of its own maps to it, with or
+                   without a message: 429 -> ErrorTooManyRequests, 401 -> ErrorUnauthorized,
+                   410 -> ErrorEndpointRetired. Any other status without a parseable API
+                   message -> ErrorClientConnection(status)
 API error message: the code is read from the first characters, e.g. "[20010] Relation not
                    found", and mapped to an exported sentinel error (compare with errors.Is)
 unknown code:      fmt.Errorf("unhandled error: '%s'", msg)
 per-item failure:  a batch call still returns 200; the failing metering point carries
-                   Success=false, ErrorCode and ErrorText in its own StatusResponse
+                   Success=false, ErrorCode and ErrorText in its own StatusResponse, and its
+                   Err() returns an error that unwraps to the code's sentinel
 retried:           429 and 503 only (twice by default). Never a 401, another 4xx, or a 500.
 ```
 
@@ -1308,14 +1354,25 @@ retried:           429 and 503 only (twice by default). Never a 401, another 4xx
 10002 ErrorToManyRequestItems:                    more than 10 metering points in one request
 10004 ErrorMaximumNumberOfMeteringPointsExceeded: batch size exceeded (also arrives as 429)
 10007 ErrorNoCprConsent:                          GetMeteringPoints(true) without CPR consent
-20010 ErrorRelationNotFound:                      DeleteRelation on a relation that is not there
+20010 ErrorRelationNotFound:                      per metering point: no relation to it
 30002 ErrorToDateCanNotBeEqualToFromDate:         from == to; the range is half-open, see above
-30014 ErrorNumberOfDaysExcceded:                  more than 730 days requested
+30014 ErrorPeriodNotAllowed:                      more than 730 days, or to not after from once
+                                                  a future to is moved back to today. The old
+                                                  name ErrorNumberOfDaysExcceded is the same error
+30015 ErrorNoDataAvailable:                       per metering point: no readings in the period
+30016 ErrorRelationHasExpired:                    per metering point: relation ended before or
+                                                  during the period
+30017 ErrorToDateCutOff:                          to is on or before the oldest date held
+30018 ErrorMeteringPointDataNotAvailableForTheRequestedPeriod:
+                                                  per metering point: the period lies outside its
+                                                  data, e.g. from is before it was registered
+40014 ErrorNoAuthorizationsFound:                 per metering point: no authorization covers it
 50001 ErrorTokenNotValid / 20012 ErrorUnauthorized: expired or wrong token
       ErrorTooManyRequests:                       a 429 the retries could not absorb
+      ErrorEndpointRetired:                       a 410: AddRelationByWebAccessCode, DeleteRelation
 ```
 
-### Pattern 1: Check Both Error Returns and Success Fields
+### Pattern 1: Check Both Error Returns and Every Result
 ```go
 details, err := client.GetMeteringPointDetails(ids)
 if err != nil {
@@ -1325,9 +1382,10 @@ if err != nil {
 
 // Check each individual result
 for _, detail := range details {
-    if !detail.Success {
-        // API-level error for this specific ID
-        log.Printf("Failed %s: code=%d msg=%s", detail.ID, detail.ErrorCode, detail.ErrorText)
+    if err := detail.Err(); err != nil {
+        // API-level error for this specific ID, e.g.
+        // "eloverblik: metering point 571313155411053087: 20010 RelationNotFound"
+        log.Printf("skipping: %v", err)
         continue
     }
     processDetail(detail.Result)
@@ -1488,8 +1546,9 @@ Metering Point IDs:
 Date Ranges:
   semantics: half-open [from, to) at date granularity; from == to is rejected (error 30002)
   timezone: both bounds are converted to Europe/Copenhagen before being formatted YYYY-MM-DD
-  maximum span: 730 days (error 30014). eloverblik.MaximumDayRequestLeap = 730 and
-                eloverblik.MaximumRequestDuration = 730 * 24h are exported for this.
+  maximum span: 730 days (error 30014, ErrorPeriodNotAllowed). eloverblik.MaximumDayRequestLeap
+                = 730 and eloverblik.MaximumRequestDuration = 730 * 24h are exported for this.
+  latest to:    tomorrow (error 30003 beyond it); a to of tomorrow is moved back to today
 
 API Rate Limits:
   token endpoint: 2 calls / minute / IP
@@ -1708,10 +1767,14 @@ When implementing an Eloverblik client:
 - [ ] Remember the client does NOT auto-refresh the ~24h data access token; rebuild the client
       for a long running process
 - [ ] Treat `to` as EXCLUSIVE; never pass `from == to` (error 30002)
-- [ ] Stay within 730 days per request (error 30014)
+- [ ] Stay within 730 days per request (error 30014, ErrorPeriodNotAllowed)
 - [ ] Batch metering point IDs 10 at a time
 - [ ] Leave the default retry policy on (429/503, Retry-After honoured), or implement backoff
-- [ ] Handle both the `error` return and the per-item `Success` field
+- [ ] Handle both the `error` return and every result's `Err()`; a metering point can fail
+      on its own inside a 200 (30015, 30016, 30018, 40014 ...)
+- [ ] Do not key results by metering point ID alone: an ID repeats once per access period
+- [ ] Do NOT call `AddRelationByWebAccessCode` or `DeleteRelation`: Energinet retired both
+      with DataHub 3.0 and they fail with `ErrorEndpointRetired` (410)
 - [ ] Validate metering point IDs (18 numeric digits)
 - [ ] Handle `FlexibleTime` zero values with `IsZero()`, and `*float64` fields with a nil check
 - [ ] Use `Flatten()` for time series; it yields From/To/Measurement, not Timestamp/Value
@@ -1739,6 +1802,7 @@ id := points[0].MeteringPointID
 from := time.Now().AddDate(0, 0, -30)
 to := time.Now()
 ts, _ := client.GetTimeSeries([]string{id}, from, to, eloverblik.Hour)
+if err := ts[0].Err(); err != nil { /* this metering point failed on its own */ }
 data := ts[0].Flatten() // []FlatTimeSeriesPoint{From, To, Measurement, Unit, Quality, ...}
 
 // Export to CSV (Customer API only)

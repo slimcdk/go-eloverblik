@@ -46,6 +46,15 @@ type MeteringPointDetailsResponse struct {
 	StatusResponse
 }
 
+// MeteringPointDetail is the master data of a metering point.
+//
+// Energinet's field descriptions list several of these fields as retired ("udgået"):
+// SettlementMethod, ConsumerCategory, MeterReadingOccurrence, EstimatedAnnualVolume,
+// MeterCounterDigits, MeterCounterMultiplyFactor and MeterCounterUnit; and three dates as
+// unavailable for now ("utilgængelig"): ConsumerStartDate, BalanceSupplierStartDate and
+// TaxSettlementDate. Expect them to be empty. The balance supplier fields are not shared
+// with a third party through a power of attorney either. See
+// https://docs.eloverblik.dk/docs/guides/metering-point-data-field-descriptions.
 type MeteringPointDetail struct {
 	MeteringPointID                 string               `json:"meteringPointId"`
 	ParentMeteringPointID           string               `json:"parentMeteringPointId"`
