@@ -149,19 +149,19 @@ go-eloverblik token --token=$ELO_TOKEN
 go-eloverblik --token=$ELO_TOKEN customer installations
 
 # Get time series data. --to is EXCLUSIVE, so this is the whole of January
-go-eloverblik --token=$ELO_TOKEN customer timeseries 571313155411053087 \
+go-eloverblik --token=$ELO_TOKEN customer timeseries 571313000000000001 \
   --from=2024-01-01 --to=2024-02-01
 
 # Or use a named period, which gets the boundaries right for you
-go-eloverblik --token=$ELO_TOKEN customer timeseries 571313155411053087 \
+go-eloverblik --token=$ELO_TOKEN customer timeseries 571313000000000001 \
   --period=last_month --aggregation=Day --flatten
 
 # Export data as JSON, converted by the CLI from the CSV the API returns
-go-eloverblik --token=$ELO_TOKEN customer export-charges 571313155411053087 \
+go-eloverblik --token=$ELO_TOKEN customer export-charges 571313000000000001 \
   --format=json
 
 # Get charges information
-go-eloverblik --token=$ELO_TOKEN customer charges 571313155411053087
+go-eloverblik --token=$ELO_TOKEN customer charges 571313000000000001
 ```
 
 ### Library Usage
@@ -198,7 +198,7 @@ func main() {
     to := time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC)
 
     timeseries, err := client.GetTimeSeries(
-        []string{"571313155411053087"},
+        []string{"571313000000000001"},
         from,
         to,
         eloverblik.Hour,
@@ -461,12 +461,12 @@ go-eloverblik token --token=$TOKEN
 ```json
 {
   "tokenType": "THIRDPARTYAPI_Refresh",
-  "tokenName": "christian local testing",
-  "name": "Christian Silas Skjerning",
-  "company": "Styr paa ApS",
-  "cvr": "44341603",
+  "tokenName": "example",
+  "name": "Test User",
+  "company": "Test Company ApS",
+  "cvr": "12345678",
   "roles": ["ReadPrivate", "ReadBusiness"],
-  "expiresAt": "2027-02-10T13:33:10+01:00"
+  "expiresAt": "2027-12-28T14:20:00+01:00"
 }
 ```
 
@@ -655,7 +655,7 @@ claims, err := eloverblik.ParseToken(refreshToken)
 
 claims.TokenName   // the name given to the token in the portal
 claims.Roles       // []string{"ReadPrivate", "ReadBusiness"}
-claims.Company     // "Styr paa ApS"
+claims.Company     // "Test Company ApS"
 claims.ExpiresAt   // time.Time, in Copenhagen time; zero when exp is missing, null, zero or negative
 claims.IsExpired() // no request needed to find out; false when the token carries no expiry
 claims.APIType()   // (eloverblik.ThirdPartyApi, nil), read from the token type; an error when it names neither API
@@ -921,7 +921,7 @@ func main() {
     to := time.Now()
 
     ts, err := client.GetTimeSeries(
-        []string{"571313155411053087"},
+        []string{"571313000000000001"},
         from, to,
         eloverblik.Hour,
     )
@@ -954,14 +954,14 @@ ts, err := client.GetTimeSeries(ids, from, to, eloverblik.Hour)
 ### Export Data to CSV File
 
 ```bash
-go-eloverblik --token=$ELO_TOKEN customer export-timeseries 571313155411053087 \
+go-eloverblik --token=$ELO_TOKEN customer export-timeseries 571313000000000001 \
   --from=2024-01-01 --to=2025-01-01 > consumption_2024.csv
 ```
 
 ### Export Data to JSON File
 
 ```bash
-go-eloverblik --token=$ELO_TOKEN customer export-charges 571313155411053087 \
+go-eloverblik --token=$ELO_TOKEN customer export-charges 571313000000000001 \
   --format=json > charges.json
 ```
 
@@ -969,8 +969,8 @@ go-eloverblik --token=$ELO_TOKEN customer export-charges 571313155411053087 \
 
 ```go
 meteringPoints := []string{
-    "571313155411053087",
-    "571313155411782079",
+    "571313000000000001",
+    "571313000000000002",
 }
 
 details, err := client.GetMeteringPointDetails(meteringPoints)
@@ -1248,7 +1248,7 @@ if err != nil {
 
 for _, ts := range timeseries {
     if err := ts.Err(); err != nil {
-        // e.g. "eloverblik: metering point 571313155411053087: 30018
+        // e.g. "eloverblik: metering point 571313000000000001: 30018
         // MeteringPointDataNotAvailableForTheRequestedPeriod" when the period starts
         // before the metering point was registered in DataHub
         log.Printf("skipping: %v", err)

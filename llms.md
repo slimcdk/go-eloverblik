@@ -462,7 +462,7 @@ for _, point := range points {
 //   Always check every result with detail.Err(), not just the error return. The same
 //   metering point ID can appear more than once, once per access period.
 // EXAMPLE:
-ids := []string{"571313155411053087", "571313155411782079"}
+ids := []string{"571313000000000001", "571313000000000002"}
 details, err := client.GetMeteringPointDetails(ids)
 if err != nil { /* handle network / API error */ }
 for _, detail := range details {
@@ -512,7 +512,7 @@ for _, detail := range details {
 from := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 to := time.Date(2026, 7, 4, 0, 0, 0, 0, time.UTC) // exclusive: yields 1, 2 and 3 July
 ts, err := client.GetTimeSeries(
-    []string{"571313155411053087"},
+    []string{"571313000000000001"},
     from, to,
     eloverblik.Day,
 )
@@ -574,7 +574,7 @@ type FlatTimeSeriesPoint struct {
 //             ChargeIdentifier.Type is a type code, and which code goes with subscriptions,
 //             fees or tariffs is undocumented.
 // EXAMPLE:
-charges, err := client.GetCustomerCharges([]string{"571313155411053087"})
+charges, err := client.GetCustomerCharges([]string{"571313000000000001"})
 if err != nil { /* handle error */ }
 for _, charge := range charges {
     if !charge.Success { continue }
@@ -651,7 +651,7 @@ from, to, err := eloverblik.GetDatesFromPeriod(eloverblik.LastMonth)
 if err != nil {
     return err
 }
-links, err := client.GetChargeLinksWithCharges([]string{"571313155411053087"}, from, to)
+links, err := client.GetChargeLinksWithCharges([]string{"571313000000000001"}, from, to)
 if err != nil {
     return err // today this is always the 404: fall back to the charges endpoint
 }
@@ -724,7 +724,7 @@ if _, err := io.Copy(file, stream); err != nil {
 //   - error: HTTP/network errors, or a non-2xx status, wrapped as
 //     "failed to export masterdata: <cause>" (as for ExportTimeSeries)
 // EXAMPLE:
-stream, err := client.ExportMasterdata([]string{"571313155411053087"})
+stream, err := client.ExportMasterdata([]string{"571313000000000001"})
 if err != nil {
     return err
 }
@@ -750,7 +750,7 @@ io.Copy(os.Stdout, stream)
 // OUTPUTS:
 //   - []StringResponse: one per ID. StringResponse = { Result string } + StatusResponse
 // EXAMPLE:
-responses, err := client.AddRelationByID([]string{"571313155411053087"})
+responses, err := client.AddRelationByID([]string{"571313000000000001"})
 if err != nil { /* handle error */ }
 for _, resp := range responses {
     if resp.Success {
@@ -1121,49 +1121,49 @@ Examples:
   Library: client.GetMeteringPoints(false)   # --include-all maps to true
   Returns: JSON array of metering points
 
-- CLI: go-eloverblik customer details 571313155411053087
-  Library: client.GetMeteringPointDetails([]string{"571313155411053087"})
+- CLI: go-eloverblik customer details 571313000000000001
+  Library: client.GetMeteringPointDetails([]string{"571313000000000001"})
   Returns: JSON array with detailed information
 
-- CLI: go-eloverblik customer timeseries 571313155411053087 --from=2026-07-01 --to=2026-07-04
+- CLI: go-eloverblik customer timeseries 571313000000000001 --from=2026-07-01 --to=2026-07-04
   Library: |
     cph, _ := time.LoadLocation("Europe/Copenhagen") // the package embeds the zone database, so this works on every platform
     from, _ := time.ParseInLocation(time.DateOnly, "2026-07-01", cph)
     to, _ := time.ParseInLocation(time.DateOnly, "2026-07-04", cph)   // exclusive
-    client.GetTimeSeries([]string{"571313155411053087"}, from, to, eloverblik.Hour)
+    client.GetTimeSeries([]string{"571313000000000001"}, from, to, eloverblik.Hour)
   Returns: JSON with the nested time series document
 
-- CLI: go-eloverblik customer timeseries 571313155411053087 --from=now-30d --flatten
+- CLI: go-eloverblik customer timeseries 571313000000000001 --from=now-30d --flatten
   Library: |
     cph, _ := time.LoadLocation("Europe/Copenhagen")
     now := time.Now().In(cph)
     from := now.AddDate(0, 0, -30)
     to := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, cph) // --to default: today's Copenhagen date, exclusive
-    tss, err := client.GetTimeSeries([]string{"571313155411053087"}, from, to, eloverblik.Hour)
+    tss, err := client.GetTimeSeries([]string{"571313000000000001"}, from, to, eloverblik.Hour)
     // then, once err is nil, for each ts in tss: skip it if ts.Err() != nil, else ts.Flatten()
   Returns: JSON object, metering point ID -> []FlatTimeSeriesPoint. A metering point that
            failed on its own is left out and reported as a warning on stderr; one that comes
            back once per access period gets the points of every period.
 
-- CLI: go-eloverblik customer timeseries 571313155411053087 --period=last_month
+- CLI: go-eloverblik customer timeseries 571313000000000001 --period=last_month
   Library: |
     from, to, _ := eloverblik.GetDatesFromPeriod(eloverblik.LastMonth)
-    client.GetTimeSeries([]string{"571313155411053087"}, from, to, eloverblik.Hour)
+    client.GetTimeSeries([]string{"571313000000000001"}, from, to, eloverblik.Hour)
   Returns: JSON with the nested time series document
 
-- CLI: go-eloverblik customer charges 571313155411053087
-  Library: client.GetCustomerCharges([]string{"571313155411053087"})
+- CLI: go-eloverblik customer charges 571313000000000001
+  Library: client.GetCustomerCharges([]string{"571313000000000001"})
   Returns: JSON array of current and future charges (never historic ones)
 
-- CLI: go-eloverblik thirdparty charges 571313155411053087
-  Library: client.GetThirdPartyCharges([]string{"571313155411053087"})
+- CLI: go-eloverblik thirdparty charges 571313000000000001
+  Library: client.GetThirdPartyCharges([]string{"571313000000000001"})
   Returns: JSON array of current and future charges (no fees list, never historic ones)
 
-- CLI: go-eloverblik customer charge-links 571313155411053087 --period=last_month
-       go-eloverblik thirdparty charge-links 571313155411053087 --period=last_month
+- CLI: go-eloverblik customer charge-links 571313000000000001 --period=last_month
+       go-eloverblik thirdparty charge-links 571313000000000001 --period=last_month
   Library: |
     from, to, _ := eloverblik.GetDatesFromPeriod(eloverblik.LastMonth)
-    client.GetChargeLinksWithCharges([]string{"571313155411053087"}, from, to)
+    client.GetChargeLinksWithCharges([]string{"571313000000000001"}, from, to)
   Returns: nothing today - BOTH the customer and the third-party API answer 404 for
            getchargelinkswithcharges, which both OpenAPI documents describe as the Charges
            integration feature being disabled (checked 2026-07-13 with valid tokens of each
@@ -1171,7 +1171,7 @@ Examples:
            with the charge links per metering point and the dated price series of the
            charges. Reach for `charges` in the meantime.
 
-- CLI: go-eloverblik customer export-timeseries 571313155411053087 --from=2026-07-01 --format=json
+- CLI: go-eloverblik customer export-timeseries 571313000000000001 --from=2026-07-01 --format=json
   Library: |
     stream, err := client.ExportTimeSeries(...) // the API's CSV; close it when done
     // The library stops here: it returns CSV. The JSON is the CLI's own conversion of that
@@ -1354,7 +1354,7 @@ if err != nil {
 }
 
 ts, err := client.GetTimeSeries(
-    []string{"571313155411053087"},
+    []string{"571313000000000001"},
     from, to,
     eloverblik.Day,
 )
@@ -1420,7 +1420,7 @@ if _, err := client.GetChargeLinksWithCharges(ids, from, to); err != nil {
 ```
 ```bash
 # CLI: headers to stderr, JSON to stdout - so they can be separated
-go-eloverblik thirdparty charge-links 571313155411053087 \
+go-eloverblik thirdparty charge-links 571313000000000001 \
     --token=$TOKEN --period=last_month --print-response-headers \
     1>data.json 2>headers.txt
 ```
@@ -1698,7 +1698,7 @@ if err != nil {
 for _, detail := range details {
     if err := detail.Err(); err != nil {
         // API-level error for this specific ID, e.g.
-        // "eloverblik: metering point 571313155411053087: 20010 RelationNotFound"
+        // "eloverblik: metering point 571313000000000001: 20010 RelationNotFound"
         log.Printf("skipping: %v", err)
         continue
     }
@@ -1885,7 +1885,7 @@ fmt.Println(len(ts), "time series")
 Metering Point IDs:
   format: Numeric string
   length: Exactly 18 digits
-  example: "571313155411053087"
+  example: "571313000000000001"
   batch_size: 1-10 IDs per request is the API's usage recommendation ("Bundle requests for 10
               metering points at a time"), not a documented limit. The technical description
               (v2.0 history) dropped the per-request metering-point limit as "not implemented".
@@ -2102,7 +2102,7 @@ func main() {
     // Fetch hourly time series for one or more metering point IDs (at most 10 per request,
     // as Energinet recommends; the library does not check)
     ts, err := client.GetTimeSeries(
-        []string{"571313155411053087"},
+        []string{"571313000000000001"},
         from, to,
         eloverblik.Hour, // Aggregation: Actual, Quarter, Hour, Day, Month, Year
     )
