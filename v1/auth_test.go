@@ -1,8 +1,6 @@
 package eloverblik
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
@@ -72,7 +70,7 @@ func TestGetDataAccessTokenConcurrent(t *testing.T) {
 	httpmock.ActivateNonDefault(c.resty.GetClient())
 	defer httpmock.DeactivateAndReset()
 
-	token := unsignedToken(t, time.Now().Add(24*time.Hour))
+	token := dataAccessToken(t, time.Now().Add(24*time.Hour))
 	var tokenCalls atomic.Int32
 	httpmock.RegisterResponder(http.MethodGet, c.resty.BaseURL+"/token",
 		func(*http.Request) (*http.Response, error) {
@@ -122,11 +120,10 @@ func TestGetDataAccessTokenConcurrent(t *testing.T) {
 // lasts about 24 hours, and the client used to keep it for its own lifetime, so a long
 // running process saw every call fail with 401 once the token had expired.
 func TestGetDataAccessTokenRenewal(t *testing.T) {
-	fresh := unsignedToken(t, time.Now().Add(24*time.Hour))
+	fresh := dataAccessToken(t, time.Now().Add(24*time.Hour))
 
 	// A data access token that carries a token type but no expiry
-	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"tokenType":"ThirdPartyApiDataAccess"}`))
-	withoutExpiry := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`)) + "." + payload + "."
+	withoutExpiry := testToken(t, map[string]any{"tokenType": "ThirdPartyApiDataAccess"})
 
 	tests := []struct {
 		name    string
@@ -135,17 +132,17 @@ func TestGetDataAccessTokenRenewal(t *testing.T) {
 	}{
 		{
 			name:    "expired token is renewed",
-			cached:  unsignedToken(t, time.Now().Add(-time.Hour)),
+			cached:  dataAccessToken(t, time.Now().Add(-time.Hour)),
 			renewed: true,
 		},
 		{
 			name:    "token expiring within five minutes is renewed",
-			cached:  unsignedToken(t, time.Now().Add(2*time.Minute)),
+			cached:  dataAccessToken(t, time.Now().Add(2*time.Minute)),
 			renewed: true,
 		},
 		{
 			name:    "token valid for more than five minutes is kept",
-			cached:  unsignedToken(t, time.Now().Add(10*time.Minute)),
+			cached:  dataAccessToken(t, time.Now().Add(10*time.Minute)),
 			renewed: false,
 		},
 		{
@@ -200,7 +197,7 @@ func TestGetDataAccessTokenRenewal(t *testing.T) {
 		httpmock.ActivateNonDefault(c.resty.GetClient())
 		defer httpmock.DeactivateAndReset()
 
-		expired := unsignedToken(t, time.Now().Add(-time.Hour))
+		expired := dataAccessToken(t, time.Now().Add(-time.Hour))
 		httpmock.RegisterResponder(http.MethodGet, c.resty.BaseURL+"/token",
 			httpmock.NewJsonResponderOrPanic(http.StatusOK, map[string]string{"result": expired}).
 				Then(httpmock.NewStringResponder(http.StatusTooManyRequests, "")))
@@ -214,19 +211,10 @@ func TestGetDataAccessTokenRenewal(t *testing.T) {
 	})
 }
 
-// unsignedToken builds an unsecured JWT ("alg": "none") for a data access token that
-// expires at exp. The client only reads the claims, so no signature is needed.
-func unsignedToken(t *testing.T, exp time.Time) string {
+// dataAccessToken builds a data access token that expires at exp.
+func dataAccessToken(t *testing.T, exp time.Time) string {
 	t.Helper()
-
-	payload, err := json.Marshal(map[string]any{
-		"tokenType": "ThirdPartyApiDataAccess",
-		"exp":       exp.Unix(),
-	})
-	require.NoError(t, err)
-
-	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
-	return header + "." + base64.RawURLEncoding.EncodeToString(payload) + "."
+	return testToken(t, map[string]any{"tokenType": "ThirdPartyApiDataAccess", "exp": exp.Unix()})
 }
 
 // TestAuthenticateFailure guards the token endpoint. Any non-200 used to be swallowed:
