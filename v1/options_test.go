@@ -340,9 +340,10 @@ func TestWithRetryClampsItsArguments(t *testing.T) {
 		assert.Equal(t, testRetryWait, c.resty.RetryWaitTime)
 	})
 
-	t.Run("re-applying the policy does not stack retry conditions", func(t *testing.T) {
+	t.Run("re-applying the policy does not stack retry conditions or hooks", func(t *testing.T) {
 		c := newMockedCustomer(t, WithRetry(1, testRetryWait), WithoutRetry())
 		assert.Len(t, c.resty.RetryConditions, 1)
+		assert.Len(t, c.resty.RetryHooks, 1, "exactly one hook releasing the bodies of retried attempts")
 		assert.Equal(t, 0, c.resty.RetryCount)
 	})
 }

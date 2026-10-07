@@ -13,12 +13,14 @@ const maxExportErrorBody = 64 << 10
 
 // exportBody hands the body of an export to the caller, who streams and closes it. The
 // export requests are sent with SetDoNotParseResponse, so resty never touches the body: on
-// a failure nobody else would read or close it. It is read here for the API's error
-// message, closed, mapped with apiErrorFromBody as for any other call, and wrapped as
-// "failed to export <what>: ...", as a transport error is too. Unlike a parsed call, the
-// body is read whatever its Content-Type, so a JSON string or problem document sent as
-// text/plain still maps to its sentinel or APIError, where a parsed call only has the
-// status to go on. A bare [code] message that is not a JSON string maps to neither.
+// a failure nobody else would read or close it. res is the last attempt: the bodies of the
+// attempts the retry policy discarded before it have been released by releaseRetriedBody.
+// On a failure the body is read here for the API's error message, closed, mapped with
+// apiErrorFromBody as for any other call, and wrapped as "failed to export <what>: ...",
+// as a transport error is too. Unlike a parsed call, the body is read whatever its
+// Content-Type, so a JSON string or problem document sent as text/plain still maps to its
+// sentinel or APIError, where a parsed call only has the status to go on. A bare [code]
+// message that is not a JSON string maps to neither.
 func exportBody(res *resty.Response, err error, what string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to export %s: %w", what, err)

@@ -32,6 +32,11 @@ const (
 	DefaultRetryMaxWait = 60 * time.Second
 )
 
+// maxDiscardedBody caps how much of the body of a retried attempt is read before it is
+// closed. Reading a body to the end lets its connection be reused; a body beyond the cap
+// is cut off by closing it, which costs the connection rather than the time to read it.
+const maxDiscardedBody = 64 << 10
+
 // WithRetry overrides the default retry policy. Only the transient statuses 429 (rate
 // limit exceeded) and 503 (DataHub unavailable) are retried; a 401 or any other 4xx is
 // returned to the caller immediately. A Retry-After response header is honoured, capped
@@ -63,8 +68,9 @@ func WithoutRetry() Option {
 }
 
 // setRetryPolicy configures retrying on a resty client. It is idempotent: the retry
-// condition is assigned rather than appended, so calling it again from an option
-// replaces the policy instead of stacking a second condition on top of it.
+// condition and the retry hook are assigned rather than appended, so calling it again
+// from an option replaces the policy instead of stacking a second condition or hook on
+// top of it.
 func setRetryPolicy(client *resty.Client, count int, maxWait time.Duration) *resty.Client {
 	if count < 0 {
 		count = 0
@@ -77,6 +83,7 @@ func setRetryPolicy(client *resty.Client, count int, maxWait time.Duration) *res
 	wait := min(DefaultRetryWait, maxWait)
 
 	client.RetryConditions = []resty.RetryConditionFunc{retryCondition}
+	client.RetryHooks = []resty.OnRetryFunc{releaseRetriedBody(client)}
 
 	return client.
 		SetRetryCount(count).
@@ -91,6 +98,35 @@ func retryCondition(res *resty.Response, err error) bool {
 		return false
 	}
 	return isRetryableError(res.StatusCode(), err)
+}
+
+// releaseRetriedBody returns the retry hook that releases the body of an attempt resty
+// is about to retry. An export is sent with SetDoNotParseResponse, so resty leaves every
+// body it receives to the client, and on a retry it drops the response of the attempt
+// unread: without the hook the body would never be closed and its connection would leak.
+// The body is drained, up to maxDiscardedBody, so the connection can be reused, and then
+// closed. A parsed request's body has already been read and closed by resty, and
+// draining and closing it again is harmless.
+//
+// resty runs its retry hooks whenever the retry condition holds, even after the last
+// attempt, when no retry is left, and it then hands that very response to the caller.
+// That body is still needed: exportBody reads the API's error message from it and closes
+// it. The hook therefore leaves the body of the last attempt alone, which it tells by the
+// attempt number: resty numbers the attempts of a request from 1 and makes at most
+// RetryCount+1 of them.
+func releaseRetriedBody(client *resty.Client) resty.OnRetryFunc {
+	return func(res *resty.Response, _ error) {
+		if res == nil || res.Request == nil || res.Request.Attempt > client.RetryCount {
+			return
+		}
+
+		body := res.RawBody()
+		if body == nil {
+			return
+		}
+		_, _ = io.Copy(io.Discard, io.LimitReader(body, maxDiscardedBody))
+		_ = body.Close()
+	}
 }
 
 // retryAfter honours the Retry-After response header the API can send along with 429 and
