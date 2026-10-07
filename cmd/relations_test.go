@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/slimcdk/go-eloverblik/v1"
@@ -27,7 +28,8 @@ func (m *retiredRelationsClient) DeleteRelation(string) (bool, error) {
 
 // TestRetiredRelationCommands covers the two commands whose endpoints Energinet retired
 // with DataHub 3.0. They must say so without calling the API, and the help must no longer
-// offer them.
+// offer them: the root's Long text names them only to say they are retired, and the
+// command listing leaves them out.
 func TestRetiredRelationCommands(t *testing.T) {
 	clientInstance = &retiredRelationsClient{t: t}
 	defer func() { clientInstance = nil }()
@@ -40,7 +42,11 @@ func TestRetiredRelationCommands(t *testing.T) {
 
 	help, err := execute(t, "--help")
 	require.NoError(t, err)
-	assert.NotContains(t, help, "add-relation-by-code")
-	assert.NotContains(t, help, "delete-relation")
-	assert.Contains(t, help, "add-relation", "the relation command that still works must stay")
+	assert.Contains(t, help, "add-relation-by-code and delete-relation are retired")
+
+	_, commands, found := strings.Cut(help, "Available Commands:")
+	require.True(t, found, "the root help lists the commands")
+	assert.NotContains(t, commands, "add-relation-by-code")
+	assert.NotContains(t, commands, "delete-relation")
+	assert.Contains(t, commands, "add-relation", "the relation command that still works must stay")
 }

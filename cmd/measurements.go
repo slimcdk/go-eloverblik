@@ -17,8 +17,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// output is where every command writes its result (configurable for testing). alive is the
-// exception: it prints to os.Stdout directly.
+// output is where this package's commands write the JSON or CSV they print (configurable
+// for testing). alive is the exception: it prints its line of text to os.Stdout directly.
+// cobra's own help and completion commands do not use it either.
 var output io.Writer = os.Stdout
 
 // warningOutput receives what a command reports about a call that still succeeded, such
@@ -185,7 +186,33 @@ func newDetailsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "details <metering-id> [metering-id ...]",
 		Short: "Get metering point details",
-		Args:  meteringPointArgs,
+		Long: `Get the master data of 1 to 10 metering points: type, grid operator, address, meter,
+balance supplier, contact addresses and child metering points.
+
+Calls POST /meteringpoints/meteringpoint/getdetails on the Customer API, or
+POST /meteringpoint/getdetails on the Third-Party API.
+
+Arguments: 1 to 10 metering point IDs, each exactly 18 digits.
+
+Output: a JSON array with one object per metering point:
+  {"result": {"meteringPointId", "typeOfMP", "energyTimeSeriesMeasureUnit",
+              "gridOperatorName", "meteringGridAreaIdentification", "physicalStatusOfMP",
+              "meterNumber", "streetName", "buildingNumber", "postcode", "cityName",
+              "balanceSupplierName", "contactAddresses": [...],
+              "childMeteringPoints": [...], ...},
+   "success", "errorCode", "errorText", "id", "stackTrace"}
+A metering point that failed has "success": false and the reason in "errorCode" and
+"errorText", while the command still succeeds. The same metering point can come back once
+per access period. Energinet lists several fields as retired or unavailable for now, e.g.
+"settlementMethod" and "consumerStartDate": expect them empty, a date as null. The balance
+supplier fields are not shared with a third party.`,
+		Example: `  go-eloverblik customer details 571313000000000001 --token "$ELO_TOKEN"
+  go-eloverblik thirdparty details 571313000000000001 571313000000000002 --token "$ELO_TOKEN"
+
+  # The metering points that failed on their own
+  go-eloverblik customer details 571313000000000001 571313000000000002 --token "$ELO_TOKEN" \
+    | jq '.[] | select(.success == false) | {id, errorCode, errorText}'`,
+		Args: meteringPointArgs,
 		Run: func(cmd *cobra.Command, args []string) {
 			details, err := clientInstance.GetMeteringPointDetails(args)
 			cobra.CheckErr(err)
@@ -201,7 +228,56 @@ func newTimeseriesCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "timeseries <metering-id> [metering-id ...]",
 		Short: "Get time series for one or more metering points",
-		Args:  meteringPointArgs,
+		Long: `Get the metered quantities (time series) of 1 to 10 metering points in the half-open range
+[from, to), at the given aggregation.
+
+Calls POST /meterdata/gettimeseries/{from}/{to}/{aggregation} on the API of the parent
+command, with from and to as Copenhagen calendar dates (YYYY-MM-DD).
+
+Arguments: 1 to 10 metering point IDs, each exactly 18 digits.
+
+Dates: give either --period, or --from with an optional --to, not both.
+  --from    The first day, included: YYYY-MM-DD, now, or now-Nd, now-Nw, now-Nm or now-Ny,
+            N days, weeks, months or years back on the Copenhagen calendar.
+  --to      The day after the last one, excluded, in the same forms. It defaults to today,
+            so the range ends with yesterday. --from 2026-09-01 --to 2026-10-01 is all of
+            September.
+  --period  yesterday, this_week, last_week, this_month, last_month, this_year or
+            last_year. Weeks start on Monday. A this_* period ends with yesterday, and is
+            an error on its first day (a Monday, the 1st, 1 January), which has no
+            complete day yet.
+From and to on the same date is rejected (API error 30002), and a range longer than 730
+days too (30014).
+
+--aggregation is sent as given: Actual, Quarter, Hour (the default), Day, Month or Year.
+
+Output without --flatten: the API's document, a JSON array with one object per metering
+point:
+  {"MyEnergyData_MarketDocument": {"TimeSeries": [{"mRID", "businessType", "curveType",
+     "measurement_Unit.name", "Period": [{"resolution", "timeInterval": {"start", "end"},
+     "point": [{"position", "out_Quantity.quantity", "out_Quantity.quality"}]}]}], ...},
+   "success", "errorCode", "errorText", "id", "stackTrace"}
+"position" and "out_Quantity.quantity" are JSON strings, e.g. "0.198". A metering point
+that failed on its own has "success": false, the reason in "errorCode" and "errorText",
+and no time series, while the command still succeeds.
+
+Output with --flatten: a JSON object keyed by metering point ID, each holding a list of
+  {"from", "to", "measurement", "quality", "unit", "curvetype", "businesstype",
+   "resolution"}
+with "from" and "to" as RFC 3339 times in Copenhagen time and "measurement" as a number.
+A metering point that failed on its own is left out and reported as a warning on stderr.
+
+The same metering point can come back once per access period: without --flatten as
+several objects, with --flatten as one list holding the points of all of them.`,
+		Example: `  # All of September, one value per day
+  go-eloverblik customer timeseries 571313000000000001 --from 2026-09-01 --to 2026-10-01 --aggregation Day --token "$ELO_TOKEN"
+
+  # Last month, hourly, as one flat list per metering point
+  go-eloverblik customer timeseries 571313000000000001 571313000000000002 --period last_month --flatten --token "$ELO_TOKEN"
+
+  # The last 30 days up to and including yesterday
+  go-eloverblik thirdparty timeseries 571313000000000001 --from now-30d --aggregation Day --flatten --token "$ELO_TOKEN"`,
+		Args: meteringPointArgs,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			period, _ := cmd.Flags().GetString("period")
 
@@ -265,11 +341,11 @@ func newTimeseriesCmd() *cobra.Command {
 			}
 		},
 	}
-	cmd.Flags().String("from", "", "start date (YYYY-MM-DD, now, now-30d/w/m/y)")
+	cmd.Flags().String("from", "", "start date, inclusive (YYYY-MM-DD, now, now-30d/w/m/y); required unless --period is given")
 	cmd.Flags().String("to", today(), "end date, exclusive (YYYY-MM-DD, now, now-30d/w/m/y, defaults to today)")
-	cmd.Flags().String("period", "", "predefined period (yesterday, last_week, etc.)")
+	cmd.Flags().String("period", "", "named range instead of --from and --to: yesterday, this_week, last_week, this_month, last_month, this_year or last_year")
 	cmd.Flags().String("aggregation", string(eloverblik.Hour), "aggregation level (Actual, Quarter, Hour, Day, Month, Year)")
-	cmd.Flags().Bool("flatten", false, "simplify the data series")
+	cmd.Flags().Bool("flatten", false, "print one flat list of readings per metering point instead of the API's nested document")
 	return cmd
 }
 
@@ -277,7 +353,28 @@ func newExportTimeseriesCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "export-timeseries <metering-id> [metering-id ...]",
 		Short: "Export time series as CSV or JSON (customer API only)",
-		Args:  meteringPointArgs,
+		Long: `Export the time series of 1 to 10 metering points in the half-open range [from, to) as the
+CSV file Eloverblik generates.
+
+Calls POST /meterdata/timeseries/export/{from}/{to}/{aggregation} on the Customer API,
+with from and to as Copenhagen calendar dates (YYYY-MM-DD).
+
+Arguments: 1 to 10 metering point IDs, each exactly 18 digits.
+
+--from, --to, --period and --aggregation work as for timeseries (see
+"go-eloverblik customer timeseries --help"): give either --period, or --from with an
+optional --to; --to is excluded and defaults to today, so the range ends with yesterday.
+From and to on the same date is rejected (API error 30002), and a range longer than 730
+days too (30014).
+
+Output with --format csv (the default): the API's CSV, unchanged: separated by
+semicolons, starting with a UTF-8 byte order mark, with Danish column names.
+Output with --format json: the rows as a JSON array of objects keyed by the CSV header,
+every value a string. The byte order mark is dropped, and a CSV without rows gives [].
+Any other --format gives the CSV.`,
+		Example: `  go-eloverblik customer export-timeseries 571313000000000001 --from 2026-09-01 --to 2026-10-01 --token "$ELO_TOKEN" > september.csv
+  go-eloverblik customer export-timeseries 571313000000000001 571313000000000002 --period last_month --aggregation Day --format json --token "$ELO_TOKEN"`,
+		Args: meteringPointArgs,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			period, _ := cmd.Flags().GetString("period")
 
@@ -325,11 +422,11 @@ func newExportTimeseriesCmd() *cobra.Command {
 			cobra.CheckErr(err)
 		},
 	}
-	cmd.Flags().String("from", "", "start date (YYYY-MM-DD, now, now-30d/w/m/y)")
+	cmd.Flags().String("from", "", "start date, inclusive (YYYY-MM-DD, now, now-30d/w/m/y); required unless --period is given")
 	cmd.Flags().String("to", today(), "end date, exclusive (YYYY-MM-DD, now, now-30d/w/m/y, defaults to today)")
-	cmd.Flags().String("period", "", "predefined period (yesterday, last_week, etc.)")
+	cmd.Flags().String("period", "", "named range instead of --from and --to: yesterday, this_week, last_week, this_month, last_month, this_year or last_year")
 	cmd.Flags().String("aggregation", string(eloverblik.Hour), "aggregation level (Actual, Quarter, Hour, Day, Month, Year)")
-	cmd.Flags().String("format", "csv", "output format (csv, json)")
+	cmd.Flags().String("format", "csv", "output format: csv (the API's CSV, unchanged) or json (an array of objects keyed by the CSV header)")
 	return cmd
 }
 
@@ -337,7 +434,21 @@ func newExportMasterdataCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "export-masterdata <metering-id> [metering-id ...]",
 		Short: "Export metering point masterdata (customer API only)",
-		Args:  meteringPointArgs,
+		Long: `Export the master data of 1 to 10 metering points as the CSV file Eloverblik generates.
+For master data as JSON from the API, use details.
+
+Calls POST /meteringpoints/masterdata/export on the Customer API.
+
+Arguments: 1 to 10 metering point IDs, each exactly 18 digits.
+
+Output with --format csv (the default): the API's CSV, unchanged: separated by
+semicolons, starting with a UTF-8 byte order mark, with Danish column names.
+Output with --format json: the rows as a JSON array of objects keyed by the CSV header,
+every value a string. The byte order mark is dropped, and a CSV without rows gives [].
+Any other --format gives the CSV.`,
+		Example: `  go-eloverblik customer export-masterdata 571313000000000001 --token "$ELO_TOKEN" > masterdata.csv
+  go-eloverblik customer export-masterdata 571313000000000001 571313000000000002 --format json --token "$ELO_TOKEN"`,
+		Args: meteringPointArgs,
 		Run: func(cmd *cobra.Command, args []string) {
 			format, _ := cmd.Flags().GetString("format")
 
@@ -353,7 +464,7 @@ func newExportMasterdataCmd() *cobra.Command {
 			cobra.CheckErr(err)
 		},
 	}
-	cmd.Flags().String("format", "csv", "output format (csv, json)")
+	cmd.Flags().String("format", "csv", "output format: csv (the API's CSV, unchanged) or json (an array of objects keyed by the CSV header)")
 	return cmd
 }
 

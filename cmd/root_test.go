@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -124,6 +125,12 @@ func TestSubcommandHelp(t *testing.T) {
 		assert.Contains(t, out, "go-eloverblik thirdparty metering-points <scope> <identifier> [flags]")
 	})
 
+	t.Run("a leaf command shows its examples", func(t *testing.T) {
+		out, err := execute(t, "customer", "timeseries", "--help")
+		require.NoError(t, err)
+		assert.Contains(t, out, "Examples:\n  # All of September, one value per day\n  go-eloverblik customer timeseries ")
+	})
+
 	t.Run("a group command lists its commands and the global flags", func(t *testing.T) {
 		out, err := execute(t, "customer", "--help")
 		require.NoError(t, err)
@@ -132,6 +139,95 @@ func TestSubcommandHelp(t *testing.T) {
 		assert.Contains(t, out, "Global Flags:")
 		assert.Contains(t, out, "--token")
 	})
+}
+
+// TestRootHelpCarriesTheRules checks that the root help states what an agent that has only
+// the binary needs before its first call: how to pass the token, the rules that otherwise
+// give a wrong result without an error, and where the full reference is. The root help is
+// printed by rootHelpFunc, which has to print the Long text and the examples itself.
+func TestRootHelpCarriesTheRules(t *testing.T) {
+	out, err := execute(t, "--help")
+	require.NoError(t, err)
+
+	for _, rule := range []string{
+		`--token "$ELO_TOKEN"`,
+		"data access token",
+		"[from, to)",
+		"--to defaults to today",
+		"730 days",
+		"1 to 10 of them, each exactly 18 digits",
+		"Results go to stdout as JSON",
+		"go to stderr",
+		"A metering point can fail on its own inside a successful response",
+		"charge-links currently answers 404",
+		"add-relation-by-code and delete-relation are retired",
+		"https://github.com/slimcdk/go-eloverblik/blob/master/llms.md",
+	} {
+		assert.Contains(t, out, rule)
+	}
+	assert.Contains(t, out, "Examples:\n  export ELO_TOKEN=")
+	assert.Less(t, strings.Index(out, "llms.md"), strings.Index(out, "Usage:"),
+		"the Long text comes first, as in cobra's own help")
+}
+
+// leafCommands returns the commands below cmd that run something, hidden ones included,
+// leaving out cobra's own help and completion commands.
+func leafCommands(cmd *cobra.Command) []*cobra.Command {
+	var leaves []*cobra.Command
+	for _, sub := range cmd.Commands() {
+		switch {
+		case sub.Name() == "help" || sub.Name() == "completion":
+		case sub.HasSubCommands():
+			leaves = append(leaves, leafCommands(sub)...)
+		default:
+			leaves = append(leaves, sub)
+		}
+	}
+	return leaves
+}
+
+// TestLeafCommandsDocumentThemselves checks that the help of every command tells how to
+// call it, for an agent that has only the binary: a Long text saying what it calls and
+// returns, and examples that pass the token. The retired commands are hidden and only
+// fail, so they say that and have no examples.
+func TestLeafCommandsDocumentThemselves(t *testing.T) {
+	leaves := leafCommands(rootCmd)
+	require.NotEmpty(t, leaves)
+
+	for _, leaf := range leaves {
+		t.Run(leaf.CommandPath(), func(t *testing.T) {
+			assert.NotEmpty(t, leaf.Long)
+			if !leaf.IsAvailableCommand() {
+				assert.True(t, strings.HasPrefix(leaf.Long, "Retired."), "a hidden command is a retired one")
+				assert.Empty(t, leaf.Example)
+				return
+			}
+			assert.Contains(t, leaf.Example, `--token "$ELO_TOKEN"`)
+		})
+	}
+}
+
+// TestHelpUsesSyntheticMeteringPointIDs keeps real metering point IDs out of the help: an
+// ID in a help text is 571313 followed by zeros and a two digit counter, which reads as a
+// placeholder.
+func TestHelpUsesSyntheticMeteringPointIDs(t *testing.T) {
+	anyID := regexp.MustCompile(`\d{18}`)
+	synthetic := regexp.MustCompile(`^5713130000000000\d\d$`)
+
+	var check func(cmd *cobra.Command)
+	check = func(cmd *cobra.Command) {
+		texts := []string{cmd.Short, cmd.Long, cmd.Example}
+		cmd.Flags().VisitAll(func(f *pflag.Flag) { texts = append(texts, f.Usage) })
+		for _, text := range texts {
+			for _, id := range anyID.FindAllString(text, -1) {
+				assert.Regexp(t, synthetic, id, "in the help of %s", cmd.CommandPath())
+			}
+		}
+		for _, sub := range cmd.Commands() {
+			check(sub)
+		}
+	}
+	check(rootCmd)
 }
 
 // TestCommandsThatNeedNoToken covers the commands that never use --token: they must run
