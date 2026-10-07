@@ -15,7 +15,7 @@ A comprehensive Go client library and CLI tool for the Danish energy data platfo
 - **Token Introspection**: Read a token's API, roles and expiry without spending a call
 - **Debuggable**: `--print-response-headers` shows what the API actually answered
 - **Well-Tested**: 93% statement coverage of the library, verified against the live API
-- **Multi-Platform**: Cross-compiled binaries for Linux, macOS, and Windows
+- **Multi-Platform**: Binaries for Linux (x86-64, ARM64 and 32-bit ARM, Raspberry Pi included), macOS and Windows (x86-64 and ARM64), tested on all three operating systems and as 32-bit code
 
 ## Table of Contents
 
@@ -51,7 +51,70 @@ go install github.com/slimcdk/go-eloverblik@latest
 
 ### Download Pre-built Binaries
 
-Download the latest release for your platform from [GitHub Releases](https://github.com/slimcdk/go-eloverblik/releases).
+Download the archive for your platform and `checksums.txt` from
+[GitHub Releases](https://github.com/slimcdk/go-eloverblik/releases). Each archive holds
+the `go-eloverblik` binary plus `LICENSE` and `README.md`. The binary needs no Go
+installation and brings its own time zone database.
+
+| Platform | Archive |
+|----------|---------|
+| Linux on x86-64 | `linux_amd64` |
+| Linux on 64-bit ARM, including a Raspberry Pi on a 64-bit system (`uname -m` prints `aarch64`) | `linux_arm64` |
+| Linux on 32-bit ARM: a Raspberry Pi on a 32-bit system, from the Pi Zero and Pi 1 up (`uname -m` prints `armv6l` or `armv7l`) | `linux_arm` |
+| macOS on Apple silicon / on Intel, macOS 13 Ventura or later | `darwin_arm64` / `darwin_amd64` |
+| Windows on x86-64 / on Arm, Windows 10 or later | `windows_amd64` / `windows_arm64` |
+
+#### Linux and Raspberry Pi
+
+```bash
+grep '_linux_arm.tar.gz$' checksums.txt | sha256sum -c -
+tar -xzf go-eloverblik_<version>_linux_arm.tar.gz
+sudo install go-eloverblik /usr/local/bin/
+```
+
+In a minimal container image the binary runs as is, but HTTPS calls need CA certificates.
+`alpine` and `gcr.io/distroless/static` ship them; `debian:*-slim`, `busybox` and `scratch`
+do not. Install `ca-certificates`, copy `/etc/ssl/certs/ca-certificates.crt` from your
+build stage, or point `SSL_CERT_FILE` at a bundle. Without them every API call fails with
+`x509: certificate signed by unknown authority`.
+
+#### macOS
+
+```bash
+grep '_darwin_arm64.tar.gz$' checksums.txt | shasum -a 256 -c -
+tar -xzf go-eloverblik_<version>_darwin_arm64.tar.gz
+xattr -d com.apple.quarantine go-eloverblik  # only if a browser downloaded the archive
+sudo mkdir -p /usr/local/bin && sudo mv go-eloverblik /usr/local/bin/
+```
+
+The binaries are not signed with an Apple Developer ID or notarized. A browser marks the
+download as quarantined, and macOS then blocks the first run with "go-eloverblik Not
+Opened" or "cannot be opened because the developer cannot be verified". The `xattr` line
+removes that mark; System Settings > Privacy & Security > Open Anyway does the same once.
+Downloading with `curl -LO`, or installing with `go install`, sets no mark.
+
+#### Windows
+
+In PowerShell:
+
+```powershell
+Get-FileHash -Algorithm SHA256 go-eloverblik_<version>_windows_amd64.zip  # compare with checksums.txt
+Expand-Archive go-eloverblik_<version>_windows_amd64.zip "$env:LOCALAPPDATA\Programs\go-eloverblik"
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+[Environment]::SetEnvironmentVariable("Path", "$userPath;$env:LOCALAPPDATA\Programs\go-eloverblik", "User")
+```
+
+Open a new terminal so it picks up the `PATH` change. The shell examples in this README
+are written for bash. In PowerShell, set and pass the token like this, and continue a long
+command on the next line with a backtick (`` ` ``) instead of `\`:
+
+```powershell
+$env:ELO_TOKEN = "your-refresh-token-here"
+go-eloverblik token --token $env:ELO_TOKEN
+```
+
+In cmd it is `set ELO_TOKEN=your-refresh-token-here`, then `--token %ELO_TOKEN%`, and `^`
+continues a line.
 
 ### Build from Source
 

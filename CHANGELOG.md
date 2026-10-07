@@ -20,6 +20,9 @@ The module now requires Go 1.27.1, the current release, up from Go 1.25.6. With 
 `GOTOOLCHAIN=auto` an older `go` command downloads it by itself; with `GOTOOLCHAIN=local`
 it refuses to build the module.
 
+The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later; those of
+1.3.0 ran on macOS 12 Monterey.
+
 ### Behaves differently
 
 - A `410 Gone` returns `ErrorEndpointRetired`, whatever its body. It used to be
@@ -108,6 +111,10 @@ it refuses to build the module.
 - The code takes what `go fix` proposes for Go 1.27, and the linters now include errorlint,
   testifylint, modernize and gocritic. errorlint found the export bug listed above.
 - The devcontainer runs Go 1.27.
+- CI runs the tests on Linux, Windows and macOS, as 32-bit code (linux/386 natively,
+  linux/arm on an emulated Raspberry Pi Zero CPU), and with `-trimpath` and GOROOT unset,
+  so the tests cannot fall back on Go's own zoneinfo.zip. It runs the release build in a
+  container without a time zone database. The release gate runs the 32-bit tests too.
 
 ## [1.3.0]
 
