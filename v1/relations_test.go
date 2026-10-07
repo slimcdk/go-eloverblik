@@ -167,3 +167,68 @@ func TestDeleteRelation(t *testing.T) {
 		assert.False(t, success)
 	})
 }
+
+// TestRetiredRelationEndpoints covers the two relation endpoints Energinet retired with
+// DataHub 3.0. Both answer 410 Gone, and the specs only say the body is a string, so every
+// shape it can plausibly take must surface as ErrorEndpointRetired. Where the body is a
+// JSON string, what the API said must survive too.
+func TestRetiredRelationEndpoints(t *testing.T) {
+	mockResty := resty.New()
+	httpmock.ActivateNonDefault(mockResty.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	c := &client{
+		accessToken: "test-access-token",
+		resty:       mockResty,
+		apiType:     CustomerApi,
+	}
+
+	calls := []struct {
+		name string
+		call func() error
+	}{
+		{"AddRelationByWebAccessCode", func() error {
+			_, err := c.AddRelationByWebAccessCode("571313180100000001", "ABCD1234")
+			return err
+		}},
+		{"DeleteRelation", func() error {
+			_, err := c.DeleteRelation("571313180100000001")
+			return err
+		}},
+	}
+
+	const message = "Adding metering points with a Web Access Code is no longer supported"
+	bodies := []struct {
+		name        string
+		contentType string
+		body        string
+		keepsText   bool
+	}{
+		{"a JSON string", "application/json", `"` + message + `"`, true},
+		{"plain text", "text/plain", message, false},
+		{"a problem document", "application/problem+json", `{"title":"Gone","status":410,"traceId":"00-abc-def-01"}`, false},
+		{"no body", "", "", false},
+	}
+
+	for _, call := range calls {
+		for _, body := range bodies {
+			t.Run(call.name+" answered with "+body.name, func(t *testing.T) {
+				httpmock.Reset()
+				httpmock.RegisterNoResponder(func(*http.Request) (*http.Response, error) {
+					resp := httpmock.NewStringResponse(http.StatusGone, body.body)
+					if body.contentType != "" {
+						resp.Header.Set("Content-Type", body.contentType)
+					}
+					return resp, nil
+				})
+
+				err := call.call()
+
+				assert.ErrorIs(t, err, ErrorEndpointRetired)
+				if body.keepsText {
+					assert.ErrorContains(t, err, message)
+				}
+			})
+		}
+	}
+}

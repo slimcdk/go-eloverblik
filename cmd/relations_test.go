@@ -1,0 +1,45 @@
+package cmd
+
+import (
+	"testing"
+
+	"github.com/slimcdk/go-eloverblik/v1"
+	"github.com/stretchr/testify/assert"
+)
+
+// retiredRelationsClient fails the test if a command calls one of the endpoints Energinet
+// retired: the answer is known, so asking the API again is wasted traffic.
+type retiredRelationsClient struct {
+	MockCustomerClient
+	t *testing.T
+}
+
+func (m *retiredRelationsClient) AddRelationByWebAccessCode(string, string) (string, error) {
+	m.t.Error("add-relation-by-code called the API")
+	return "", nil
+}
+
+func (m *retiredRelationsClient) DeleteRelation(string) (bool, error) {
+	m.t.Error("delete-relation called the API")
+	return false, nil
+}
+
+// TestRetiredRelationCommands covers the two commands whose endpoints Energinet retired
+// with DataHub 3.0. They must say so without calling the API, and the help must no longer
+// offer them.
+func TestRetiredRelationCommands(t *testing.T) {
+	clientInstance = &retiredRelationsClient{t: t}
+	defer func() { clientInstance = nil }()
+
+	_, err := execute(t, "customer", "add-relation-by-code", "571313174002485069", "ABCD1234", "--token", "dummy")
+	assert.ErrorIs(t, err, eloverblik.ErrorEndpointRetired)
+
+	_, err = execute(t, "customer", "delete-relation", "571313174002485069", "--token", "dummy")
+	assert.ErrorIs(t, err, eloverblik.ErrorEndpointRetired)
+
+	help, err := execute(t, "--help")
+	assert.NoError(t, err)
+	assert.NotContains(t, help, "add-relation-by-code")
+	assert.NotContains(t, help, "delete-relation")
+	assert.Contains(t, help, "add-relation", "the relation command that still works must stay")
+}

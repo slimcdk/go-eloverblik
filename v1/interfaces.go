@@ -19,8 +19,20 @@ type Customer interface {
 	Client
 	GetCustomerCharges(meteringPointIDs []string) ([]CustomerChargeResponse, error)
 	AddRelationByID(meteringPointIDs []string) ([]StringResponse, error)
+
+	// AddRelationByWebAccessCode linked a metering point to the user by its web access code.
+	//
+	// Deprecated: Energinet retired the endpoint with DataHub 3.0. It answers 410 Gone, which
+	// is reported as ErrorEndpointRetired. Data is shared through ElOverblik instead, see
+	// https://docs.eloverblik.dk/docs/guides/data-sharing.
 	AddRelationByWebAccessCode(meteringPointID, webAccessCode string) (string, error)
+
+	// DeleteRelation deleted the user's relation to a metering point.
+	//
+	// Deprecated: Energinet retired the endpoint with DataHub 3.0. It answers 410 Gone, which
+	// is reported as ErrorEndpointRetired, and no longer deletes the relation.
 	DeleteRelation(meteringPointID string) (bool, error)
+
 	GetMeteringPoints(includeAll bool) ([]MeteringPoints, error)
 	ExportTimeSeries(meteringPointIDs []string, from, to time.Time, aggregation Aggregation) (io.ReadCloser, error)
 	ExportMasterdata(meteringPointIDs []string) (io.ReadCloser, error)

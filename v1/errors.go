@@ -205,6 +205,8 @@ func statusSentinel(statusCode int) error {
 		return ErrorTooManyRequests
 	case http.StatusUnauthorized:
 		return ErrorUnauthorized
+	case http.StatusGone:
+		return ErrorEndpointRetired
 	default:
 		return nil
 	}
@@ -303,9 +305,13 @@ func apiError(msg string, statusCode int) error {
 	}
 
 	// API error messages carry the code in their first characters, e.g.
-	// "[20010] Relation not found". A message without one holds nothing to look up.
+	// "[20010] Relation not found". A message without one holds nothing to look up, but
+	// on a status with a sentinel of its own it is that sentinel, said in other words.
 	code, ok := apiErrorCode(msg)
 	if !ok {
+		if sentinel := statusSentinel(statusCode); sentinel != nil {
+			return fmt.Errorf("%w: %s", sentinel, msg)
+		}
 		return fmt.Errorf("failed to parse error in api error message %s", msg)
 	}
 
@@ -386,6 +392,7 @@ var (
 	ErrorThirdPartyAlreadyExistButIsInactive            error = errors.New("third party already exist but is inactive")                                     // status code 401 - api code 60005
 	ErrorThirdPartyAlreadyExistButIsRevoked             error = errors.New("third party already exist but access is revoked")                               // status code 401 - api code 60006
 	ErrorTooManyRequests                                error = errors.New("too many requests")                                                             // status code 429
+	ErrorEndpointRetired                                error = errors.New("endpoint retired by Energinet")                                                 // status code 410
 
 	// The time series codes Energinet documented alongside DataHub 3.0. 30017 fails the request
 	// as a whole; 30015, 30016 and 30018 are reported per metering point, inside an otherwise

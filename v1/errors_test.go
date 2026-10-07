@@ -3,8 +3,11 @@ package eloverblik
 import (
 	"encoding/json"
 	"errors"
+	"net/http"
 	"testing"
 
+	"github.com/go-resty/resty/v2"
+	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -247,4 +250,44 @@ func TestApiErrorNoCprConsent(t *testing.T) {
 	err := apiError("[10007] Missing consent for CPR lookup", 403)
 	assert.Error(t, err)
 	assert.Equal(t, ErrorNoCprConsent, err)
+}
+
+// TestStatusSentinelForMessageWithoutCode covers an error message without a "[code]", on a
+// status that has a sentinel of its own. The call must match that sentinel and keep what
+// the API said, rather than read as a message the client failed to parse.
+func TestStatusSentinelForMessageWithoutCode(t *testing.T) {
+	mockResty := resty.New()
+	httpmock.ActivateNonDefault(mockResty.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	c := &client{
+		accessToken: "test-access-token",
+		resty:       mockResty,
+		apiType:     CustomerApi,
+	}
+
+	tests := []struct {
+		status  int
+		message string
+		want    error
+	}{
+		{http.StatusUnauthorized, "The data access token has expired", ErrorUnauthorized},
+		{http.StatusTooManyRequests, "Rate limit exceeded", ErrorTooManyRequests},
+	}
+
+	for _, test := range tests {
+		t.Run(http.StatusText(test.status), func(t *testing.T) {
+			httpmock.Reset()
+			httpmock.RegisterNoResponder(func(*http.Request) (*http.Response, error) {
+				resp := httpmock.NewStringResponse(test.status, `"`+test.message+`"`)
+				resp.Header.Set("Content-Type", "application/json")
+				return resp, nil
+			})
+
+			_, err := c.GetMeteringPointDetails([]string{"571313180100000001"})
+
+			assert.ErrorIs(t, err, test.want)
+			assert.ErrorContains(t, err, test.message)
+		})
+	}
 }
