@@ -1,6 +1,6 @@
 module github.com/slimcdk/go-eloverblik
 
-go 1.25.6
+go 1.27.1
 
 require (
 	github.com/go-resty/resty/v2 v2.17.2

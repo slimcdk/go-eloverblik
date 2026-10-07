@@ -14,6 +14,12 @@ release follows the API. Nothing was removed, and the only code that stops compi
 unkeyed `MeteringPoints{...}` literal, which must now list `IsMovedOut`. Some results do
 change for code that compiles unchanged; those come first.
 
+### Requires Go 1.27
+
+The module now requires Go 1.27.1, the current release, up from Go 1.25.6. With the default
+`GOTOOLCHAIN=auto` an older `go` command downloads it by itself; with `GOTOOLCHAIN=local`
+it refuses to build the module.
+
 ### Behaves differently
 
 - A `410 Gone` returns `ErrorEndpointRetired`, whatever its body. It used to be

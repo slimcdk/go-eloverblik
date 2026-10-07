@@ -40,11 +40,15 @@ jobs:
           # govulncheck reports standard library vulnerabilities against the
           # toolchain it runs with, so pinning an exact patch would keep
           # reporting stdlib issues that a newer patch has already fixed.
-          go-version: '1.25'
+          go-version: '1.27'
           check-latest: true
 
+      # Pinned: @latest follows golang.org/x/vuln's own go directive, and a release
+      # that requires a newer Go than the line above cannot be built (v1.8.0 requires
+      # Go 1.26). Move the pin together with the Go line in go.mod; Dependabot does
+      # not see versions in a run step, so nothing will do it for you.
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
 
       # Highest-signal check for a Go module: govulncheck does reachability
       # analysis, so it only fails on vulnerabilities this code can actually
@@ -71,7 +75,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          go-version: '1.27'
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
