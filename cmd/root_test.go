@@ -27,6 +27,38 @@ func resetCommandFlags(cmd *cobra.Command) {
 	}
 }
 
+// captureStdout returns what run writes to os.Stdout. The pipe is drained while run is
+// still writing: a pipe holds only a few KB (about 4 KB on Windows), so reading it after
+// run returns would block a command with more output than that, such as a completion
+// script, forever.
+func captureStdout(t *testing.T, run func()) string {
+	t.Helper()
+
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	copied := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(&buf, r)
+		copied <- err
+	}()
+
+	old := os.Stdout
+	os.Stdout = w
+	defer func() {
+		os.Stdout = old
+		_ = r.Close()
+	}()
+
+	run()
+
+	require.NoError(t, w.Close())
+	require.NoError(t, <-copied)
+
+	return buf.String()
+}
+
 // execute is a helper function to capture the output of a cobra command.
 func execute(t *testing.T, args ...string) (string, error) {
 	t.Helper()
@@ -34,27 +66,13 @@ func execute(t *testing.T, args ...string) (string, error) {
 	// Reset flag state to avoid pollution between sequential calls
 	resetCommandFlags(rootCmd)
 
-	// Redirect stdout to a buffer
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
+	var err error
+	out := captureStdout(t, func() {
+		rootCmd.SetArgs(args)
+		err = rootCmd.Execute()
+	})
 
-	// Create a buffer to capture the output
-	var buf bytes.Buffer
-
-	// Execute the command
-	rootCmd.SetArgs(args)
-	err := rootCmd.Execute()
-
-	// Stop redirecting stdout
-	w.Close()
-	os.Stdout = old
-
-	// Read the output from the pipe
-	_, readErr := io.Copy(&buf, r)
-	require.NoError(t, readErr)
-
-	return strings.TrimSpace(buf.String()), err
+	return strings.TrimSpace(out), err
 }
 
 func TestRootCmd(t *testing.T) {
@@ -87,22 +105,6 @@ func TestExecute(t *testing.T) {
 	resetCommandFlags(rootCmd)
 	rootCmd.SetArgs([]string{})
 
-	// Redirect stdout to a buffer
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	// Create a buffer to capture the output
-	var buf bytes.Buffer
-
-	// Execute the command
-	Execute()
-
-	// Stop redirecting stdout
-	w.Close()
-	os.Stdout = old
-
-	// Read the output from the pipe
-	_, readErr := io.Copy(&buf, r)
-	assert.NoError(t, readErr)
+	out := captureStdout(t, Execute)
+	assert.Contains(t, out, "A CLI for the Danish Eloverblik platform")
 }
