@@ -29,32 +29,32 @@ func TestParseToken(t *testing.T) {
 		// The refresh token names the role claim "roles".
 		claims, err := ParseToken(testToken(t, map[string]any{
 			"tokenType":         "THIRDPARTYAPI_Refresh",
-			"tokenName":         "christian local testing",
-			"tokenid":           "6ad87f99-d536-41a2-9722-622e94822fba",
+			"tokenName":         "example",
+			"tokenid":           "00000000-0000-0000-0000-000000000001",
 			"webApp":            "ThirdPartyApp",
 			"loginType":         "Certificate",
-			"cvr":               "44341603",
-			"company":           "Styr paa ApS",
-			"userId":            "995172",
-			"tpid":              "5c01496f-ca03-4bdc-88b7-114f8277ea42",
+			"cvr":               "12345678",
+			"company":           "Test Company ApS",
+			"userId":            "123456",
+			"tpid":              "00000000-0000-0000-0000-000000000002",
 			"roles":             "ReadPrivate, ReadBusiness",
 			"iss":               "Energinet",
 			"aud":               "Energinet",
 			"exp":               expiry.Unix(),
-			claimGivenName:      "Christian Silas Skjerning",
-			claimNameIdentifier: "EIA:c004d233-710c-46e3-a9fa-4d787a9e0052",
+			claimGivenName:      "Test User",
+			claimNameIdentifier: "EIA:00000000-0000-0000-0000-000000000003",
 		}))
 
 		require.NoError(t, err)
 		assert.Equal(t, "THIRDPARTYAPI_Refresh", claims.TokenType)
-		assert.Equal(t, "christian local testing", claims.TokenName)
-		assert.Equal(t, "6ad87f99-d536-41a2-9722-622e94822fba", claims.TokenID)
-		assert.Equal(t, "Christian Silas Skjerning", claims.Name)
-		assert.Equal(t, "EIA:c004d233-710c-46e3-a9fa-4d787a9e0052", claims.Subject)
-		assert.Equal(t, "Styr paa ApS", claims.Company)
-		assert.Equal(t, "44341603", claims.CVR)
-		assert.Equal(t, "995172", claims.UserID)
-		assert.Equal(t, "5c01496f-ca03-4bdc-88b7-114f8277ea42", claims.ThirdPartyID)
+		assert.Equal(t, "example", claims.TokenName)
+		assert.Equal(t, "00000000-0000-0000-0000-000000000001", claims.TokenID)
+		assert.Equal(t, "Test User", claims.Name)
+		assert.Equal(t, "EIA:00000000-0000-0000-0000-000000000003", claims.Subject)
+		assert.Equal(t, "Test Company ApS", claims.Company)
+		assert.Equal(t, "12345678", claims.CVR)
+		assert.Equal(t, "123456", claims.UserID)
+		assert.Equal(t, "00000000-0000-0000-0000-000000000002", claims.ThirdPartyID)
 		assert.Equal(t, []string{"ReadPrivate", "ReadBusiness"}, claims.Roles)
 		assert.True(t, claims.ExpiresAt.Equal(expiry))
 

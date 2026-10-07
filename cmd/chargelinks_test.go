@@ -35,7 +35,7 @@ func TestChargeLinksCmdSendsCopenhagenMidnight(t *testing.T) {
 			output = io.Discard
 			defer func() { output = oldOutput }()
 
-			_, err := execute(t, api, "charge-links", "571313174002485069",
+			_, err := execute(t, api, "charge-links", "571313000000000003",
 				"--from", "2026-01-01", "--to", "2026-07-01", "--token", "dummy")
 
 			require.NoError(t, err)

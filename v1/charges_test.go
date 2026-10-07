@@ -117,11 +117,11 @@ func TestGetChargesPriceID(t *testing.T) {
 	httpmock.ActivateNonDefault(mockResty.GetClient())
 	defer httpmock.DeactivateAndReset()
 
-	meteringPointIDs := []string{"571313113162842251"}
+	meteringPointIDs := []string{"571313180100000001"}
 
 	// Trimmed from a live /meteringpoint/getcharges response
 	mockResult := `{
-		"meteringPointId": "571313113162842251",
+		"meteringPointId": "571313180100000001",
 		"subscriptions": [
 			{
 				"price": 28.122861,

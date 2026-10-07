@@ -34,10 +34,10 @@ func TestRetiredRelationCommands(t *testing.T) {
 	clientInstance = &retiredRelationsClient{t: t}
 	defer func() { clientInstance = nil }()
 
-	_, err := execute(t, "customer", "add-relation-by-code", "571313174002485069", "ABCD1234", "--token", "dummy")
+	_, err := execute(t, "customer", "add-relation-by-code", "571313000000000003", "ABCD1234", "--token", "dummy")
 	require.ErrorIs(t, err, eloverblik.ErrorEndpointRetired)
 
-	_, err = execute(t, "customer", "delete-relation", "571313174002485069", "--token", "dummy")
+	_, err = execute(t, "customer", "delete-relation", "571313000000000003", "--token", "dummy")
 	require.ErrorIs(t, err, eloverblik.ErrorEndpointRetired)
 
 	help, err := execute(t, "--help")

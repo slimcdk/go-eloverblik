@@ -274,12 +274,12 @@ func TestGetMeteringPointDetailsFullPayload(t *testing.T) {
 		"result": [
 			{
 				"result": {
-					"meteringPointId": "571313113162842251",
+					"meteringPointId": "571313180100000001",
 					"parentMeteringPointId": "",
 					"typeOfMP": "E17",
 					"energyTimeSeriesMeasureUnit": "KWH",
 					"settlementMethod": "D01",
-					"meterNumber": "30203518",
+					"meterNumber": "10000001",
 					"gridOperatorName": "N1 A/S - 131",
 					"gridOperatorID": "5790001089030",
 					"gridOperatorID_SchemeAgencyIdentifier": "GLN",
@@ -292,9 +292,9 @@ func TestGetMeteringPointDetailsFullPayload(t *testing.T) {
 					"subTypeOfMP": "D01",
 					"disconnectionType": "D02",
 					"product": "Item8716867000030",
-					"consumerCVR": "42703087",
-					"dataAccessCVR": "42703087",
-					"consumerStartDate": "2025-04-27T22:00:00.000Z",
+					"consumerCVR": "12345678",
+					"dataAccessCVR": "12345678",
+					"consumerStartDate": "2025-06-30T22:00:00.000Z",
 					"meterReadingOccurrence": "PT1H",
 					"meterCounterDigits": "7.0",
 					"meterCounterMultiplyFactor": "1.0",
@@ -307,32 +307,32 @@ func TestGetMeteringPointDetailsFullPayload(t *testing.T) {
 					"taxReduction": "False",
 					"taxSettlementDate": "",
 					"mpRelationType": "",
-					"firstConsumerPartyName": "John Sisk & Son ApS",
+					"firstConsumerPartyName": "Test Customer ApS",
 					"secondConsumerPartyName": "",
 					"protectedName": "False",
-					"occurrence": "2026-07-12T22:00:00.000Z",
+					"occurrence": "2026-06-30T22:00:00.000Z",
 					"meteringPointAlias": "Main meter",
 					"assetType": "D01",
 					"mpAddressWashInstructions": "D01",
-					"darReference": "0a3f5098-ac77-32b8-e044-0003ba298018",
-					"streetCode": "0116",
-					"streetName": "Blichers Alle",
+					"darReference": "00000000-0000-0000-0000-000000000001",
+					"streetCode": "0001",
+					"streetName": "Testvej",
 					"buildingNumber": "1",
-					"postcode": "8830",
-					"cityName": "Tjele",
-					"citySubDivisionName": "Foulum",
-					"municipalityCode": "791",
+					"postcode": "8000",
+					"cityName": "Aarhus C",
+					"citySubDivisionName": "Testby",
+					"municipalityCode": "751",
 					"contactAddresses": [
 						{
-							"contactName1": "John Sisk & Son ApS",
+							"contactName1": "Test Customer ApS",
 							"addressCode": "D01",
-							"streetName": "Ørestads Boulevard",
-							"buildingNumber": "73",
-							"postcode": "2300",
-							"cityName": "København S",
+							"streetName": "Prøvevej",
+							"buildingNumber": "2",
+							"postcode": "8000",
+							"cityName": "Aarhus C",
 							"countryName": "DK",
-							"contactPhoneNumber": "00353873349334",
-							"contactEmailAddress": "T.Kelly@SISK.ie",
+							"contactPhoneNumber": "004512345678",
+							"contactEmailAddress": "contact@example.com",
 							"attention": "Accounts payable",
 							"postBox": "1234",
 							"protectedAddress": "False"
@@ -340,18 +340,18 @@ func TestGetMeteringPointDetailsFullPayload(t *testing.T) {
 					],
 					"childMeteringPoints": [
 						{
-							"parentMeteringPointId": "571313113162842251",
-							"meteringPointId": "571313113162842268",
+							"parentMeteringPointId": "571313180100000001",
+							"meteringPointId": "571313180100000002",
 							"typeOfMP": "D01",
 							"meterReadingOccurrence": "PT1H",
-							"meterNumber": "30203519"
+							"meterNumber": "10000002"
 						}
 					]
 				},
 				"success": true,
 				"errorCode": 10000,
 				"errorText": "NoError",
-				"id": "571313113162842251"
+				"id": "571313180100000001"
 			}
 		]
 	}`
@@ -363,7 +363,7 @@ func TestGetMeteringPointDetailsFullPayload(t *testing.T) {
 		},
 	)
 
-	details, err := c.GetMeteringPointDetails([]string{"571313113162842251"})
+	details, err := c.GetMeteringPointDetails([]string{"571313180100000001"})
 
 	require.NoError(t, err)
 	if !assert.Len(t, details, 1) {
@@ -376,14 +376,14 @@ func TestGetMeteringPointDetailsFullPayload(t *testing.T) {
 	assert.Equal(t, "GLN", detail.GridOperatorIDSchemeAgencyID)
 	assert.Equal(t, "D01", detail.AssetType)
 	assert.Equal(t, "D01", detail.MpAddressWashInstructions)
-	assert.Equal(t, "0a3f5098-ac77-32b8-e044-0003ba298018", detail.DarReference)
+	assert.Equal(t, "00000000-0000-0000-0000-000000000001", detail.DarReference)
 	assert.Equal(t, "Main meter", detail.MeteringPointAlias)
 	assert.Equal(t, "False", detail.ProtectedName)
 	assert.Equal(t, "5790000000001", detail.BalanceSupplierID)
 	assert.Equal(t, "GLN", detail.BalanceSupplierIDSchemeAgencyID)
 
 	// occurrence is a timestamp, not a plain string
-	assert.Equal(t, "2026-07-12T22:00:00Z", detail.Occurrence.UTC().Format(time.RFC3339))
+	assert.Equal(t, "2026-06-30T22:00:00Z", detail.Occurrence.UTC().Format(time.RFC3339))
 
 	// powerLimitKW stays a string, powerLimitKWDecimal is a number
 	assert.Empty(t, detail.PowerLimitKW)
@@ -400,8 +400,8 @@ func TestGetMeteringPointDetailsFullPayload(t *testing.T) {
 	}
 
 	if assert.Len(t, detail.ChildMeteringPoints, 1) {
-		assert.Equal(t, "571313113162842268", detail.ChildMeteringPoints[0].MeteringPointID)
-		assert.Equal(t, "30203519", detail.ChildMeteringPoints[0].MeterNumber)
+		assert.Equal(t, "571313180100000002", detail.ChildMeteringPoints[0].MeteringPointID)
+		assert.Equal(t, "10000002", detail.ChildMeteringPoints[0].MeterNumber)
 	}
 }
 
@@ -425,7 +425,7 @@ func TestGetMeteringPointDetailsNullPowerLimit(t *testing.T) {
 				"result": [
 					{
 						"result": {
-							"meteringPointId": "571313113162842251",
+							"meteringPointId": "571313180100000001",
 							"powerLimitKW": "",
 							"powerLimitKWDecimal": null,
 							"occurrence": "",
@@ -441,7 +441,7 @@ func TestGetMeteringPointDetailsNullPowerLimit(t *testing.T) {
 			return resp, nil
 		})
 
-	details, err := c.GetMeteringPointDetails([]string{"571313113162842251"})
+	details, err := c.GetMeteringPointDetails([]string{"571313180100000001"})
 
 	require.NoError(t, err)
 	if !assert.Len(t, details, 1) {

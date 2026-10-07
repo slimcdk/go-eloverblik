@@ -32,7 +32,7 @@ type TokenClaims struct {
 
 	// Name is the name of the person the token was issued to.
 	Name string `json:"name,omitempty"`
-	// Subject identifies the token owner, e.g. "EIA:c004d233-...".
+	// Subject identifies the token owner, e.g. "EIA:" followed by a UUID.
 	Subject string `json:"subject,omitempty"`
 
 	Company string `json:"company,omitempty"`

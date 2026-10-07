@@ -23,7 +23,7 @@ func (nopCloser) Close() error { return nil }
 func TestCsvToJSON(t *testing.T) {
 	t.Run("converts simple CSV to JSON", func(t *testing.T) {
 		// CSV with BOM (U+FEFF) at the start, as Eloverblik sends it
-		csvData := "\uFEFFMålepunktsID;Fra_dato;Til_dato;Mængde\n571313155411053087;01-02-2026 00:00:00;01-02-2026 01:00:00;0,198\n571313155411053087;01-02-2026 01:00:00;01-02-2026 02:00:00;0,196"
+		csvData := "\uFEFFMålepunktsID;Fra_dato;Til_dato;Mængde\n571313000000000001;01-02-2026 00:00:00;01-02-2026 01:00:00;0,198\n571313000000000001;01-02-2026 01:00:00;01-02-2026 02:00:00;0,196"
 		stream := nopCloser{strings.NewReader(csvData)}
 
 		// Capture stdout
@@ -42,13 +42,13 @@ func TestCsvToJSON(t *testing.T) {
 		assert.Len(t, records, 2)
 
 		// Check first record (the BOM is not part of the first header)
-		assert.Equal(t, "571313155411053087", records[0]["MålepunktsID"])
+		assert.Equal(t, "571313000000000001", records[0]["MålepunktsID"])
 		assert.Equal(t, "01-02-2026 00:00:00", records[0]["Fra_dato"])
 		assert.Equal(t, "01-02-2026 01:00:00", records[0]["Til_dato"])
 		assert.Equal(t, "0,198", records[0]["Mængde"])
 
 		// Check second record
-		assert.Equal(t, "571313155411053087", records[1]["MålepunktsID"])
+		assert.Equal(t, "571313000000000001", records[1]["MålepunktsID"])
 		assert.Equal(t, "0,196", records[1]["Mængde"])
 	})
 
@@ -171,13 +171,13 @@ func TestOutputStream(t *testing.T) {
 
 func TestMeteringPointArgs(t *testing.T) {
 	t.Run("accepts valid metering point IDs", func(t *testing.T) {
-		args := []string{"571313155411053087"}
+		args := []string{"571313000000000001"}
 		err := meteringPointArgs(nil, args)
 		assert.NoError(t, err)
 	})
 
 	t.Run("accepts multiple valid IDs", func(t *testing.T) {
-		args := []string{"571313155411053087", "571313155411782079"}
+		args := []string{"571313000000000001", "571313000000000002"}
 		err := meteringPointArgs(nil, args)
 		assert.NoError(t, err)
 	})
@@ -190,14 +190,14 @@ func TestMeteringPointArgs(t *testing.T) {
 	})
 
 	t.Run("rejects non-numeric IDs", func(t *testing.T) {
-		args := []string{"57131315541105308a"}
+		args := []string{"57131300000000000a"}
 		err := meteringPointArgs(nil, args)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid id")
 	})
 
 	// An ID is 18 digits, not a number: a sign must not pass for one.
-	for _, id := range []string{"+57131315541105308", "-57131315541105308"} {
+	for _, id := range []string{"+57131300000000000", "-57131300000000000"} {
 		t.Run("rejects signed ID "+id, func(t *testing.T) {
 			err := meteringPointArgs(nil, []string{id})
 			require.Error(t, err)
@@ -214,7 +214,7 @@ func TestMeteringPointArgs(t *testing.T) {
 	t.Run("rejects more than 10 IDs", func(t *testing.T) {
 		args := make([]string, 11)
 		for i := range args {
-			args[i] = "571313155411053087"
+			args[i] = "571313000000000001"
 		}
 		err := meteringPointArgs(nil, args)
 		assert.Error(t, err)
@@ -378,7 +378,7 @@ func (m *MockClient) GetChargeLinksWithCharges(meteringPointIDs []string, from, 
 func TestDetailsCmd(t *testing.T) {
 	mock := &MockClient{
 		GetMeteringPointDetailsFunc: func(meteringPointIDs []string) ([]eloverblik.MeteringPointDetailsResponse, error) {
-			assert.Equal(t, []string{"571313174002485069"}, meteringPointIDs)
+			assert.Equal(t, []string{"571313000000000003"}, meteringPointIDs)
 			return []eloverblik.MeteringPointDetailsResponse{{
 				Success: true,
 			}}, nil
@@ -392,7 +392,7 @@ func TestDetailsCmd(t *testing.T) {
 	output = &buf
 	defer func() { output = oldOutput }()
 
-	_, err := execute(t, "customer", "details", "571313174002485069", "--token", "dummy")
+	_, err := execute(t, "customer", "details", "571313000000000003", "--token", "dummy")
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), `"success":true`)
 }
@@ -401,7 +401,7 @@ func TestExportTimeseriesCmd(t *testing.T) {
 	// Mock the customer API for export commands
 	mockCustomer := &MockCustomerClient{}
 	mockCustomer.ExportTimeSeriesFunc = func(meteringPointIDs []string, from, to time.Time, aggregation eloverblik.Aggregation) (io.ReadCloser, error) {
-		assert.Equal(t, []string{"571313174002485069"}, meteringPointIDs)
+		assert.Equal(t, []string{"571313000000000003"}, meteringPointIDs)
 		return io.NopCloser(strings.NewReader("header;value\n2026-01-01;1.23")), nil
 	}
 	clientInstance = mockCustomer
@@ -413,7 +413,7 @@ func TestExportTimeseriesCmd(t *testing.T) {
 	output = &buf
 	defer func() { output = oldOutput }()
 
-	_, err := execute(t, "customer", "export-timeseries", "571313174002485069", "--from", "2026-01-01", "--token", "dummy")
+	_, err := execute(t, "customer", "export-timeseries", "571313000000000003", "--from", "2026-01-01", "--token", "dummy")
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "2026-01-01;1.23")
 }
@@ -421,8 +421,8 @@ func TestExportTimeseriesCmd(t *testing.T) {
 func TestExportMasterdataCmd(t *testing.T) {
 	mockCustomer := &MockCustomerClient{}
 	mockCustomer.ExportMasterdataFunc = func(meteringPointIDs []string) (io.ReadCloser, error) {
-		assert.Equal(t, []string{"571313174002485069"}, meteringPointIDs)
-		return io.NopCloser(strings.NewReader("id;address\n571313174002485069;Some Address")), nil
+		assert.Equal(t, []string{"571313000000000003"}, meteringPointIDs)
+		return io.NopCloser(strings.NewReader("id;address\n571313000000000003;Some Address")), nil
 	}
 	clientInstance = mockCustomer
 	defer func() { clientInstance = nil }()
@@ -432,9 +432,9 @@ func TestExportMasterdataCmd(t *testing.T) {
 	output = &buf
 	defer func() { output = oldOutput }()
 
-	_, err := execute(t, "customer", "export-masterdata", "571313174002485069", "--token", "dummy")
+	_, err := execute(t, "customer", "export-masterdata", "571313000000000003", "--token", "dummy")
 	require.NoError(t, err)
-	assert.Contains(t, buf.String(), "571313174002485069;Some Address")
+	assert.Contains(t, buf.String(), "571313000000000003;Some Address")
 }
 
 // TestExportCmdsFormatJSON covers --format json on the export commands. Eloverblik's CSV
@@ -448,13 +448,13 @@ func TestExportCmdsFormatJSON(t *testing.T) {
 	}{
 		{
 			name: "drops the byte order mark from the first key",
-			csv:  "\uFEFFMålepunktsID;Mængde\n571313174002485069;0,198",
-			want: `[{"MålepunktsID":"571313174002485069","Mængde":"0,198"}]`,
+			csv:  "\uFEFFMålepunktsID;Mængde\n571313000000000003;0,198",
+			want: `[{"MålepunktsID":"571313000000000003","Mængde":"0,198"}]`,
 		},
 		{
 			name: "drops the byte order mark before a quoted header",
-			csv:  "\uFEFF\"MålepunktsID\";\"Mængde\"\n571313174002485069;0,198",
-			want: `[{"MålepunktsID":"571313174002485069","Mængde":"0,198"}]`,
+			csv:  "\uFEFF\"MålepunktsID\";\"Mængde\"\n571313000000000003;0,198",
+			want: `[{"MålepunktsID":"571313000000000003","Mængde":"0,198"}]`,
 		},
 		{
 			name: "prints an empty array for a header without rows",
@@ -481,7 +481,7 @@ func TestExportCmdsFormatJSON(t *testing.T) {
 				output = &buf
 				defer func() { output = oldOutput }()
 
-				args := []string{"customer", command, "571313174002485069", "--format", "json", "--token", "dummy"}
+				args := []string{"customer", command, "571313000000000003", "--format", "json", "--token", "dummy"}
 				if command == "export-timeseries" {
 					args = append(args, "--from", "2026-09-01")
 				}
@@ -497,7 +497,7 @@ func TestExportCmdsFormatJSON(t *testing.T) {
 func TestTimeseriesCmd(t *testing.T) {
 	mock := &MockClient{
 		GetTimeSeriesFunc: func(meteringPointIDs []string, from, to time.Time, aggregation eloverblik.Aggregation) ([]eloverblik.TimeSeries, error) {
-			assert.Equal(t, []string{"571313174002485069"}, meteringPointIDs)
+			assert.Equal(t, []string{"571313000000000003"}, meteringPointIDs)
 			return []eloverblik.TimeSeries{}, nil
 		},
 	}
@@ -509,19 +509,19 @@ func TestTimeseriesCmd(t *testing.T) {
 	output = &buf
 	defer func() { output = oldOutput }()
 
-	_, err := execute(t, "customer", "timeseries", "571313174002485069", "--from", "2026-01-01", "--token", "dummy")
+	_, err := execute(t, "customer", "timeseries", "571313000000000003", "--from", "2026-01-01", "--token", "dummy")
 	require.NoError(t, err)
 	assert.JSONEq(t, `[]`, buf.String())
 
 	// Test with period
 	buf.Reset()
-	_, err = execute(t, "customer", "timeseries", "571313174002485069", "--period", "last_week", "--token", "dummy")
+	_, err = execute(t, "customer", "timeseries", "571313000000000003", "--period", "last_week", "--token", "dummy")
 	require.NoError(t, err)
 	assert.JSONEq(t, `[]`, buf.String())
 
 	// Test mutually exclusive flags
 	buf.Reset()
-	_, err = execute(t, "customer", "timeseries", "571313174002485069", "--period", "last_week", "--from", "2026-01-01", "--token", "dummy")
+	_, err = execute(t, "customer", "timeseries", "571313000000000003", "--period", "last_week", "--from", "2026-01-01", "--token", "dummy")
 	assert.Error(t, err)
 }
 
@@ -552,12 +552,12 @@ func TestTimeseriesCmdFlattenFailedMeteringPoint(t *testing.T) {
 	mock := &MockClient{
 		GetTimeSeriesFunc: func(meteringPointIDs []string, from, to time.Time, aggregation eloverblik.Aggregation) ([]eloverblik.TimeSeries, error) {
 			return []eloverblik.TimeSeries{
-				timeSeriesResult("571313174002485069", day, 7.5),
+				timeSeriesResult("571313000000000003", day, 7.5),
 				{
 					Success:   false,
 					ErrorCode: 30018,
 					ErrorText: "MeteringPointDataNotAvailableForTheRequestedPeriod",
-					ID:        "571313174002485070",
+					ID:        "571313000000000004",
 				},
 			}, nil
 		},
@@ -570,16 +570,16 @@ func TestTimeseriesCmdFlattenFailedMeteringPoint(t *testing.T) {
 	output, warningOutput = &stdout, &stderr
 	defer func() { output, warningOutput = oldOutput, oldWarnings }()
 
-	_, err := execute(t, "customer", "timeseries", "571313174002485069", "571313174002485070",
+	_, err := execute(t, "customer", "timeseries", "571313000000000003", "571313000000000004",
 		"--from", "2026-09-01", "--to", "2026-09-02", "--aggregation", "Day", "--flatten", "--token", "dummy")
 
 	assert.NoError(t, err)
 
 	var flattened map[string][]eloverblik.FlatTimeSeriesPoint
 	assert.NoError(t, json.Unmarshal(stdout.Bytes(), &flattened))
-	assert.Len(t, flattened["571313174002485069"], 1)
-	assert.NotContains(t, flattened, "571313174002485070")
-	assert.Contains(t, stderr.String(), "metering point 571313174002485070: 30018 MeteringPointDataNotAvailableForTheRequestedPeriod")
+	assert.Len(t, flattened["571313000000000003"], 1)
+	assert.NotContains(t, flattened, "571313000000000004")
+	assert.Contains(t, stderr.String(), "metering point 571313000000000004: 30018 MeteringPointDataNotAvailableForTheRequestedPeriod")
 }
 
 // TestTimeseriesCmdFlattenRepeatedMeteringPoint covers a response that holds the same
@@ -591,8 +591,8 @@ func TestTimeseriesCmdFlattenRepeatedMeteringPoint(t *testing.T) {
 	mock := &MockClient{
 		GetTimeSeriesFunc: func(meteringPointIDs []string, from, to time.Time, aggregation eloverblik.Aggregation) ([]eloverblik.TimeSeries, error) {
 			return []eloverblik.TimeSeries{
-				timeSeriesResult("571313174002485069", first, 7.5),
-				timeSeriesResult("571313174002485069", second, 8.5),
+				timeSeriesResult("571313000000000003", first, 7.5),
+				timeSeriesResult("571313000000000003", second, 8.5),
 			}, nil
 		},
 	}
@@ -604,16 +604,16 @@ func TestTimeseriesCmdFlattenRepeatedMeteringPoint(t *testing.T) {
 	output = &stdout
 	defer func() { output = oldOutput }()
 
-	_, err := execute(t, "customer", "timeseries", "571313174002485069",
+	_, err := execute(t, "customer", "timeseries", "571313000000000003",
 		"--from", "2026-09-01", "--to", "2026-09-03", "--aggregation", "Day", "--flatten", "--token", "dummy")
 
 	assert.NoError(t, err)
 
 	var flattened map[string][]eloverblik.FlatTimeSeriesPoint
 	assert.NoError(t, json.Unmarshal(stdout.Bytes(), &flattened))
-	if assert.Len(t, flattened["571313174002485069"], 2) {
-		assert.InDelta(t, 7.5, flattened["571313174002485069"][0].Measurement, 1e-9)
-		assert.InDelta(t, 8.5, flattened["571313174002485069"][1].Measurement, 1e-9)
+	if assert.Len(t, flattened["571313000000000003"], 2) {
+		assert.InDelta(t, 7.5, flattened["571313000000000003"][0].Measurement, 1e-9)
+		assert.InDelta(t, 8.5, flattened["571313000000000003"][1].Measurement, 1e-9)
 	}
 }
 
@@ -646,7 +646,7 @@ func TestTimeseriesCmdsSendCalendarDates(t *testing.T) {
 			output = io.Discard
 			defer func() { output = oldOutput }()
 
-			_, err := execute(t, "customer", command, "571313174002485069",
+			_, err := execute(t, "customer", command, "571313000000000003",
 				"--from", "2026-01-01", "--to", "2026-07-01", "--token", "dummy")
 
 			require.NoError(t, err)

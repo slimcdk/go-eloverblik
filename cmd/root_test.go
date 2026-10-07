@@ -281,10 +281,10 @@ func TestCommandsRejectMissingToken(t *testing.T) {
 		name string
 		args []string
 	}{
-		{"customer", []string{"customer", "details", "571313174002485069"}},
-		{"thirdparty", []string{"thirdparty", "details", "571313174002485069"}},
+		{"customer", []string{"customer", "details", "571313000000000003"}},
+		{"thirdparty", []string{"thirdparty", "details", "571313000000000003"}},
 		{"token", []string{"token"}},
-		{"customer with an empty token", []string{"customer", "details", "571313174002485069", "--token", ""}},
+		{"customer with an empty token", []string{"customer", "details", "571313000000000003", "--token", ""}},
 		{"token with an empty token", []string{"token", "--token", ""}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
