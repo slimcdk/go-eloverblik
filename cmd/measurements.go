@@ -26,8 +26,15 @@ var output io.Writer = os.Stdout
 // stderr so stdout stays clean, parseable JSON.
 var warningOutput io.Writer = os.Stderr
 
-// clock is what parseDate reads the current time from (configurable for testing).
+// clock is what parseDate and today read the current time from (configurable for testing).
 var clock = time.Now
+
+// today is the date the --to flags default to: the current date in Copenhagen, the zone
+// parseDate reads it back in, whatever the host's own zone. Around midnight the host's own
+// date can be a day behind or ahead of it.
+func today() string {
+	return clock().In(copenhagen).Format(time.DateOnly)
+}
 
 // copenhagen is the zone parseDate reads dates in. The v1 package embeds time/tzdata, so
 // it loads on every platform, Windows and minimal container images included.
@@ -259,7 +266,7 @@ func newTimeseriesCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().String("from", "", "start date (YYYY-MM-DD, now, now-30d/w/m/y)")
-	cmd.Flags().String("to", time.Now().Format(time.DateOnly), "end date, exclusive (YYYY-MM-DD, now, now-30d/w/m/y, defaults to today)")
+	cmd.Flags().String("to", today(), "end date, exclusive (YYYY-MM-DD, now, now-30d/w/m/y, defaults to today)")
 	cmd.Flags().String("period", "", "predefined period (yesterday, last_week, etc.)")
 	cmd.Flags().String("aggregation", string(eloverblik.Hour), "aggregation level (Actual, Quarter, Hour, Day, Month, Year)")
 	cmd.Flags().Bool("flatten", false, "simplify the data series")
@@ -319,7 +326,7 @@ func newExportTimeseriesCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().String("from", "", "start date (YYYY-MM-DD, now, now-30d/w/m/y)")
-	cmd.Flags().String("to", time.Now().Format(time.DateOnly), "end date, exclusive (YYYY-MM-DD, now, now-30d/w/m/y, defaults to today)")
+	cmd.Flags().String("to", today(), "end date, exclusive (YYYY-MM-DD, now, now-30d/w/m/y, defaults to today)")
 	cmd.Flags().String("period", "", "predefined period (yesterday, last_week, etc.)")
 	cmd.Flags().String("aggregation", string(eloverblik.Hour), "aggregation level (Actual, Quarter, Hour, Day, Month, Year)")
 	cmd.Flags().String("format", "csv", "output format (csv, json)")

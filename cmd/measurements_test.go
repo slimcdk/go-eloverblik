@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/slimcdk/go-eloverblik/v1"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -268,6 +269,12 @@ func TestParseDate(t *testing.T) {
 			got, err := parseDate(tc.input)
 			require.NoError(t, err)
 			assert.Equal(t, zoned(tc.want), zoned(got))
+			// The offset and the abbreviation alone cannot tell Copenhagen from the host's
+			// zone on a Danish host, where time.Local renders the same. Its name cannot
+			// either when TZ=Europe/Copenhagen, which names time.Local after the zone, so
+			// the host's zone is ruled out by identity.
+			assert.Equal(t, "Europe/Copenhagen", got.Location().String())
+			assert.NotSame(t, time.Local, got.Location(), "read in the host's zone")
 		})
 	}
 
@@ -275,6 +282,27 @@ func TestParseDate(t *testing.T) {
 		t.Run(input, func(t *testing.T) {
 			_, err := parseDate(input)
 			assert.Error(t, err)
+		})
+	}
+}
+
+// TestToDefaultsToTodayInCopenhagen covers the default of --to, which is today's date. It
+// was today in the host's zone, while parseDate reads the date as midnight in Copenhagen,
+// so around midnight a host in another zone asked for a range that ended a day early or a
+// day late. The clock is pinned to 00:30 on 30 March 2026 in Copenhagen, still 29 March in
+// UTC.
+func TestToDefaultsToTodayInCopenhagen(t *testing.T) {
+	stubClock(t, time.Date(2026, 3, 29, 22, 30, 0, 0, time.UTC))
+
+	for name, build := range map[string]func() *cobra.Command{
+		"timeseries":        newTimeseriesCmd,
+		"export-timeseries": newExportTimeseriesCmd,
+		"charge-links":      newChargeLinksCmd,
+	} {
+		t.Run(name, func(t *testing.T) {
+			to := build().Flags().Lookup("to")
+			require.NotNil(t, to)
+			assert.Equal(t, "2026-03-30", to.DefValue)
 		})
 	}
 }

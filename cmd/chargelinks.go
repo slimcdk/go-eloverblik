@@ -78,7 +78,7 @@ func newChargeLinksCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().String("from", "", "start date (YYYY-MM-DD, now, now-30d/w/m/y)")
-	cmd.Flags().String("to", time.Now().Format(time.DateOnly), "end date, exclusive (YYYY-MM-DD, now, now-30d/w/m/y, defaults to today)")
+	cmd.Flags().String("to", today(), "end date, exclusive (YYYY-MM-DD, now, now-30d/w/m/y, defaults to today)")
 	cmd.Flags().String("period", "", "predefined period (yesterday, last_week, etc.)")
 	return cmd
 }
