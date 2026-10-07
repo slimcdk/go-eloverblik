@@ -968,6 +968,13 @@ Components:
     < Api-Supported-Versions: 1.0
     < Content-Type: application/json; charset=utf-8
     < Date: Mon, 01 Jan 2024 00:00:00 GMT
+
+--version, -v (root command only):
+  purpose: print "go-eloverblik version <version>" and exit, without a token
+  version: the release's tag for a release binary (set at link time) and for
+           go install ...@vX.Y.Z (read from the build info); a pseudo-version for a build
+           from a git checkout, with +dirty when it has uncommitted changes; "(devel)" when
+           the binary carries no version at all
 ```
 
 ### Help Output (`go-eloverblik --help`)
@@ -1070,6 +1077,7 @@ Flags:
   -h, --help                     help for go-eloverblik
       --print-response-headers   Print HTTP response headers from the Eloverblik API to stderr
       --token string             Eloverblik refresh token, created at eloverblik.dk (required by the customer, thirdparty and token commands)
+  -v, --version                  version for go-eloverblik
 
 Use "go-eloverblik [command] --help" for more information about a command.
 ```
