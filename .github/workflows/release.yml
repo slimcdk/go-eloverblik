@@ -41,8 +41,19 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Verify module tidiness
+      # Fails if a module zip or directory already in the module cache, which
+      # setup-go restores from the Actions cache, was changed after download, or
+      # if a module's go.mod does not match go.sum. On a cache miss it checks no
+      # module contents. It does not compare go.mod or go.sum with the code: the
+      # next step does that.
+      - name: Verify dependencies
         run: go mod verify
+
+      # Fails, and prints the diff, if go.mod/go.sum are not what `go mod tidy`
+      # would write, so a tag with an untidy module cannot ship. The same check as
+      # the tidy job in test.yml.
+      - name: Check go mod tidy
+        run: go mod tidy -diff
 
       - name: Test
         run: go test -race ./...

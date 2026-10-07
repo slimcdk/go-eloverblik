@@ -12,9 +12,18 @@ project_name: go-eloverblik
 
 before:
   hooks:
-    # Fail early on a dirty/incomplete module graph rather than halfway through
-    # the build matrix. Deliberately not "go mod tidy": a release must build the
-    # code as tagged, never rewrite go.mod/go.sum underneath itself.
+    # Fail before the build matrix starts rather than halfway through it:
+    #   go mod tidy -diff  go.mod/go.sum are not what `go mod tidy` would write
+    #                      (a missing go.sum entry, a require nothing uses); it
+    #                      prints the diff. It runs first: go mod download would
+    #                      quietly add a missing go.sum line before it could see it.
+    #   go mod download    a module go.mod requires cannot be downloaded, or does
+    #                      not match its hash in go.sum.
+    #   go mod verify      a module in the local module cache was changed after
+    #                      it was downloaded.
+    # -diff only reports. Deliberately not a plain "go mod tidy": a release must
+    # build the code as tagged, never rewrite go.mod/go.sum underneath itself.
+    - go mod tidy -diff
     - go mod download
     - go mod verify
 
