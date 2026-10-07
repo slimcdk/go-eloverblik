@@ -239,6 +239,57 @@ func apiErrorFromBody(body apiErrorBody, statusCode int) error {
 	return apiError(body.Message, statusCode)
 }
 
+// Err reports the outcome of a single metering point in a batch response, nil when it
+// succeeded. A batch call only returns an error when the request fails as a whole; a
+// metering point that fails on its own, e.g. with 30018 because the period lies before it
+// was registered in DataHub, is reported in its own result and nowhere else.
+//
+// The error unwraps to the sentinel of its code, so errors.Is works as it does for the
+// call itself. A code the client does not know yet is still an error, just one that
+// matches no sentinel:
+//
+//	for _, ts := range timeSeries {
+//		if err := ts.Err(); err != nil {
+//			log.Printf("skipping: %v", err)
+//			continue
+//		}
+//		process(ts.Flatten())
+//	}
+func (s StatusResponse) Err() error {
+	if s.Success {
+		return nil
+	}
+
+	var sentinel error
+	if s.ErrorCode > 0 {
+		sentinel = apiErrorMap[uint64(s.ErrorCode)]
+	}
+
+	return &itemError{
+		meteringPointID: s.ID,
+		code:            s.ErrorCode,
+		text:            s.ErrorText,
+		err:             sentinel,
+	}
+}
+
+// itemError is the failure of one metering point in a batch response. It unwraps to the
+// sentinel of its code, nil for a code the client does not know.
+type itemError struct {
+	meteringPointID string
+	code            int
+	text            string
+	err             error
+}
+
+// Error renders the failure in one line, e.g.
+// "eloverblik: metering point 571313180100000002: 30018 MeteringPointDataNotAvailableForTheRequestedPeriod".
+func (e *itemError) Error() string {
+	return fmt.Sprintf("eloverblik: metering point %s: %d %s", e.meteringPointID, e.code, e.text)
+}
+
+func (e *itemError) Unwrap() error { return e.err }
+
 func apiError(msg string, statusCode int) error {
 
 	// Not every failure carries an API error message: a 429 from the rate limiter or a
@@ -296,7 +347,7 @@ var (
 	ErrorFromDateIsGreaterThanToday                     error = errors.New("requested from date is after today")                                            // status code 400 - api code 30000
 	ErrorFromDateIsGreaterThanToDate                    error = errors.New("period not allowed, ToDate is before FromDate")                                 // status code 400 - api code 30001
 	ErrorToDateCanNotBeEqualToFromDate                  error = errors.New("period not allowed, ToDate is equal to FromDat")                                // status code 400 - api code 30002
-	ErrorToDateIsGreaterThanToday                       error = errors.New("requested to date is after today")                                              // status code 400 - api code 30003
+	ErrorToDateIsGreaterThanToday                       error = errors.New("requested to date is after tomorrow")                                           // status code 400 - api code 30003
 	ErrorInvalidDateFormat                              error = errors.New("invalid date format in request")                                                // status code 400 - api code 30004
 	ErrorInvalidRequestParameters                       error = errors.New("a request parameter is invalid")                                                // status code 400 - api code 30005
 	ErrorAccessToMeteringPointDenied                    error = errors.New("access to meterpoint denied")                                                   // status code 401 - api code 30006
@@ -306,7 +357,6 @@ var (
 	ErrorDateNotCoveredByAuthorization                  error = errors.New("requested date not covered by Authorization")                                   // status code 401 - api code 30010
 	ErrorAggrationNotValid                              error = errors.New("requested data aggregation is not supported")                                   // status code 406 - api code 30011
 	ErrorRequestToHuge                                  error = errors.New("request size too large")                                                        // status code 413 - api code 30012
-	ErrorNumberOfDaysExcceded                           error = errors.New("request period exceeds the maximum number of days (730)")                       // status code 400 - api code 30014
 	ErrorInvalidCVR                                     error = errors.New("CVR is invalid")                                                                // status code 403 - api code 40000
 	ErrorInvalidIncludeFutureMeteringPointsRelatedToCVR error = errors.New("requested future meteringpoints related to CVR are invalid")                    // status code 404 - api code 40001
 	ErrorInvalidMasterDataFields                        error = errors.New("invalid master data fields")                                                    // status code 417 - api code 40002
@@ -336,6 +386,21 @@ var (
 	ErrorThirdPartyAlreadyExistButIsInactive            error = errors.New("third party already exist but is inactive")                                     // status code 401 - api code 60005
 	ErrorThirdPartyAlreadyExistButIsRevoked             error = errors.New("third party already exist but access is revoked")                               // status code 401 - api code 60006
 	ErrorTooManyRequests                                error = errors.New("too many requests")                                                             // status code 429
+
+	// The time series codes Energinet documented alongside DataHub 3.0. 30017 fails the request
+	// as a whole; 30015, 30016 and 30018 are reported per metering point, inside an otherwise
+	// successful response; 30014 arrives either way.
+	ErrorPeriodNotAllowed                                   error = errors.New("period not allowed, longer than 730 days or ToDate not after FromDate") // status code 400 or per metering point - api code 30014
+	ErrorNoDataAvailable                                    error = errors.New("no data available for the requested period")                            // per metering point - api code 30015
+	ErrorRelationHasExpired                                 error = errors.New("relation expired before or during the requested period")                // per metering point - api code 30016
+	ErrorToDateCutOff                                       error = errors.New("requested to date is on or before the oldest supported date")           // status code 400 - api code 30017
+	ErrorMeteringPointDataNotAvailableForTheRequestedPeriod error = errors.New("metering point data is not available for the requested period")         // per metering point - api code 30018
+
+	// ErrorNumberOfDaysExcceded is the former name of ErrorPeriodNotAllowed, and the same error.
+	//
+	// Deprecated: Energinet names 30014 PeriodNotAllowed, and a period longer than 730 days is
+	// only one of the two reasons the API rejects a period with it. Use ErrorPeriodNotAllowed.
+	ErrorNumberOfDaysExcceded error = ErrorPeriodNotAllowed
 )
 
 var apiErrorMap = map[uint64]error{
@@ -372,7 +437,11 @@ var apiErrorMap = map[uint64]error{
 	30010: ErrorDateNotCoveredByAuthorization,
 	30011: ErrorAggrationNotValid,
 	30012: ErrorRequestToHuge,
-	30014: ErrorNumberOfDaysExcceded,
+	30014: ErrorPeriodNotAllowed,
+	30015: ErrorNoDataAvailable,
+	30016: ErrorRelationHasExpired,
+	30017: ErrorToDateCutOff,
+	30018: ErrorMeteringPointDataNotAvailableForTheRequestedPeriod,
 	40000: ErrorInvalidCVR,
 	40001: ErrorInvalidIncludeFutureMeteringPointsRelatedToCVR,
 	40002: ErrorInvalidMasterDataFields,
