@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -61,11 +62,24 @@ func isMeteringPointID(id string) bool {
 	return len(id) == 18 && !strings.ContainsFunc(id, func(r rune) bool { return r < '0' || r > '9' })
 }
 
-// csvToJSON converts a CSV stream to JSON format
+// csvToJSON converts a CSV stream to a JSON array with one object per row, keyed by the
+// header. Eloverblik's CSV starts with a UTF-8 byte order mark, which is dropped, so the
+// first key is the header's own name; a CSV with a header and no rows gives [].
 func csvToJSON(stream io.ReadCloser) error {
 	defer func() { _ = stream.Close() }()
 
-	reader := csv.NewReader(stream)
+	// Drop the byte order mark before the CSV reader sees it: left in the first field, it
+	// would also keep a quoted header from being read as quoted.
+	body := bufio.NewReader(stream)
+	mark, _, err := body.ReadRune()
+	if err != nil {
+		return fmt.Errorf("failed to read CSV headers: %w", err)
+	}
+	if mark != '\uFEFF' {
+		_ = body.UnreadRune()
+	}
+
+	reader := csv.NewReader(body)
 	reader.Comma = ';' // Eloverblik CSV uses semicolon delimiter
 	reader.LazyQuotes = true
 	reader.TrimLeadingSpace = true
@@ -77,7 +91,8 @@ func csvToJSON(stream io.ReadCloser) error {
 		return fmt.Errorf("failed to read CSV headers: %w", err)
 	}
 
-	var records []map[string]string
+	// Not nil: no rows encode as [], not null
+	records := []map[string]string{}
 
 	// Read all data rows
 	for {

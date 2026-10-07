@@ -21,7 +21,7 @@ func (nopCloser) Close() error { return nil }
 
 func TestCsvToJSON(t *testing.T) {
 	t.Run("converts simple CSV to JSON", func(t *testing.T) {
-		// CSV with BOM (U+FEFF) at the start
+		// CSV with BOM (U+FEFF) at the start, as Eloverblik sends it
 		csvData := "\uFEFFMålepunktsID;Fra_dato;Til_dato;Mængde\n571313155411053087;01-02-2026 00:00:00;01-02-2026 01:00:00;0,198\n571313155411053087;01-02-2026 01:00:00;01-02-2026 02:00:00;0,196"
 		stream := nopCloser{strings.NewReader(csvData)}
 
@@ -40,14 +40,14 @@ func TestCsvToJSON(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, records, 2)
 
-		// Check first record (BOM will be in the first header)
-		assert.Equal(t, "571313155411053087", records[0]["\uFEFFMålepunktsID"])
+		// Check first record (the BOM is not part of the first header)
+		assert.Equal(t, "571313155411053087", records[0]["MålepunktsID"])
 		assert.Equal(t, "01-02-2026 00:00:00", records[0]["Fra_dato"])
 		assert.Equal(t, "01-02-2026 01:00:00", records[0]["Til_dato"])
 		assert.Equal(t, "0,198", records[0]["Mængde"])
 
 		// Check second record
-		assert.Equal(t, "571313155411053087", records[1]["\uFEFFMålepunktsID"])
+		assert.Equal(t, "571313155411053087", records[1]["MålepunktsID"])
 		assert.Equal(t, "0,196", records[1]["Mængde"])
 	})
 
@@ -63,10 +63,8 @@ func TestCsvToJSON(t *testing.T) {
 		err := csvToJSON(stream)
 		require.NoError(t, err)
 
-		var records []map[string]string
-		err = json.Unmarshal(buf.Bytes(), &records)
-		require.NoError(t, err)
-		assert.Empty(t, records)
+		// An empty array, not null: a consumer can iterate the result without a nil check
+		assert.JSONEq(t, `[]`, buf.String())
 	})
 
 	t.Run("handles CSV with special characters", func(t *testing.T) {
@@ -409,6 +407,63 @@ func TestExportMasterdataCmd(t *testing.T) {
 	_, err := execute(t, "customer", "export-masterdata", "571313174002485069", "--token", "dummy")
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "571313174002485069;Some Address")
+}
+
+// TestExportCmdsFormatJSON covers --format json on the export commands. Eloverblik's CSV
+// starts with a UTF-8 byte order mark, which ended up in the first key of every row, and
+// a CSV with a header and no rows printed null instead of an empty array.
+func TestExportCmdsFormatJSON(t *testing.T) {
+	cases := []struct {
+		name string
+		csv  string
+		want string
+	}{
+		{
+			name: "drops the byte order mark from the first key",
+			csv:  "\uFEFFMålepunktsID;Mængde\n571313174002485069;0,198",
+			want: `[{"MålepunktsID":"571313174002485069","Mængde":"0,198"}]`,
+		},
+		{
+			name: "drops the byte order mark before a quoted header",
+			csv:  "\uFEFF\"MålepunktsID\";\"Mængde\"\n571313174002485069;0,198",
+			want: `[{"MålepunktsID":"571313174002485069","Mængde":"0,198"}]`,
+		},
+		{
+			name: "prints an empty array for a header without rows",
+			csv:  "\uFEFFMålepunktsID;Mængde\n",
+			want: `[]`,
+		},
+	}
+
+	for _, command := range []string{"export-timeseries", "export-masterdata"} {
+		for _, tc := range cases {
+			t.Run(command+" "+tc.name, func(t *testing.T) {
+				mock := &MockCustomerClient{}
+				mock.ExportTimeSeriesFunc = func([]string, time.Time, time.Time, eloverblik.Aggregation) (io.ReadCloser, error) {
+					return io.NopCloser(strings.NewReader(tc.csv)), nil
+				}
+				mock.ExportMasterdataFunc = func([]string) (io.ReadCloser, error) {
+					return io.NopCloser(strings.NewReader(tc.csv)), nil
+				}
+				clientInstance = mock
+				defer func() { clientInstance = nil }()
+
+				oldOutput := output
+				var buf bytes.Buffer
+				output = &buf
+				defer func() { output = oldOutput }()
+
+				args := []string{"customer", command, "571313174002485069", "--format", "json", "--token", "dummy"}
+				if command == "export-timeseries" {
+					args = append(args, "--from", "2026-09-01")
+				}
+				_, err := execute(t, args...)
+
+				require.NoError(t, err)
+				assert.JSONEq(t, tc.want, buf.String())
+			})
+		}
+	}
 }
 
 func TestTimeseriesCmd(t *testing.T) {
