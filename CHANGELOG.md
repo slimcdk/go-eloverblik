@@ -17,14 +17,15 @@ that stops compiling is an unkeyed `MeteringPoints{...}` literal, which must now
 `IsMovedOut`. Some results do change for code that compiles unchanged; those come right
 after the Go requirement.
 
-### Requires Go 1.27
+### Requires Go 1.26
 
-The module now requires Go 1.27.1, the current release, up from Go 1.25.6. With the default
-`GOTOOLCHAIN=auto` an older `go` command downloads it by itself; with `GOTOOLCHAIN=local`
-it refuses to build the module.
+The module now requires Go 1.26, the older of the two Go releases the Go team supports, up
+from Go 1.25.6, which it no longer supports. With the default `GOTOOLCHAIN=auto` an older
+`go` command downloads a newer Go by itself; with `GOTOOLCHAIN=local` it refuses to build
+the module.
 
-The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later; those of
-1.3.0 ran on macOS 12 Monterey.
+The release binaries are built with Go 1.27.1, so the macOS ones need macOS 13 Ventura or
+later; those of 1.3.0 ran on macOS 12 Monterey.
 
 ### Behaves differently
 
@@ -268,7 +269,7 @@ The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later;
 - `v1/live_test.go`, behind the `live` build tag, checks the shape of the live API's
   answers with the refresh tokens of whoever runs it by hand. CI never runs it;
   golangci-lint compiles and lints it.
-- The code takes what `go fix` proposes for Go 1.27, and the linters now include errorlint,
+- The code takes what `go fix` proposes for Go 1.26, and the linters now include errorlint,
   testifylint, modernize and gocritic. errorlint found the export errors that formatted a
   transport error instead of wrapping it, listed above.
 - The devcontainer runs Go 1.27.
@@ -276,6 +277,9 @@ The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later;
   linux/arm on an emulated Raspberry Pi Zero CPU), and with `-trimpath` and GOROOT unset,
   so the tests cannot fall back on Go's own zoneinfo.zip. It runs the release build in a
   container without a time zone database. The release gate runs the 32-bit tests too.
+- `go.mod` names Go 1.26.0 as the oldest Go to build the module with, and Go 1.27.1 as
+  the toolchain CI and the release build with. A CI job vets and tests the module on Go
+  1.26.0, with `GOTOOLCHAIN=local`, so nothing newer creeps in.
 
 ## [1.3.0]
 

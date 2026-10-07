@@ -154,12 +154,12 @@ func ExampleParseToken() {
 // is built here the way GetTimeSeries returns it for a metering point whose data does
 // not cover the requested period, inside an otherwise successful response.
 func ExampleStatusResponse_Err() {
-	ts := eloverblik.TimeSeries{
+	ts := eloverblik.TimeSeries{StatusResponse: eloverblik.StatusResponse{
 		Success:   false,
 		ErrorCode: 30018,
 		ErrorText: "MeteringPointDataNotAvailableForTheRequestedPeriod",
 		ID:        "571313180100000002",
-	}
+	}}
 
 	err := ts.Err()
 	fmt.Println(err)

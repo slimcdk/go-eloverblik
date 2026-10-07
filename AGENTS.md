@@ -27,6 +27,7 @@ go vet ./...
 go test -race ./...
 env -u GOROOT -u ZONEINFO go test -count=1 -trimpath ./...
 GOARCH=386 go test ./...
+GOTOOLCHAIN=go1.26.0 go vet ./... && GOTOOLCHAIN=go1.26.0 go test ./...   # the oldest Go
 golangci-lint run --timeout=5m
 go mod tidy -diff                            # must print nothing
 actionlint .github/workflows/*.yml           # when a workflow changes
@@ -46,6 +47,13 @@ again as its gate):
   zoneinfo, Europe/Copenhagen then comes only from the `time/tzdata` import in
   `v1/constvars.go`. On Linux, CI also runs the release build in a busybox container without
   network or zoneinfo; see that step.
+- `go.mod` has two Go lines. `go 1.26.0` is the oldest Go a caller can build the module
+  with: the older of the two releases the Go team supports. Raise it only when that drops
+  out of support or the code needs something newer, and never for a test alone. The
+  `toolchain` line is the Go that CI, `go-version-file` and the release build with; move it
+  to each new release. A job with `GOTOOLCHAIN=local` on Go 1.26.0 vets and tests the
+  module, so a feature the go line does not allow fails there; move its version with the
+  go line.
 - `GOARCH=386` and the ARMv6 run below test the suite as 32-bit code, where `int` is 32 bits.
   Metering point IDs have 18 digits: never parse one into an `int`. Neither run uses `-race`,
   which supports neither architecture.
@@ -61,9 +69,10 @@ again as its gate):
   `--timeout=5m`. The config is in the v2 format, which v1 cannot read. Locally:
   `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0`.
   It runs govet (every analyzer but shadow and fieldalignment) and reports gofmt and
-  goimports differences, which is why `go vet` and `gofmt` are not CI steps of their own.
-  The config sets the `live` build tag, so it also type-checks and lints
-  `v1/live_test.go`, which nothing else compiles. Linting runs no test.
+  goimports differences, which is why `gofmt` is not a CI step of its own and `go vet` is
+  one only in the oldest-Go job. The config sets the `live` build tag, so it also
+  type-checks and lints `v1/live_test.go`, which only that job vets too. Linting runs no
+  test.
   `actionlint` is not run by CI at all.
 - The Build job cross-compiles every shipped target with `go build -v -o /dev/null .`:
   linux, darwin and windows on amd64 and arm64, plus linux/arm with `GOARM=6`.
@@ -71,7 +80,7 @@ again as its gate):
   `govulncheck -show verbose ./...` (locally:
   `go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 -show verbose ./...`). It sets up Go
   `1.27` instead of reading `go.mod`, and Dependabot does not see the govulncheck pin: move
-  both by hand when the Go line in `go.mod` moves.
+  both by hand when the toolchain line in `go.mod` moves.
 
 ## Conventions
 

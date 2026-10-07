@@ -36,7 +36,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          # Track the newest patch release of the Go line declared in go.mod.
+          # Track the newest patch release of the toolchain line in go.mod.
           # govulncheck reports standard library vulnerabilities against the
           # toolchain it runs with, so pinning an exact patch would keep
           # reporting stdlib issues that a newer patch has already fixed.
@@ -45,8 +45,8 @@ jobs:
 
       # Pinned: @latest follows golang.org/x/vuln's own go directive, and a release
       # that requires a newer Go than the line above cannot be built (v1.8.0 requires
-      # Go 1.26). Move the pin together with the Go line in go.mod; Dependabot does
-      # not see versions in a run step, so nothing will do it for you.
+      # Go 1.26). Move the pin together with the toolchain line in go.mod; Dependabot
+      # does not see versions in a run step, so nothing will do it for you.
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
 

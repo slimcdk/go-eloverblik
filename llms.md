@@ -14,6 +14,7 @@ module: github.com/slimcdk/go-eloverblik   # the module root is the CLI (package
 package: eloverblik                        # the identifier the import below binds
 import: github.com/slimcdk/go-eloverblik/v1
 install: go get github.com/slimcdk/go-eloverblik/v1
+go: 1.26 or later (the go line in go.mod; releases are built with the toolchain line, 1.27.1)
 godoc: https://pkg.go.dev/github.com/slimcdk/go-eloverblik/v1 (offline, go doc -all github.com/slimcdk/go-eloverblik/v1)
 cli_help: go-eloverblik --help carries the rules (token, dates, IDs, output); the --help of
   every API command it lists (the customer and thirdparty commands, and token) gives its

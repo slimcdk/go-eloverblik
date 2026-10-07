@@ -380,7 +380,7 @@ func TestDetailsCmd(t *testing.T) {
 		GetMeteringPointDetailsFunc: func(meteringPointIDs []string) ([]eloverblik.MeteringPointDetailsResponse, error) {
 			assert.Equal(t, []string{"571313000000000003"}, meteringPointIDs)
 			return []eloverblik.MeteringPointDetailsResponse{{
-				Success: true,
+				StatusResponse: eloverblik.StatusResponse{Success: true},
 			}}, nil
 		},
 	}
@@ -551,7 +551,7 @@ func timeSeriesResult(meteringPointID string, day time.Time, quantity float64) e
 				}},
 			}},
 		},
-		Success: true, ErrorCode: 10000, ID: meteringPointID,
+		StatusResponse: eloverblik.StatusResponse{Success: true, ErrorCode: 10000, ID: meteringPointID},
 	}
 }
 
@@ -564,12 +564,12 @@ func TestTimeseriesCmdFlattenFailedMeteringPoint(t *testing.T) {
 		GetTimeSeriesFunc: func(meteringPointIDs []string, from, to time.Time, aggregation eloverblik.Aggregation) ([]eloverblik.TimeSeries, error) {
 			return []eloverblik.TimeSeries{
 				timeSeriesResult("571313000000000003", day, 7.5),
-				{
+				{StatusResponse: eloverblik.StatusResponse{
 					Success:   false,
 					ErrorCode: 30018,
 					ErrorText: "MeteringPointDataNotAvailableForTheRequestedPeriod",
 					ID:        "571313000000000004",
-				},
+				}},
 			}, nil
 		},
 	}

@@ -44,6 +44,8 @@ A comprehensive Go client library and CLI tool for the Danish energy data platfo
 
 ## Installation
 
+The CLI and the library need Go 1.26 or later to build; the release binaries need no Go.
+
 ### Using Go Install
 
 ```bash

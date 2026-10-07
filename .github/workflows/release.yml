@@ -36,8 +36,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          # Exactly the toolchain go.mod requires, so the release binaries are
-          # built by the same Go the tests ran on.
+          # The toolchain line of go.mod, so the release binaries are built by the
+          # same Go the tests ran on.
           go-version-file: go.mod
           cache: true
 

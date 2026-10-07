@@ -40,9 +40,9 @@ jobs:
     - name: Check out code
       uses: actions/checkout@v7
 
-    # go-version-file keeps CI on exactly the toolchain go.mod requires, so the
-    # workflow cannot drift from the module's own requirement. setup-go also caches
-    # the module and build caches, keyed on go.sum, so no separate cache step.
+    # go-version-file installs the toolchain line of go.mod, the Go the module is
+    # built and released with, so the workflow cannot drift from it. setup-go also
+    # caches the module and build caches, keyed on go.mod, so no separate cache step.
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
@@ -142,6 +142,33 @@ jobs:
         GOARM: "6"
         QEMU_CPU: arm1176
       run: go test -exec qemu-arm ./...
+
+  test-oldest-go:
+    name: Test (oldest supported Go)
+    runs-on: ubuntu-latest
+    env:
+      # Build with the Go installed below, not the newer toolchain go.mod names.
+      GOTOOLCHAIN: local
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v7
+
+    # The go line in go.mod is the oldest Go a caller can build the module with.
+    # go-version-file would install the toolchain line instead, so the floor is
+    # named here. Move it together with the go line.
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version: '1.26.0'
+
+    - name: Vet
+      run: |
+        go vet ./...
+        go vet -tags live ./v1/
+
+    - name: Run tests
+      run: go test ./...
 
   tidy:
     name: Tidy
