@@ -58,6 +58,32 @@ func TestGetMeteringPoints(t *testing.T) {
 		assert.Equal(t, "Testvej", meteringPoints[0].StreetName)
 		assert.True(t, meteringPoints[0].HasRelation)
 	})
+
+	// isMovedOut appeared in the API's metering point list in 2026, between the July and
+	// the October OpenAPI documents.
+	t.Run("reads whether the user has moved out of the metering point", func(t *testing.T) {
+		httpmock.Reset()
+		httpmock.RegisterResponder("GET", "/MeteringPoints/MeteringPoints",
+			func(req *http.Request) (*http.Response, error) {
+				resp := httpmock.NewStringResponse(200, `{
+					"result": [
+						{"meteringPointId": "571313180100000001", "hasRelation": true, "isMovedOut": true},
+						{"meteringPointId": "571313180100000002", "hasRelation": true, "isMovedOut": false}
+					]
+				}`)
+				resp.Header.Set("Content-Type", "application/json")
+				return resp, nil
+			},
+		)
+
+		meteringPoints, err := c.GetMeteringPoints(false)
+
+		assert.NoError(t, err)
+		if assert.Len(t, meteringPoints, 2) {
+			assert.True(t, meteringPoints[0].IsMovedOut)
+			assert.False(t, meteringPoints[1].IsMovedOut)
+		}
+	})
 }
 
 // TestGetMeteringPointsIncludeAll guards the includeAll query parameter. It used to be

@@ -29,6 +29,7 @@ type MeteringPoints struct {
 	MeterNumber             string                `json:"meterNumber"`
 	ConsumerStartDate       FlexibleTime          `json:"consumerStartDate"`
 	HasRelation             bool                  `json:"hasRelation"`
+	IsMovedOut              bool                  `json:"isMovedOut"` // added alongside DataHub 3.0, undocumented by Energinet
 	ChildMeteringPoints     []ChildMeteringPoints `json:"childMeteringPoints"`
 }
 
