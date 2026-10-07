@@ -84,23 +84,25 @@
 // midnights in Europe/Copenhagen. The package embeds the time zone database, so
 // time.LoadLocation("Europe/Copenhagen") works on every platform.
 //
-// The range is half-open, [from, to): to is excluded, so to include a last day D, pass
-// D plus one day. The API rejects a range whose two dates are equal, with error 30002
-// ([ErrorToDateCanNotBeEqualToFromDate]), and one longer than 730 days
-// ([MaximumDayRequestLeap]), with error 30014 ([ErrorPeriodNotAllowed]). The client
+// For GetTimeSeries the range is half-open, [from, to): to is excluded, so to include a
+// last day D, pass D plus one day. [Customer.ExportTimeSeries] is the exception: the
+// export includes to, so for the days GetTimeSeries returns, pass to.AddDate(0, 0, -1),
+// and an export covers at least two days. The API rejects a range whose two dates are
+// equal, with error 30002 ([ErrorToDateCanNotBeEqualToFromDate]), and one longer than 730
+// days ([MaximumDayRequestLeap]), with error 30014 ([ErrorPeriodNotAllowed]). The client
 // checks neither, so split a longer range yourself.
 //
-// [Client.GetChargeLinksWithCharges] is the exception: it sends both bounds as
-// timestamps in Copenhagen time and keeps the time of day, so pass Copenhagen midnights
-// to ask for whole days.
+// [Client.GetChargeLinksWithCharges] sends both bounds as timestamps in Copenhagen time
+// instead, and keeps the time of day, so pass Copenhagen midnights to ask for whole days.
 //
 // [GetDatesFromPeriod] returns the bounds of a named [Period], computed in Copenhagen
 // time: [Yesterday], [ThisWeek], [LastWeek], [ThisMonth], [LastMonth], [ThisYear] or
 // [LastYear]. Weeks run from Monday to Sunday. Its to is exclusive too: 00:00 on the
-// first day after the period, or now for the this_* periods, so a date-based call stops
-// before today, which is not complete. On the first day of a this_* period, a Monday,
-// the 1st of the month or 1 January, from and to would fall on the same date, so it
-// returns an error wrapping [ErrorPeriodHasNoCompleteDay] instead.
+// first day after the period, or now for the this_* periods, so GetTimeSeries stops
+// before today, which is not complete. ExportTimeSeries, which includes to, also exports
+// that first day after the period, or today for a this_* period. On the first day of a
+// this_* period, a Monday, the 1st of the month or 1 January, from and to would fall on
+// the same date, so it returns an error wrapping [ErrorPeriodHasNoCompleteDay] instead.
 //
 // # Batches and per metering point failures
 //

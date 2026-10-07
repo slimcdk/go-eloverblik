@@ -162,6 +162,10 @@ exclusive: dateTo
 granularity: date (GetTimeSeries and ExportTimeSeries format both bounds with time.DateOnly
   in Europe/Copenhagen; GetChargeLinksWithCharges is the exception, see below)
 equal dates: rejected outright with API error 30002 (ErrorToDateCanNotBeEqualToFromDate)
+exception: ExportTimeSeries (and export-timeseries) includes dateTo as well, so it returns
+  the days from dateFrom through dateTo, and with equal dates rejected it covers at least
+  two days. For the days GetTimeSeries returns, pass to minus one day. Checked against the
+  live API on 2026-10-07
 worked example:
   request: from=2026-07-01, to=2026-07-04, aggregation=Day
   returns: exactly 1 July, 2 July and 3 July. 4 July is NOT returned.
@@ -175,7 +179,10 @@ future to: a to later than tomorrow is rejected (30003); a to of tomorrow is mov
 `GetDatesFromPeriod` returns an **exclusive** `to`: for yesterday, last_week, last_month and
 last_year it is the start of the period that follows; for this_week, this_month and this_year
 it is the current instant (`now`), which the date-formatted calls turn into today's date, so
-today is never included. It computes every period in Europe/Copenhagen, whatever the host's
+GetTimeSeries never includes today. ExportTimeSeries includes `to`, so with these bounds it
+also exports the first day after the period, or today for a this_* period; pass
+`to.AddDate(0, 0, -1)` to export the period alone. It computes every period in
+Europe/Copenhagen, whatever the host's
 time zone: today is the current Copenhagen date, every bound but a `now` is 00:00 Copenhagen
 time, and weeks run from Monday to Sunday:
 
@@ -682,7 +689,10 @@ for _, result := range links.Results {
 // SIGNATURE: ExportTimeSeries(meteringPointIDs []string, from, to time.Time, aggregation Aggregation) (io.ReadCloser, error)
 // INPUTS:
 //   - meteringPointIDs ([]string): metering point IDs, at most 10 per request (recommended)
-//   - from, to (time.Time): half-open [from, to), same semantics as GetTimeSeries
+//   - from, to (time.Time): from through to, BOTH included, unlike GetTimeSeries; to equal
+//     to from is rejected (30002), so an export covers at least two days. For the days
+//     GetTimeSeries(ids, from, to, ...) returns, pass to.AddDate(0, 0, -1). Checked against
+//     the live API on 2026-10-07
 //   - aggregation (Aggregation): Data granularity
 // OUTPUTS:
 //   - io.ReadCloser: CSV data stream (Danish format, semicolon-delimited). Caller closes.
@@ -698,6 +708,8 @@ for _, result := range links.Results {
 //   - Headers: Danish language
 //   - Columns: MålepunktsID, Fra_dato, Til_dato, Mængde, Måleenhed, Kvalitet, Type,
 //     Målepunktstype_Kode, Målepunktstype (the last two seen since DataHub 3.0, checked
+//     2026-10-07)
+//   - MålepunktsID holds each ID with a tab before it, as in every export (checked
 //     2026-10-07)
 // USAGE PATTERN:
 stream, err := client.ExportTimeSeries(ids, from, to, eloverblik.Hour)
@@ -956,8 +968,9 @@ Authentication
 Rules that change the result
   - Dates are Copenhagen calendar dates, and a range is half-open, [from, to): --from is
     included, --to is not. --to defaults to today, so the range ends with yesterday.
-    --from 2026-09-01 --to 2026-10-01 is all of September. For timeseries and
-    export-timeseries, from and to on the same date is rejected (API error 30002).
+    --from 2026-09-01 --to 2026-10-01 is all of September. export-timeseries is the
+    exception: the export includes --to too. For timeseries and export-timeseries, from
+    and to on the same date is rejected (API error 30002).
   - A time series range spans at most 730 days (API error 30014).
   - Commands that take metering point IDs take 1 to 10 of them, each exactly 18 digits.
   - Results go to stdout as JSON, except export-* (CSV unless --format json) and alive
@@ -1046,7 +1059,9 @@ customer|thirdparty timeseries:
              are []FlatTimeSeriesPoint, instead of the raw nested document.
 
 customer export-timeseries:
-  --from, --to, --period, --aggregation: as above
+  --from, --to, --period, --aggregation: as above, except that the export INCLUDES --to,
+            so --from 2026-09-01 --to 2026-10-01 exports September and 1 October, and
+            --period last_week eight days. From and to on the same date is rejected (30002)
   --format: string, default "csv". "csv" streams the API's CSV unchanged; "json" converts it
             (see "CSV to JSON Conversion"); any other value gives the CSV.
 
@@ -1072,7 +1087,8 @@ token:
 ### Date Specification (--from / --to / --period)
 
 The `timeseries`, `export-timeseries` and `charge-links` commands support two mutually
-exclusive ways to specify date ranges. Remember `--to` is EXCLUSIVE (see "Date Semantics").
+exclusive ways to specify date ranges. Remember `--to` is EXCLUSIVE (see "Date Semantics"),
+except for `export-timeseries`, which includes it.
 
 ```yaml
 Option A - Explicit dates with --from and --to:
@@ -1093,7 +1109,9 @@ Option B - Predefined period with --period:
   Values: yesterday, this_week, last_week, this_month, last_month, this_year, last_year
   Note: the period helper already returns an exclusive end date, computed in Copenhagen
         time; weeks start on Monday, and a this_* period is an error on its first day
-        (a Monday, the 1st, 1 January), which has no complete day yet
+        (a Monday, the 1st, 1 January), which has no complete day yet. export-timeseries
+        includes that end date, so it also exports the day after a period, or today for a
+        this_* period
 
 Errors:
   - "--period cannot be used with --from or --to"
@@ -1905,8 +1923,9 @@ Metering Point IDs:
               check the count; the CLI accepts 1 to 10 IDs per command.
 
 Date Ranges:
-  semantics: half-open [from, to). For GetTimeSeries/ExportTimeSeries this is at date granularity,
-             and from == to (the same Copenhagen date) is rejected (error 30002)
+  semantics: half-open [from, to). For GetTimeSeries this is at date granularity, and from == to
+             (the same Copenhagen date) is rejected (error 30002). ExportTimeSeries includes to
+             as well, [from, to], and rejects from == to too
   timezone: GetTimeSeries and ExportTimeSeries convert both bounds to Europe/Copenhagen and send them
             as YYYY-MM-DD, dropping the time of day. GetChargeLinksWithCharges sends them in the JSON
             body as RFC 3339 timestamps in Copenhagen time (spec format date-time). The time of day is
@@ -2163,7 +2182,8 @@ When implementing an Eloverblik client:
 - [ ] Reuse ONE client - it caches its data access token, and /token allows only 2 calls/minute
 - [ ] Let the client renew the ~24h data access token: it does so before expiry, so a long
       running process keeps the same client, shared between goroutines
-- [ ] Treat `to` as EXCLUSIVE; never pass `from == to` (error 30002)
+- [ ] Treat `to` as EXCLUSIVE, except for ExportTimeSeries, which includes it; never pass
+      `from == to` (error 30002)
 - [ ] Build dates as Copenhagen midnights; expect `ErrorPeriodHasNoCompleteDay` from
       `GetDatesFromPeriod` for a this_* period on its first day, and fall back
 - [ ] Stay within 730 days per request (error 30014, ErrorPeriodNotAllowed)
@@ -2228,8 +2248,9 @@ for _, series := range ts {
     fmt.Println(len(data), "points")
 }
 
-// Export to CSV (Customer API only)
-stream, err := client.ExportTimeSeries([]string{id}, from, to, eloverblik.Hour)
+// Export to CSV (Customer API only). The export includes to, so end it a day earlier for
+// the same days as GetTimeSeries
+stream, err := client.ExportTimeSeries([]string{id}, from, to.AddDate(0, 0, -1), eloverblik.Hour)
 if err != nil {
     return err
 }

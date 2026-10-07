@@ -1126,8 +1126,11 @@ func liveExport(t *testing.T, what string, export func() (io.ReadCloser, error))
 }
 
 // liveExportTimeSeries checks the documented columns of a time series export, and that
-// every row has a metering point ID, two timestamps and a quantity, not all of them 0. A
-// row without a quantity, as for an hour the grid operator reported missing, is logged.
+// every row has two timestamps and a quantity, not all of them 0. It exports the days of
+// [from, to) as the docs say to, with to minus one day, since the export includes to: the
+// rows must reach into that last day and stop at its end, so an export that dropped or
+// overran its to fails either way. A row without a quantity, as for an hour the grid
+// operator reported missing, is logged.
 func liveExportTimeSeries(t *testing.T, c *client, ids []string, from, to time.Time) {
 	t.Helper()
 
@@ -1136,7 +1139,8 @@ func liveExportTimeSeries(t *testing.T, c *client, ids []string, from, to time.T
 		t.Logf("%s: skipped, no connected metering point", what)
 		return
 	}
-	stream, err := c.ExportTimeSeries(ids, from, to, Hour)
+	lastDay := to.AddDate(0, 0, -1)
+	stream, err := c.ExportTimeSeries(ids, from, lastDay, Hour)
 	if !liveOK(t, what, err) {
 		return
 	}
@@ -1200,15 +1204,19 @@ func liveExportTimeSeries(t *testing.T, c *client, ids []string, from, to time.T
 	if noQuantity > 0 {
 		t.Logf("%s: %d rows without a Mængde", what, noQuantity)
 	}
-	// The export is documented to read [from, to) as GetTimeSeries does
+	// Asked for from through lastDay, the export's rows run from from to the end of lastDay,
+	// which is to
 	if !first.IsZero() && first.Before(from) {
 		t.Errorf("%s: the rows start %s before the requested from", what, from.Sub(first))
 	}
 	if !last.IsZero() && last.After(to) {
-		t.Errorf("%s: the rows end %s after the requested to, which is excluded", what, last.Sub(to))
+		t.Errorf("%s: the rows end %s after the end of the requested to", what, last.Sub(to))
+	}
+	if !last.IsZero() && !last.After(lastDay) {
+		t.Errorf("%s: no row reaches into the requested to; the export no longer includes to", what)
 	}
 	if !first.IsZero() {
-		t.Logf("%s: the rows cover %s of the requested %s", what, last.Sub(first), to.Sub(from))
+		t.Logf("%s: the rows cover %s of the %s from from through to", what, last.Sub(first), to.Sub(from))
 	}
 	if len(rows) > 0 && sum == 0 {
 		t.Errorf("%s: every Mængde of the week is 0", what)

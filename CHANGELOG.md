@@ -227,8 +227,8 @@ The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later;
   data access token against a `/token` limit of 2 calls a minute, and the rules that change
   a result without an error, from the half-open Copenhagen date ranges to the metering
   points that fail on their own. Every command's help says which endpoint it calls, what it
-  takes and what it prints, with examples, and `--to` on `timeseries`, `export-timeseries`
-  and `charge-links` is described as exclusive.
+  takes and what it prints, with examples, and `--to` on `timeseries` and `charge-links` is
+  described as exclusive, on `export-timeseries` as included (see below).
 - The `charge-links` help and the `GetChargeLinksWithCharges` godoc say why the endpoint
   answers 404, where they used to say Eloverblik had not deployed it: both OpenAPI
   documents declare it, and document its 404 as "When the Charges integration feature is
@@ -244,6 +244,12 @@ The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later;
   or would have dereferenced nil, and help listings that no longer matched `--help`. The
   comments on the error sentinels no longer give an HTTP status per code: Energinet's
   documentation gives none, and some were wrong.
+- `ExportTimeSeries` and `export-timeseries` are documented as including `to`: the export
+  returns the days from `from` through `to` and rejects a `to` equal to `from`, so it
+  covers at least two days, where `GetTimeSeries` and `timeseries` stop before `to`. They
+  were documented as half-open like the rest. `--period last_week` exports eight days, and
+  `--from 2026-09-01 --to 2026-10-01` September and 1 October. A live test run on
+  2026-10-07 found it; the client sends the dates as before.
 
 ### Dependencies, CI and tooling
 

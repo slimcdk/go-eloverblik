@@ -57,6 +57,16 @@ type Customer interface {
 	DeleteRelation(meteringPointID string) (bool, error)
 
 	GetMeteringPoints(includeAll bool) ([]MeteringPoints, error)
+	// ExportTimeSeries exports the time series of the metering points as the CSV file
+	// Eloverblik generates: separated by semicolons, opening with a UTF-8 byte order mark,
+	// with Danish column names. The caller closes the returned stream.
+	//
+	// Unlike GetTimeSeries, the export includes to: it covers the Copenhagen days from
+	// from through to. A to equal to from is rejected with
+	// ErrorToDateCanNotBeEqualToFromDate, so an export covers at least two days. For the
+	// days GetTimeSeries(ids, from, to, aggregation) returns, pass to.AddDate(0, 0, -1).
+	// Like the other exports, the MålepunktsID column holds each ID with a tab before it.
+	// Both were checked against the live API on 2026-10-07.
 	ExportTimeSeries(meteringPointIDs []string, from, to time.Time, aggregation Aggregation) (io.ReadCloser, error)
 	ExportMasterdata(meteringPointIDs []string) (io.ReadCloser, error)
 	ExportCharges(meteringPointIDs []string) (io.ReadCloser, error)

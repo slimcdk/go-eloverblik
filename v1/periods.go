@@ -23,15 +23,16 @@ var ErrorPeriodHasNoCompleteDay = errors.New("period started today and has no co
 // are in, whatever the host's time zone: today is the current date in Copenhagen, and
 // every bound is 00:00 Copenhagen time, except the to of a this_* period, which is now.
 // Weeks run from Monday to Sunday, as in ISO 8601 and the Danish calendar. Every range
-// is half-open, [from, to), as the API reads it.
+// is half-open, [from, to), as GetTimeSeries reads it; ExportTimeSeries includes to.
 type Period string
 
 // The supported periods, each with the [from, to) range GetDatesFromPeriod returns.
-// The date-based calls, GetTimeSeries and ExportTimeSeries, send only the Copenhagen
-// date of each bound, so for them a this_* period covers its first day up to and
-// including yesterday, and leaves out today, which is not complete.
-// GetChargeLinksWithCharges sends both bounds as timestamps, so for it a this_* period
-// runs up to now, today included.
+// GetTimeSeries sends only the Copenhagen date of each bound, so for it a this_* period
+// covers its first day up to and including yesterday, and leaves out today, which is not
+// complete. ExportTimeSeries sends the dates too but includes to, so it also exports the
+// day after a period, or today for a this_* period; pass to.AddDate(0, 0, -1) for the
+// period alone. GetChargeLinksWithCharges sends both bounds as timestamps, so for it a
+// this_* period runs up to now, today included.
 const (
 	// Yesterday is [00:00 yesterday, 00:00 today).
 	Yesterday Period = "yesterday"
@@ -61,13 +62,15 @@ const (
 // is the current date in Copenhagen, weeks start on Monday, and from and to are returned
 // in Europe/Copenhagen.
 //
-// The API treats the requested range as half-open: it returns data from dateFrom up to
-// but not including dateTo, and it rejects a request where the two dates are equal with
-// error 30002. For yesterday, last_week, last_month and last_year the returned to is
-// therefore 00:00 on the first day after the period, not the last instant of the period
-// itself. For this_week, this_month and this_year it is now, so a date-based call such as
-// GetTimeSeries stops before today, while GetChargeLinksWithCharges, which sends
-// timestamps, runs up to now. On the first day of a this_* period from and to would fall
+// GetTimeSeries treats the requested range as half-open: it returns data from dateFrom
+// up to but not including dateTo, and the API rejects a request where the two dates are
+// equal with error 30002. For yesterday, last_week, last_month and last_year the returned
+// to is therefore 00:00 on the first day after the period, not the last instant of the
+// period itself. For this_week, this_month and this_year it is now, so GetTimeSeries stops
+// before today, while GetChargeLinksWithCharges, which sends timestamps, runs up to now.
+// ExportTimeSeries includes to, so with these bounds it also exports the first day after
+// the period, or today; pass to.AddDate(0, 0, -1) to export the period alone, which for
+// yesterday leaves from and to on the same date, a request the export rejects. On the first day of a this_* period from and to would fall
 // on the same date, so it returns an error wrapping ErrorPeriodHasNoCompleteDay instead,
 // whichever call the bounds are for, such as
 // "this_week: period started today and has no complete day yet".

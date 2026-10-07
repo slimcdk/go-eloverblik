@@ -42,8 +42,9 @@ Authentication
 Rules that change the result
   - Dates are Copenhagen calendar dates, and a range is half-open, [from, to): --from is
     included, --to is not. --to defaults to today, so the range ends with yesterday.
-    --from 2026-09-01 --to 2026-10-01 is all of September. For timeseries and
-    export-timeseries, from and to on the same date is rejected (API error 30002).
+    --from 2026-09-01 --to 2026-10-01 is all of September. export-timeseries is the
+    exception: the export includes --to too. For timeseries and export-timeseries, from
+    and to on the same date is rejected (API error 30002).
   - A time series range spans at most 730 days (API error 30014).
   - Commands that take metering point IDs take 1 to 10 of them, each exactly 18 digits.
   - Results go to stdout as JSON, except export-* (CSV unless --format json) and alive

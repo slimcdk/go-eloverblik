@@ -358,19 +358,23 @@ func newExportTimeseriesCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "export-timeseries <metering-id> [metering-id ...]",
 		Short: "Export time series as CSV or JSON (customer API only)",
-		Long: `Export the time series of 1 to 10 metering points in the half-open range [from, to) as the
-CSV file Eloverblik generates.
+		Long: `Export the time series of 1 to 10 metering points, from --from through --to, as the CSV
+file Eloverblik generates. Unlike timeseries, the export includes the --to date.
 
 Calls POST /meterdata/timeseries/export/{from}/{to}/{aggregation} on the Customer API,
 with from and to as Copenhagen calendar dates (YYYY-MM-DD).
 
 Arguments: 1 to 10 metering point IDs, each exactly 18 digits.
 
---from, --to, --period and --aggregation work as for timeseries (see
+--from, --to, --period and --aggregation are read as for timeseries (see
 "go-eloverblik customer timeseries --help"): give either --period, or --from with an
-optional --to; --to is excluded and defaults to today, so the range ends with yesterday.
-From and to on the same date is rejected (API error 30002), and a range longer than 730
-days too (30014).
+optional --to, which defaults to today. The export endpoint, unlike timeseries, includes
+the to date: --from 2026-09-01 --to 2026-10-01 exports September and 1 October, and
+--period last_week exports eight days, Monday through the Monday after. Every period
+exports the day after it as well, and a this_* period also asks for today. For the days
+timeseries returns, pass the day before its --to. From and to on the same date is
+rejected (API error 30002), so an export covers at least two days, and a range longer
+than 730 days is rejected too (30014).
 
 Output with --format csv (the default): the API's CSV, unchanged: separated by
 semicolons, starting with a UTF-8 byte order mark, with Danish column names.
@@ -378,8 +382,8 @@ Output with --format json: the rows as a JSON array of objects keyed by the CSV 
 every value a string, without the white space around it. The byte order mark is
 dropped, and a CSV without rows gives [].
 Any other --format gives the CSV.`,
-		Example: `  go-eloverblik customer export-timeseries 571313000000000001 --from 2026-09-01 --to 2026-10-01 --token "$ELO_TOKEN" > september.csv
-  go-eloverblik customer export-timeseries 571313000000000001 571313000000000002 --period last_month --aggregation Day --format json --token "$ELO_TOKEN"`,
+		Example: `  go-eloverblik customer export-timeseries 571313000000000001 --from 2026-09-01 --to 2026-09-30 --token "$ELO_TOKEN" > september.csv
+  go-eloverblik customer export-timeseries 571313000000000001 571313000000000002 --from 2026-09-01 --to 2026-09-30 --aggregation Day --format json --token "$ELO_TOKEN"`,
 		Args: meteringPointArgs,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			period, _ := cmd.Flags().GetString("period")
@@ -429,7 +433,7 @@ Any other --format gives the CSV.`,
 		},
 	}
 	cmd.Flags().String("from", "", "start date, inclusive (YYYY-MM-DD, now, now-30d/w/m/y); required unless --period is given")
-	cmd.Flags().String("to", today(), "end date, exclusive (YYYY-MM-DD, now, now-30d/w/m/y, defaults to today)")
+	cmd.Flags().String("to", today(), "end date, included by the export (YYYY-MM-DD, now, now-30d/w/m/y, defaults to today)")
 	cmd.Flags().String("period", "", "named range instead of --from and --to: yesterday, this_week, last_week, this_month, last_month, this_year or last_year")
 	cmd.Flags().String("aggregation", string(eloverblik.Hour), "aggregation level (Actual, Quarter, Hour, Day, Month, Year)")
 	cmd.Flags().String("format", "csv", "output format: csv (the API's CSV, unchanged) or json (an array of objects keyed by the CSV header)")

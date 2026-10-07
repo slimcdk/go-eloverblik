@@ -339,8 +339,9 @@ Authentication
 Rules that change the result
   - Dates are Copenhagen calendar dates, and a range is half-open, [from, to): --from is
     included, --to is not. --to defaults to today, so the range ends with yesterday.
-    --from 2026-09-01 --to 2026-10-01 is all of September. For timeseries and
-    export-timeseries, from and to on the same date is rejected (API error 30002).
+    --from 2026-09-01 --to 2026-10-01 is all of September. export-timeseries is the
+    exception: the export includes --to too. For timeseries and export-timeseries, from
+    and to on the same date is rejected (API error 30002).
   - A time series range spans at most 730 days (API error 30014).
   - Commands that take metering point IDs take 1 to 10 of them, each exactly 18 digits.
   - Results go to stdout as JSON, except export-* (CSV unless --format json) and alive
@@ -512,9 +513,11 @@ go-eloverblik customer timeseries <metering-id>... --from=now-30d --to=now
 # Use --period for common ranges (cannot be used with --from/--to):
 #   yesterday, this_week, last_week, this_month, last_month,
 #   this_year, last_year
-# Weeks start on Monday. For timeseries and export-timeseries a this_* period ends with
-# yesterday; for charge-links it runs up to now, today included. A this_* period fails on
-# its first day (a Monday, the 1st, 1 January), which has no complete day yet.
+# Weeks start on Monday. For timeseries a this_* period ends with yesterday; for
+# charge-links it runs up to now, today included. export-timeseries includes --to, so it
+# exports a period's to date as well: last_week is eight days, and a this_* period also
+# asks for today. A this_* period fails on its first day (a Monday, the 1st, 1 January),
+# which has no complete day yet.
 
 go-eloverblik customer timeseries <metering-id>... \
   --from=YYYY-MM-DD \
@@ -540,6 +543,7 @@ go-eloverblik customer charge-links <metering-id>... --from=YYYY-MM-DD --to=YYYY
 # Data Export (CSV or JSON). The API returns CSV; --format=json makes the CLI convert it to
 # an array of objects keyed by the CSV header, without the byte order mark the CSV starts
 # with or the white space around a value, and [] when there are no rows.
+# export-timeseries includes --to, so --period=last_year also exports 1 January this year.
 go-eloverblik customer export-timeseries <metering-id>... --period=last_year
 
 go-eloverblik customer export-timeseries <metering-id>... \
@@ -737,8 +741,15 @@ charge link period covering it to get the amount charged.
 `ExportTimeSeries`, `ExportMasterdata` and `ExportCharges` (Customer API only) return the
 CSV file the API generates, as an `io.ReadCloser` streamed as it arrives, and the caller
 must close it. The CSV is separated by semicolons, starts with a UTF-8 byte order mark and
-has Danish column names. The library returns it as it is: JSON exists only in the CLI,
-whose `--format json` converts the CSV.
+has Danish column names. In every export, the `MålepunktsID` column holds the ID with a
+tab before it (checked on 2026-10-07). The library returns the CSV as it is: JSON exists
+only in the CLI, whose `--format json` converts the CSV and drops that tab.
+
+`ExportTimeSeries` is the exception to [Dates Are Half-Open](#dates-are-half-open): the
+export includes `to`, covering the days from `from` through `to`, and rejects a `to` equal
+to `from` (30002), so it covers at least two days. For the days `GetTimeSeries(ids, from,
+to, ...)` returns, pass `to.AddDate(0, 0, -1)`. Checked against the live API on
+2026-10-07.
 
 ```go
 csv, err := client.ExportTimeSeries(ids, from, to, eloverblik.Day) // client is a Customer
@@ -797,7 +808,8 @@ eloverblik.AuthScopeCustomerKey // Scope by customer key
 
 The API reads a requested range as `[dateFrom, dateTo)`, at the granularity of a date:
 `dateFrom` is included, `dateTo` is not, and a request where the two are equal is rejected
-outright with error 30002.
+outright with error 30002. The time series export is the exception: it includes `dateTo`
+too, see [Exports](#exports).
 
 ```go
 cph, err := time.LoadLocation("Europe/Copenhagen") // never fails: the package embeds time/tzdata
@@ -820,6 +832,8 @@ days.
 
 So to get a single day, ask for that day and the next one. This is the off-by-one that
 makes `--period yesterday` sound like it should send the same date twice; it must not.
+The time series export, which includes `to`, cannot return a single day: see
+[Exports](#exports).
 
 ### Period Constants
 
@@ -847,6 +861,11 @@ the API rejects with error 30002, so `GetDatesFromPeriod` returns an error wrapp
 complete day yet". The error is returned whichever call the bounds are for,
 `GetChargeLinksWithCharges` included. On the other days that call, which sends timestamps,
 gets a this_* period up to now, today included.
+
+`ExportTimeSeries` includes `to`, so with these bounds it also exports the day after the
+period, or today for a this_* period. Pass `to.AddDate(0, 0, -1)` to export the period
+alone; for `Yesterday` that leaves `from` and `to` on the same date, which the export
+rejects.
 
 ```go
 import (
@@ -955,8 +974,9 @@ ts, err := client.GetTimeSeries(ids, from, to, eloverblik.Hour)
 ### Export Data to CSV File
 
 ```bash
+# The export includes --to, unlike timeseries
 go-eloverblik --token=$ELO_TOKEN customer export-timeseries 571313000000000001 \
-  --from=2024-01-01 --to=2025-01-01 > consumption_2024.csv
+  --from=2024-01-01 --to=2024-12-31 > consumption_2024.csv
 ```
 
 ### Export Data to JSON File

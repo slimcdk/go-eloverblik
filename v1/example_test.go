@@ -208,7 +208,8 @@ func ExampleAPIError() {
 }
 
 // This example exports the daily time series of last month as CSV. The export is
-// streamed, and the caller must close it.
+// streamed, and the caller must close it. Unlike GetTimeSeries, the export includes to,
+// so it ends on the last day of the month instead of the 1st of the next.
 func ExampleCustomer_exportTimeSeries() {
 	client := eloverblik.NewCustomer(os.Getenv("ELO_TOKEN"))
 
@@ -216,8 +217,9 @@ func ExampleCustomer_exportTimeSeries() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	lastDay := to.AddDate(0, 0, -1)
 
-	csv, err := client.ExportTimeSeries([]string{"571313180100000002"}, from, to, eloverblik.Day)
+	csv, err := client.ExportTimeSeries([]string{"571313180100000002"}, from, lastDay, eloverblik.Day)
 	if err != nil {
 		log.Fatal(err)
 	}
