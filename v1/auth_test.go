@@ -118,6 +118,102 @@ func TestGetDataAccessTokenConcurrent(t *testing.T) {
 	assert.Equal(t, int32(1), tokenCalls.Load(), "one client must fetch its data access token once")
 }
 
+// TestGetDataAccessTokenRenewal guards the renewal of the cached data access token. It
+// lasts about 24 hours, and the client used to keep it for its own lifetime, so a long
+// running process saw every call fail with 401 once the token had expired.
+func TestGetDataAccessTokenRenewal(t *testing.T) {
+	fresh := unsignedToken(t, time.Now().Add(24*time.Hour))
+
+	// A data access token that carries a token type but no expiry
+	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"tokenType":"ThirdPartyApiDataAccess"}`))
+	withoutExpiry := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`)) + "." + payload + "."
+
+	tests := []struct {
+		name    string
+		cached  string
+		renewed bool
+	}{
+		{
+			name:    "expired token is renewed",
+			cached:  unsignedToken(t, time.Now().Add(-time.Hour)),
+			renewed: true,
+		},
+		{
+			name:    "token expiring within five minutes is renewed",
+			cached:  unsignedToken(t, time.Now().Add(2*time.Minute)),
+			renewed: true,
+		},
+		{
+			name:    "token valid for more than five minutes is kept",
+			cached:  unsignedToken(t, time.Now().Add(10*time.Minute)),
+			renewed: false,
+		},
+		{
+			name:    "token that is not a JWT is kept",
+			cached:  "opaque-access-token",
+			renewed: false,
+		},
+		{
+			name:    "token without an expiry is kept",
+			cached:  withoutExpiry,
+			renewed: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c := NewThirdParty("test-refresh-token", WithoutRetry()).(*client)
+			httpmock.ActivateNonDefault(c.resty.GetClient())
+			defer httpmock.DeactivateAndReset()
+
+			// The first /token call hands out the token under test, any later one a fresh token
+			tokenCalls := 0
+			httpmock.RegisterResponder(http.MethodGet, c.resty.BaseURL+"/token",
+				func(*http.Request) (*http.Response, error) {
+					tokenCalls++
+					token := fresh
+					if tokenCalls == 1 {
+						token = test.cached
+					}
+					return httpmock.NewJsonResponse(http.StatusOK, map[string]string{"result": token})
+				})
+
+			first, err := c.GetDataAccessToken()
+			require.NoError(t, err)
+			require.Equal(t, test.cached, first)
+
+			second, err := c.GetDataAccessToken()
+			require.NoError(t, err)
+
+			if test.renewed {
+				assert.Equal(t, fresh, second, "the cached token must be replaced")
+				assert.Equal(t, 2, tokenCalls, "the cached token must be renewed with a new /token call")
+			} else {
+				assert.Equal(t, test.cached, second, "the cached token must be kept")
+				assert.Equal(t, 1, tokenCalls, "a usable token must not cost another /token call")
+			}
+		})
+	}
+
+	t.Run("failed renewal reports the error, not the expired token", func(t *testing.T) {
+		c := NewThirdParty("test-refresh-token", WithoutRetry()).(*client)
+		httpmock.ActivateNonDefault(c.resty.GetClient())
+		defer httpmock.DeactivateAndReset()
+
+		expired := unsignedToken(t, time.Now().Add(-time.Hour))
+		httpmock.RegisterResponder(http.MethodGet, c.resty.BaseURL+"/token",
+			httpmock.NewJsonResponderOrPanic(http.StatusOK, map[string]string{"result": expired}).
+				Then(httpmock.NewStringResponder(http.StatusTooManyRequests, "")))
+
+		_, err := c.GetDataAccessToken()
+		require.NoError(t, err)
+
+		token, err := c.GetDataAccessToken()
+		require.ErrorIs(t, err, ErrorTooManyRequests)
+		assert.Empty(t, token)
+	})
+}
+
 // unsignedToken builds an unsecured JWT ("alg": "none") for a data access token that
 // expires at exp. The client only reads the claims, so no signature is needed.
 func unsignedToken(t *testing.T, exp time.Time) string {

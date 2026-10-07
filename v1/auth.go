@@ -2,6 +2,7 @@ package eloverblik
 
 import (
 	"fmt"
+	"time"
 )
 
 type AuthorizationScope string
@@ -87,8 +88,16 @@ func (c *client) authenticate() error {
 	return nil
 }
 
+// dataAccessTokenRenewalMargin is how long before its expiry the cached data access token
+// is replaced, so a request does not set out with a token that expires on the way.
+const dataAccessTokenRenewalMargin = 5 * time.Minute
+
 // GetDataAccessToken returns the data access token the client sends on its requests,
 // exchanging the refresh token for one on the first call that needs it and caching it.
+//
+// A data access token lasts about 24 hours. Once the cached one has expired, or expires
+// within five minutes, according to its exp claim, the next call fetches a new one, so a
+// long running client keeps working. A token whose expiry cannot be read is kept.
 //
 // It is safe for concurrent use: goroutines that need a token at the same time wait for a
 // single /token request, which matters because the API allows only 2 of those a minute.
@@ -96,12 +105,23 @@ func (c *client) GetDataAccessToken() (string, error) {
 	c.tokenMu.Lock()
 	defer c.tokenMu.Unlock()
 
-	if c.accessToken == "" {
+	if c.accessToken == "" || expiresWithin(c.accessToken, dataAccessTokenRenewalMargin) {
 		if err := c.authenticate(); err != nil {
-			return c.accessToken, err
+			return "", err
 		}
 	}
 	return c.accessToken, nil
+}
+
+// expiresWithin reports whether the token's exp claim is past or less than margin away. A
+// token without a readable expiry is treated as not expiring, so the client keeps it and
+// leaves it to the API to reject it.
+func expiresWithin(token string, margin time.Duration) bool {
+	claims, err := ParseToken(token)
+	if err != nil || claims.ExpiresAt.IsZero() {
+		return false
+	}
+	return time.Until(claims.ExpiresAt) < margin
 }
 
 func (c *client) GetAuthorizations() ([]Authorization, error) {

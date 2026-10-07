@@ -7,14 +7,16 @@ import (
 )
 
 // client is the internal implementation that satisfies the Customer and ThirdParty interfaces.
-// It is safe for concurrent use by multiple goroutines.
+// It is safe for concurrent use by multiple goroutines, and renews its data access token
+// before it expires.
 type client struct {
 	refreshToken string
 	resty        *resty.Client
 	apiType      apiType
 
-	// tokenMu guards accessToken. It is held across the /token request, so goroutines
-	// that need a data access token at the same time share the one request.
+	// tokenMu guards accessToken, the cached data access token. It is held across the
+	// /token request, so goroutines that need a data access token at the same time, the
+	// first one or the one that replaces an expiring token, share the one request.
 	tokenMu     sync.Mutex
 	accessToken string
 }
@@ -39,7 +41,9 @@ const (
 //
 // The client is safe for concurrent use by multiple goroutines. Create one and share it:
 // it fetches a data access token from /token on the first call that needs one, and the
-// API allows only 2 such calls a minute.
+// API allows only 2 such calls a minute. The data access token lasts about 24 hours; the
+// client fetches a new one when the cached one has expired or expires within five
+// minutes, so a long running process can keep using the same client.
 //
 // Example:
 //
@@ -59,7 +63,9 @@ func NewCustomer(refreshToken string, opts ...Option) Customer {
 //
 // The client is safe for concurrent use by multiple goroutines. Create one and share it:
 // it fetches a data access token from /token on the first call that needs one, and the
-// API allows only 2 such calls a minute.
+// API allows only 2 such calls a minute. The data access token lasts about 24 hours; the
+// client fetches a new one when the cached one has expired or expires within five
+// minutes, so a long running process can keep using the same client.
 //
 // Example:
 //
