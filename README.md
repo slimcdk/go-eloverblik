@@ -141,6 +141,10 @@ go build .
 ### CLI Usage
 
 ```bash
+# Which version is this? The release's tag for a release binary or go install @vX.Y.Z,
+# a pseudo-version for a build from a checkout.
+go-eloverblik --version
+
 # Set your token as an environment variable
 export ELO_TOKEN="your-refresh-token-here"
 
@@ -410,6 +414,7 @@ Flags:
   -h, --help                     help for go-eloverblik
       --print-response-headers   Print HTTP response headers from the Eloverblik API to stderr
       --token string             Eloverblik refresh token, created at eloverblik.dk (required by the customer, thirdparty and token commands)
+  -v, --version                  version for go-eloverblik
 
 Use "go-eloverblik [command] --help" for more information about a command.
 ```
@@ -1321,6 +1326,7 @@ project's conventions and how a release is cut.
 │   ├── root.go             # Root command and initialization
 │   ├── thirdparty.go       # Third-party specific commands
 │   ├── token.go            # Token inspection command
+│   ├── version.go          # The version --version prints
 │   └── *_test.go           # CLI tests
 ├── v1/                     # Library implementation
 │   ├── auth.go             # Token exchange, IsAlive and the third-party authorization endpoints

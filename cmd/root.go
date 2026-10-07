@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 
 	eloverblik "github.com/slimcdk/go-eloverblik/v1"
 	"github.com/spf13/cobra"
@@ -150,6 +151,10 @@ func rootHelpFunc(cmd *cobra.Command, _ []string) {
 }
 
 func init() {
+	// Setting Version gives the root command cobra's --version and -v flags.
+	info, ok := debug.ReadBuildInfo()
+	rootCmd.Version = cliVersion(version, info, ok)
+
 	// --token is not marked required: the commands that use it check it with refreshToken.
 	rootCmd.PersistentFlags().String("token", "", "Eloverblik refresh token, created at eloverblik.dk (required by the customer, thirdparty and token commands)")
 	rootCmd.PersistentFlags().Bool("print-response-headers", false, "Print HTTP response headers from the Eloverblik API to stderr")

@@ -159,7 +159,10 @@ go test -tags live -count=1 -v -run Live ./v1/
 Pushing a `v*` tag runs `.github/workflows/release.yml`: the test gate, then GoReleaser
 (`release --clean`, configured in `.goreleaser.yaml`), which builds the archives and
 checksums and creates the GitHub release. A tag with a pre-release suffix, such as
-`v1.4.0-rc.1`, is published as a pre-release.
+`v1.4.0-rc.1`, is published as a pre-release. The release build sets the version
+`--version` prints with `-X github.com/slimcdk/go-eloverblik/cmd.version=v{{ .Version }}`;
+the linker ignores `-X` for a symbol that does not exist, so check `--version` on a
+snapshot build whenever that variable moves.
 
 The release notes are the CHANGELOG.md section whose heading is exactly
 `## [<tag without v>]`; GoReleaser appends the commits since the previous tag, grouped by

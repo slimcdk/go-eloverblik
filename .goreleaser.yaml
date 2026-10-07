@@ -64,16 +64,11 @@ builds:
     ldflags:
       # -s -w drop the symbol table and DWARF debug info.
       #
-      # No -X version injection here on purpose: the source has no version
-      # variable to inject into (main.go only calls cmd.Execute(), and the cobra
-      # root command sets no Version field). GoReleaser's default ldflags would
-      # try to set main.version/main.commit/main.date/main.builtBy, which the
-      # linker silently ignores for symbols that do not exist. Rather than carry
-      # four dead flags, we strip only. If a version variable is added later,
-      # add for example
-      #   -X github.com/slimcdk/go-eloverblik/cmd.version={{ .Version }}
-      # and wire it into the cobra root command.
-      - -s -w
+      # -X sets the version --version prints, with the v of the tag, as go install
+      # reports it. The variable lives in package cmd, not main, so GoReleaser's
+      # default main.version would miss it; the linker ignores -X for a symbol that
+      # does not exist, so check --version on a snapshot build when moving it.
+      - -s -w -X github.com/slimcdk/go-eloverblik/cmd.version=v{{ .Version }}
     # Reproducible builds: timestamp the binary from the commit, not from "now".
     mod_timestamp: "{{ .CommitTimestamp }}"
 
