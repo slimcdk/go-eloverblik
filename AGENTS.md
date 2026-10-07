@@ -62,6 +62,8 @@ again as its gate):
   `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0`.
   It runs govet (every analyzer but shadow and fieldalignment) and reports gofmt and
   goimports differences, which is why `go vet` and `gofmt` are not CI steps of their own.
+  The config sets the `live` build tag, so it also type-checks and lints
+  `v1/live_test.go`, which nothing else compiles. Linting runs no test.
   `actionlint` is not run by CI at all.
 - The Build job cross-compiles every shipped target with `go build -v -o /dev/null .`:
   linux, darwin and windows on amd64 and arm64, plus linux/arm with `GOARM=6`.
@@ -74,22 +76,24 @@ again as its gate):
 ## Conventions
 
 - Test first: a change in behaviour starts with a test that fails without it.
-- Tests never call api.eloverblik.dk, and there is no test host: `NewCustomer` and
-  `NewThirdParty` always target `https://api.eloverblik.dk` (`Mode` and `TestMode` have no
-  effect). In `v1/`, activate httpmock on the client's own HTTP client before its first
-  request, `httpmock.ActivateNonDefault(c.resty.GetClient())`, so an unregistered request
-  fails instead of going out; or point `c.resty.SetBaseURL` at an `httptest` server, as
-  `v1/options_test.go` does. In `cmd/`, set `clientInstance` to a fake (`MockClient` in
-  `cmd/measurements_test.go`): the `customer` and `thirdparty` commands build a real client
-  whenever `clientInstance` is nil and `--token` is set, and `token --data-access` calls
-  `/token`.
-- No scheduled or automated traffic to Energinet: no workflow, test or script may call an
-  Eloverblik or Energinet host. The files in `docs/` are refreshed by hand, as
-  `docs/README.md` describes.
-- When sources disagree, trust them in this order: the live API, then the OpenAPI documents
-  (`docs/swagger-eloverblik-*.json`), then the PDF technical description, which predates
-  DataHub 3.0. Where the live API is known to differ from the documents, as with the time
-  series resolutions, README.md and llms.md say so.
+- Tests never call api.eloverblik.dk, except the [live tests](#live-tests), and there is
+  no test host: `NewCustomer` and `NewThirdParty` always target `https://api.eloverblik.dk`
+  (`Mode` and `TestMode` have no effect). In `v1/`, activate httpmock on the client's own
+  HTTP client before its first request, `httpmock.ActivateNonDefault(c.resty.GetClient())`,
+  so an unregistered request fails instead of going out; or point `c.resty.SetBaseURL` at
+  an `httptest` server, as `v1/options_test.go` does. In `cmd/`, set `clientInstance` to a
+  fake (`MockClient` in `cmd/measurements_test.go`): the `customer` and `thirdparty`
+  commands build a real client whenever `clientInstance` is nil and `--token` is set, and
+  `token --data-access` calls `/token`.
+- No scheduled or automated traffic to Energinet: no workflow or script, and no test but
+  the live tests, may call an Eloverblik or Energinet host, and only a person runs the live
+  tests (`go test -tags live`), by hand. golangci-lint sets the `live` tag only to compile
+  and lint them. The files in `docs/` are refreshed by hand, as `docs/README.md` describes.
+- When sources disagree, trust them in this order: the live API (the live tests check the
+  client against it), then the OpenAPI documents (`docs/swagger-eloverblik-*.json`), then
+  the PDF technical description, which predates DataHub 3.0. Where the live API is known
+  to differ from the documents, as with the time series resolutions, README.md and llms.md
+  say so.
 - Every behaviour change gets an entry in CHANGELOG.md, in the section of the next release
   (the topmost `## [x.y.z]` whose `vx.y.z` tag does not exist yet; open one above the others
   when the topmost is already tagged), and is documented in README.md and llms.md in the
@@ -106,6 +110,40 @@ again as its gate):
   Energinet, such as the CSV export headers or the wording of the guides in
   `docs/eloverblik-guides/`, is quoted verbatim and never translated, as `v1/meters.go`
   quotes "udgået".
+
+## Live tests
+
+`v1/live_test.go` checks the client against the production API with the refresh tokens
+of the person running it. Only the `live` build tag compiles it in, and each test skips
+unless its token is set, so CI and a plain `go test` never run it:
+
+```sh
+export ELO_CUSTOMER_TOKEN='...'    # a Customer API refresh token, and/or
+export ELO_THIRDPARTY_TOKEN='...'  # a Third-Party API refresh token
+go test -tags live -count=1 -v -run Live ./v1/
+```
+
+- A coding agent never runs them. It asks the maintainer to, and to share the output.
+- They check the shape of every answer, never its values. A call that fails, a metering
+  point ID or GLN without its format and check digit, an empty address field, a week of
+  time series that is all zeros, or a field in a response that the client would drop
+  fails the test. A field the client decodes that a response leaves out is only logged,
+  because the API leaves out empty fields. The field comparison is `jsonFieldDrift` in
+  `v1/responseshape_test.go`, which the ordinary tests cover.
+- They read only metering points that should have data for last week: the customer test
+  skips those the user has moved out of, the third-party test those whose access does
+  not cover the week, and both read time series only for connected metering points.
+- They only read. Never add a call that changes something, such as `AddRelationByID`.
+- Their output must hold no customer data: log counts, codes, resolutions and field
+  names, never a value from a response. Report errors through `describeShapeError` in
+  `v1/responseshape_test.go`, which leaves out the values, URLs and IDs an error can
+  quote; resty's own log is silenced for the same reason.
+- A run sends at most about 15 requests per token, one of them to `/token`, and stops
+  when no data access token could be fetched. The API allows 2 `/token` calls a minute
+  per IP, so wait a minute between runs. `-count=1` keeps `go test` from replaying a
+  cached pass.
+- When the code or the docs change what they claim about the live API, change the check
+  that verifies the claim with them.
 
 ## Release
 

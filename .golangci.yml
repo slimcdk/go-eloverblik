@@ -2,6 +2,10 @@ version: "2"
 run:
   modules-download-mode: readonly
   tests: true
+  # Lint v1/live_test.go too. Linting compiles it but never runs it, so nothing reaches
+  # Eloverblik; only go test -tags live runs it.
+  build-tags:
+    - live
 linters:
   enable:
     - errorlint # errors compared with == or formatted with %v instead of wrapped

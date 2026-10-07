@@ -251,6 +251,9 @@ The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later;
   used to run the publishing job too, as if the tag had just been pushed.
 - The test workflow can be started by hand, so it can run on a branch that has no pull
   request into master yet.
+- `v1/live_test.go`, behind the `live` build tag, checks the shape of the live API's
+  answers with the refresh tokens of whoever runs it by hand. CI never runs it;
+  golangci-lint compiles and lints it.
 - The code takes what `go fix` proposes for Go 1.27, and the linters now include errorlint,
   testifylint, modernize and gocritic. errorlint found the export errors that formatted a
   transport error instead of wrapping it, listed above.

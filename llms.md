@@ -1946,7 +1946,7 @@ Coverage:
 Test Files:
   - v1/*_test.go intercept the resty transport with httpmock (options_test.go also runs httptest servers);
     cmd/*_test.go swap in mock Client/Customer implementations through clientInstance.
-    No test reaches api.eloverblik.dk; the response fixtures of the endpoints that answer come
+    No test in a plain go test run reaches api.eloverblik.dk; the response fixtures of the endpoints that answer come
     from live API responses, while the charge-links fixture is constructed, since that endpoint
     has never answered
   - Both success and error paths are covered, including non-2xx statuses with empty bodies,
@@ -1954,11 +1954,15 @@ Test Files:
     periods
   - v1/example_test.go holds the godoc examples; go test runs the two with a fixed output
     (ParseToken and StatusResponse.Err), and none of the examples reaches Eloverblik
+  - v1/live_test.go, behind the live build tag, checks the shape of the live API's answers
+    with the refresh tokens of whoever runs it by hand. It only reads, its output holds no
+    value from a response, and it never runs in CI
 
 Run Tests:
   command: go test ./...
   with_coverage: go test -coverprofile=coverage.out ./...
   with_race: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+  live (by hand only, with ELO_CUSTOMER_TOKEN and/or ELO_THIRDPARTY_TOKEN set): go test -tags live -count=1 -v -run Live ./v1/
   all checks: AGENTS.md (CLAUDE.md is a symlink to it) lists every check CI runs and how to run it locally
 ```
 
