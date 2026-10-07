@@ -5,6 +5,9 @@ on:
     branches: [ master, main, develop ]
   pull_request:
     branches: [ master, main, develop ]
+  # By hand, for a branch that has no pull request into one of the branches above
+  # yet, such as one stacked on another pull request.
+  workflow_dispatch:
 
 # Least privilege by default. No job in this workflow writes to the repository,
 # so nothing widens this. Codecov uploads over its own upload endpoint and needs

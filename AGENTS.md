@@ -36,6 +36,9 @@ How CI runs them (`.github/workflows/test.yml`; before a release, `release.yml` 
 `go mod verify`, `go mod tidy -diff`, `go test -race ./...`, the 386 run and the ARMv6 run
 again as its gate):
 
+- `test.yml` runs for pushes to and pull requests into master, main and develop. On any
+  other branch, such as one stacked on another pull request, start it by hand:
+  `gh workflow run test.yml --ref <branch>`.
 - `go test -v -race -coverprofile=coverage.out -covermode=atomic ./...` on ubuntu, windows and
   macos runners, every step in bash, followed by the `-trimpath` run above on all three.
 - The `-trimpath` run with `GOROOT` and `ZONEINFO` unset leaves the tests, like a release
