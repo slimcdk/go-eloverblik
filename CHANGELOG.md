@@ -79,6 +79,9 @@ it refuses to build the module.
   data fields Energinet lists as retired or, for now, unavailable.
 - The OpenAPI documents in `docs/` are the ones Energinet publishes as of October 2026. The
   previous ones dated from February, before `getchargelinkswithcharges` was specified.
+  `docs/` also holds the current technical description (revised March 2025, replacing the
+  2020 edition) and the docs.eloverblik.dk guides as Markdown, and `docs/README.md` says
+  where each file comes from and which to trust.
 
 ### Dependencies, CI and tooling
 

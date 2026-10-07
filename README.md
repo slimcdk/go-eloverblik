@@ -1056,6 +1056,7 @@ GOOS=windows GOARCH=amd64 go build -o go-eloverblik-windows-amd64.exe .
 │   ├── timeseries.go       # Timeseries endpoints
 │   ├── utils.go            # Internal helpers
 │   └── *_test.go           # Unit tests
+├── docs/                   # Energinet's API documentation, see docs/README.md
 ├── .github/
 │   └── workflows/
 │       ├── release.yml     # Tag-triggered GoReleaser build
