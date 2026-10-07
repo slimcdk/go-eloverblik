@@ -1,15 +1,22 @@
 package eloverblik
 
 import (
+	"sync"
+
 	"github.com/go-resty/resty/v2"
 )
 
 // client is the internal implementation that satisfies the Customer and ThirdParty interfaces.
+// It is safe for concurrent use by multiple goroutines.
 type client struct {
 	refreshToken string
-	accessToken  string
 	resty        *resty.Client
 	apiType      apiType
+
+	// tokenMu guards accessToken. It is held across the /token request, so goroutines
+	// that need a data access token at the same time share the one request.
+	tokenMu     sync.Mutex
+	accessToken string
 }
 
 type apiType int
@@ -30,6 +37,10 @@ const (
 // NewCustomer creates and returns a new Eloverblik Customer client.
 // Zero or more options can be passed to configure the client.
 //
+// The client is safe for concurrent use by multiple goroutines. Create one and share it:
+// it fetches a data access token from /token on the first call that needs one, and the
+// API allows only 2 such calls a minute.
+//
 // Example:
 //
 //	customerClient := eloverblik.NewCustomer(refreshToken)
@@ -45,6 +56,10 @@ func NewCustomer(refreshToken string, opts ...Option) Customer {
 
 // NewThirdParty creates and returns a new Eloverblik ThirdParty client.
 // Zero or more options can be passed to configure the client.
+//
+// The client is safe for concurrent use by multiple goroutines. Create one and share it:
+// it fetches a data access token from /token on the first call that needs one, and the
+// API allows only 2 such calls a minute.
 //
 // Example:
 //

@@ -50,7 +50,8 @@ type ThirdPartyMeteringPoint struct {
 	ChildMeteringPoints     []ChildMeteringPoint `json:"childMeteringPoints"`
 }
 
-// Fetches and sets a access token on the base client
+// authenticate exchanges the refresh token for a data access token and caches it on the
+// client. The caller must hold c.tokenMu.
 func (c *client) authenticate() error {
 
 	// Response struct
@@ -86,7 +87,15 @@ func (c *client) authenticate() error {
 	return nil
 }
 
+// GetDataAccessToken returns the data access token the client sends on its requests,
+// exchanging the refresh token for one on the first call that needs it and caching it.
+//
+// It is safe for concurrent use: goroutines that need a token at the same time wait for a
+// single /token request, which matters because the API allows only 2 of those a minute.
 func (c *client) GetDataAccessToken() (string, error) {
+	c.tokenMu.Lock()
+	defer c.tokenMu.Unlock()
+
 	if c.accessToken == "" {
 		if err := c.authenticate(); err != nil {
 			return c.accessToken, err

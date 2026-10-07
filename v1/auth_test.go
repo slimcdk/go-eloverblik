@@ -1,7 +1,12 @@
 package eloverblik
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -57,6 +62,75 @@ func TestGetDataAccessToken(t *testing.T) {
 		assert.Equal(t, "already-cached-token", token)
 		assert.Equal(t, 0, httpmock.GetTotalCallCount(), "authenticate() should not be called if token is cached")
 	})
+}
+
+// TestGetDataAccessTokenConcurrent guards the token cache against concurrent use. Every
+// goroutine used to find the cache empty and fetch a token of its own, which raced on the
+// cached token and spent the 2 calls a minute the API allows on /token many times over.
+func TestGetDataAccessTokenConcurrent(t *testing.T) {
+	c := NewThirdParty("test-refresh-token", WithoutRetry()).(*client)
+	httpmock.ActivateNonDefault(c.resty.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	token := unsignedToken(t, time.Now().Add(24*time.Hour))
+	var tokenCalls atomic.Int32
+	httpmock.RegisterResponder(http.MethodGet, c.resty.BaseURL+"/token",
+		func(*http.Request) (*http.Response, error) {
+			tokenCalls.Add(1)
+			// A slow answer keeps the window open in which an unguarded cache is still empty
+			time.Sleep(20 * time.Millisecond)
+			return httpmock.NewJsonResponse(http.StatusOK, map[string]string{"result": token})
+		})
+	httpmock.RegisterResponder(http.MethodGet, c.resty.BaseURL+"/authorization/authorizations",
+		func(req *http.Request) (*http.Response, error) {
+			if req.Header.Get("Authorization") != "Bearer "+token {
+				return httpmock.NewStringResponse(http.StatusUnauthorized, ""), nil
+			}
+			return httpmock.NewJsonResponse(http.StatusOK, map[string]any{"result": []any{}})
+		})
+
+	const goroutines = 32
+	start := make(chan struct{})
+	errs := make(chan error, goroutines)
+	var wg sync.WaitGroup
+	for i := range goroutines {
+		wg.Go(func() {
+			<-start
+			if i%2 == 0 {
+				_, err := c.GetAuthorizations()
+				errs <- err
+				return
+			}
+			got, err := c.GetDataAccessToken()
+			if err == nil && got != token {
+				err = fmt.Errorf("got data access token %q, want the one /token issued", got)
+			}
+			errs <- err
+		})
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		require.NoError(t, err)
+	}
+	assert.Equal(t, int32(1), tokenCalls.Load(), "one client must fetch its data access token once")
+}
+
+// unsignedToken builds an unsecured JWT ("alg": "none") for a data access token that
+// expires at exp. The client only reads the claims, so no signature is needed.
+func unsignedToken(t *testing.T, exp time.Time) string {
+	t.Helper()
+
+	payload, err := json.Marshal(map[string]any{
+		"tokenType": "ThirdPartyApiDataAccess",
+		"exp":       exp.Unix(),
+	})
+	require.NoError(t, err)
+
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
+	return header + "." + base64.RawURLEncoding.EncodeToString(payload) + "."
 }
 
 // TestAuthenticateFailure guards the token endpoint. Any non-200 used to be swallowed:
