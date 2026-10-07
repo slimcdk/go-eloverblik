@@ -21,10 +21,6 @@ var headerOutput io.Writer = os.Stderr
 var rootCmd = &cobra.Command{
 	Use:   "go-eloverblik",
 	Short: "A CLI for the Danish Eloverblik platform",
-	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
-		// write data access token to temporary location for reuse
-		return nil
-	},
 }
 
 func Execute() {
