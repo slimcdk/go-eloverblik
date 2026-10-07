@@ -173,8 +173,15 @@ func TestApiErrorCode(t *testing.T) {
 		assert.Equal(t, uint64(30004), code)
 	})
 
+	// The time series export answers with "#NNNNN: message" instead, e.g. when to equals from.
+	t.Run("reads the code out of a message in the export's form", func(t *testing.T) {
+		code, ok := apiErrorCode("#30002: Period not allowed, ToDate is equal to FromDate.")
+		assert.True(t, ok)
+		assert.Equal(t, uint64(30002), code)
+	})
+
 	t.Run("reports no code for a message that carries none", func(t *testing.T) {
-		for _, msg := range []string{"", "no", "Not Found", "Request 20010 failed", "[abcde] nonsense"} {
+		for _, msg := range []string{"", "no", "Not Found", "Request 20010 failed", "[abcde] nonsense", "#abcde: nonsense"} {
 			_, ok := apiErrorCode(msg)
 			assert.False(t, ok, "message %q", msg)
 		}
@@ -190,6 +197,11 @@ func TestApiErrorCode(t *testing.T) {
 			"[2001] Too short",
 			"[20010",
 			"[20010 Relation not found",
+			"#300021: Six digits",
+			"#3000: Four digits",
+			"#30002 No colon",
+			"[30002: Mixed forms",
+			"#30002] Mixed forms",
 		} {
 			code, ok := apiErrorCode(msg)
 			assert.False(t, ok, "message %q", msg)

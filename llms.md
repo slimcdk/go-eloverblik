@@ -1619,12 +1619,14 @@ non-2xx status:    |
                    ALWAYS an error. Which one depends on the body:
                    - "[code] message" with a known code -> that code's sentinel, whatever the
                      status (a 429 carrying [10004] is ErrorMaximumNumberOfMeteringPointsExceeded,
-                     not ErrorTooManyRequests)
+                     not ErrorTooManyRequests). The time series export writes the code as #code
+                     followed by a colon instead, and maps the same way
                    - an RFC 7807 problem document (what both specs declare for 400/401/403/404,
                      and what the charge-links endpoint answers its 404 with) ->
                      *eloverblik.APIError (StatusCode, Code, Title, Detail, TraceID, Errors; use
-                     errors.As). Code holds a "[NNNNN]" code Detail opens with, known to the
-                     client or not, else 0. It unwraps to the sentinel of a known code, else to
+                     errors.As). Code holds a "[NNNNN]" or "#NNNNN" code Detail opens with,
+                     known to the client or not, else 0. It unwraps to the sentinel of a known
+                     code, else to
                      ErrorUnauthorized / ErrorEndpointRetired / ErrorTooManyRequests on a
                      401 / 410 / 429, and to nothing on any other status
                    - no usable body (empty, not JSON, or the no-error code 10000) ->
@@ -1640,10 +1642,11 @@ reading the body:  a parsed call (every call but the exports and IsAlive) reads 
                    as "no usable body" above. The exports read the body of a failed request
                    whatever its Content-Type, so a JSON string or problem document sent as
                    text/plain still maps to its sentinel or *APIError
-API error message: the code is read only from exactly five digits in brackets at the start,
-                   e.g. "[20010] Relation not found", and mapped to an exported sentinel error
-                   (compare with errors.Is). "[20240101] ..." or "[20010" without its closing
-                   bracket carries no code
+API error message: the code is read only from exactly five digits at the start, in brackets,
+                   e.g. "[20010] Relation not found", or after a hash and before a colon, as the
+                   time series export writes it (#30002 when to equals from), and mapped to an
+                   exported sentinel error (compare with errors.Is). "[20240101] ..." or
+                   "[20010" without its closing bracket carries no code
 unknown code:      >-
                    a five digit code the client has no sentinel for -> on a 401 / 410 / 429 the
                    status sentinel wrapped with the message, e.g. "unauthorized access: unhandled

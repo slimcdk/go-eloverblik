@@ -228,12 +228,18 @@ func statusSentinel(statusCode int) error {
 }
 
 // apiErrorCode reads the API error code out of a message, e.g. 20010 out of
-// "[20010] Relation not found". ok is false when the message carries no code. A code is
-// exactly five digits in brackets: a message that opens with a bracketed number of any
-// other length, such as "[20240101] ...", carries no code, rather than one made of its
-// first five digits.
+// "[20010] Relation not found", or 30002 out of "#30002: Period not allowed, ToDate is
+// equal to FromDate.", the form the time series export answers with. ok is false when the
+// message carries no code. A code is exactly five digits, in brackets or after a hash and
+// before a colon: a message that opens with a number of any other length, such as
+// "[20240101] ...", carries no code, rather than one made of its first five digits.
 func apiErrorCode(msg string) (code uint64, ok bool) {
-	if len(msg) < 7 || msg[0] != '[' || msg[6] != ']' {
+	if len(msg) < 7 {
+		return 0, false
+	}
+	bracketed := msg[0] == '[' && msg[6] == ']'
+	hashed := msg[0] == '#' && msg[6] == ':'
+	if !bracketed && !hashed {
 		return 0, false
 	}
 

@@ -81,6 +81,28 @@ func TestFailedExport(t *testing.T) {
 	}
 }
 
+// TestFailedExportInTheExportsErrorForm covers the form the time series export writes its
+// error code in, "#NNNNN: message" rather than "[NNNNN] message". Asked for a period whose
+// to equals its from, the live API answered 400 with "#30002: Period not allowed, ToDate is
+// equal to FromDate.", which the client reported as "failed to parse error in api error
+// message", matching no sentinel.
+func TestFailedExportInTheExportsErrorForm(t *testing.T) {
+	mockResty := resty.New()
+	httpmock.ActivateNonDefault(mockResty.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	c := &client{accessToken: "test-access-token", resty: mockResty, apiType: CustomerApi}
+	httpmock.RegisterNoResponder(httpmock.NewStringResponder(http.StatusBadRequest,
+		`"#30002: Period not allowed, ToDate is equal to FromDate."`).HeaderSet(http.Header{"Content-Type": []string{"application/json"}}))
+
+	day := time.Date(2026, 9, 28, 0, 0, 0, 0, cph)
+	stream, err := c.ExportTimeSeries([]string{"571313180100000001"}, day, day, Hour)
+
+	assert.Nil(t, stream)
+	require.ErrorIs(t, err, ErrorToDateCanNotBeEqualToFromDate)
+	assert.Equal(t, "failed to export time series: "+ErrorToDateCanNotBeEqualToFromDate.Error(), err.Error())
+}
+
 // trackedBody is a response body that records whether it was read to the end and whether
 // it was closed. Like a body from net/http, it cannot be read once it is closed.
 type trackedBody struct {

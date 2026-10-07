@@ -1203,7 +1203,9 @@ Failures arrive at two levels, and both matter.
 **The call itself** fails with an error. When the API names an error code the client knows,
 or answers 401, 410 or 429, that error matches a sentinel with `errors.Is`; on those three
 statuses it does so for a code the client does not know, too. A code is read only from
-five digits in brackets at the start of the message, as in `[20010] Relation not found`.
+five digits at the start of the message: in brackets, as in `[20010] Relation not found`,
+or after a hash and before a colon, as the time series export writes it, as in
+`#30002: Period not allowed, ToDate is equal to FromDate.`
 Anything else matches none and lands in the `err != nil` branch. That includes a 503 that
 still fails after the retries, and a problem document such as the 404 that
 `getchargelinkswithcharges` answers today, which arrives as an `*APIError` carrying the

@@ -46,12 +46,13 @@ The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later;
   the client has no sentinel for it, such as a code Energinet added later, or 10000. It used
   to stay zero then, as for a document without a code. What the error unwraps to is
   unchanged.
-- An API error code is read only from five digits in brackets, `[NNNNN]`, at the start of
-  the message. A message that opened with a bracketed number of more than five digits, or
-  with `[` and five digits but no `]`, used to be read as a code made of its first five
-  digits: `[200101] …` matched `ErrorRelationNotFound`, the sentinel of 20010. Such a
-  message now carries no code and is judged by its HTTP status, with the message kept, as
-  any other message without a code.
+- An API error code is read only from exactly five digits at the start of the message, in
+  brackets, `[NNNNN]`, or after a hash and before a colon, `#NNNNN:`, as the time series
+  export writes it. A message that opened with a bracketed number of more than five
+  digits, or with `[` and five digits but no `]`, used to be read as a code made of its
+  first five digits: `[200101] …` matched `ErrorRelationNotFound`, the sentinel of 20010.
+  Such a message now carries no code and is judged by its HTTP status, with the message
+  kept, as any other message without a code.
 - 30014 maps to `ErrorPeriodNotAllowed`, with a message that names both reasons the API
   gives it. `ErrorNumberOfDaysExcceded` is the same error, so `errors.Is` matches either
   name, but code comparing error strings sees the new text. So does code comparing 30003's,
@@ -171,6 +172,10 @@ The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later;
   time zone database of its own and a `-trimpath` build cannot use Go's, so
   Europe/Copenhagen failed to load, and the error was discarded. The package now embeds the
   database (`time/tzdata`, about 400 KB).
+- A failed export whose message writes its code as `#NNNNN:`, as the time series export
+  does, matches that code's sentinel. A time series export whose `to` equalled its `from`
+  failed with `failed to parse error in api error message #30002: …`, which matched no
+  sentinel; it now matches `ErrorToDateCanNotBeEqualToFromDate`.
 - `timeseries --flatten` crashed with `index out of range [0]` as soon as one metering point
   failed on its own, e.g. with 30018 for a period that starts before it was registered.
 - A failed export left its response body open, and with it the connection. The body is
