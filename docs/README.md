@@ -2,16 +2,19 @@
 
 The files in this directory are Energinet's documentation of the Eloverblik Customer and
 Third-Party APIs, kept here so the client can be checked against them offline. They are
-Energinet's material, copied as published, and are **not** covered by this repository's MIT
-license.
+Energinet's material and are **not** covered by this repository's MIT license. Only the
+OpenAPI documents and the PDF are copied as published. The guides were rendered and
+converted to Markdown, as [Refreshing](#refreshing) describes, and the JSON skeletons were
+taken in February 2022 from the examples in Appendix B of the technical description's
+November 2020 edition, an appendix Energinet deleted in March 2022.
 
 | File | What it is | Source | Retrieved |
 |------|------------|--------|-----------|
 | `swagger-eloverblik-customerapi.json` | OpenAPI 3.0.4 document of the Customer API, `api-version` 1.0, byte for byte as served | <https://api.eloverblik.dk/customerapi/swagger/customerapi-v1.0/swagger.json> | 2026-10-07, unchanged since 2026-10-05 |
 | `swagger-eloverblik-thirdpartyapi.json` | OpenAPI 3.0.4 document of the Third-Party API, `api-version` 1.0, byte for byte as served | <https://api.eloverblik.dk/thirdpartyapi/swagger/thirdpartyapi-v1.0/swagger.json> | 2026-10-07, unchanged since 2026-10-05 |
-| `customer-and-third-party-api-for-datahub-eloverblik-technical-description.pdf` | Technical description of both APIs, document 19/11830-1, last revised 27 March 2025 | <https://energinet.dk/media/2l1lmb2z/customer-and-third-party-api-for-datahub-eloverblik-technical-description.pdf> | 2026-10-07 |
+| `customer-and-third-party-api-for-datahub-eloverblik-technical-description.pdf` | Technical description of both APIs, document 19/11830-1, last revised 27 March 2025, as published | <https://energinet.dk/media/2l1lmb2z/customer-and-third-party-api-for-datahub-eloverblik-technical-description.pdf> | 2026-10-07 |
 | `eloverblik-guides/*.md` | The guides on docs.eloverblik.dk, in Danish, converted from the rendered pages to Markdown; each file names its page | <https://docs.eloverblik.dk/docs/guides/introduction> | 2026-10-07 |
-| `MyEnergyDataMarketDocumentResponse.json`, `metering-point-details-response.json`, `metering-point-price-data.json`, `meter-point-readings-response.json` | Example response skeletons with `"string"` placeholders, copied from Appendix B ("Examples") of the technical description's November 2020 edition (version 6.0); Energinet deleted that appendix in March 2022. Superseded by the OpenAPI documents; the meter readings endpoint no longer exists | Appendix B of the technical description, edition of 10 November 2020 (in git history: `git show d26e701:'docs/Customer and Third party API for Datahub Eloverblik  Technical description gl.pdf' > technical-description-2020.pdf`) | 2022-02 |
+| `MyEnergyDataMarketDocumentResponse.json`, `metering-point-details-response.json`, `metering-point-price-data.json`, `meter-point-readings-response.json` | Example response skeletons with `"string"` placeholders, taken from Appendix B ("Examples") of the technical description's November 2020 edition (version 6.0) and identical to its examples apart from whitespace (the metering point details skeleton is the Third-Party API example, which lacks the Customer API example's `balanceSupplierName` and `balanceSupplierStartDate`); Energinet deleted that appendix in March 2022. Superseded by the OpenAPI documents; the meter readings endpoint no longer exists | Appendix B of the technical description, edition of 10 November 2020 (in git history: `git show d26e701:'docs/Customer and Third party API for Datahub Eloverblik  Technical description gl.pdf' > technical-description-2020.pdf`) | 2022-02 |
 
 ## Which one to trust
 
