@@ -57,6 +57,7 @@ type Customer interface {
 	DeleteRelation(meteringPointID string) (bool, error)
 
 	GetMeteringPoints(includeAll bool) ([]MeteringPoints, error)
+
 	// ExportTimeSeries exports the time series of the metering points as the CSV file
 	// Eloverblik generates: separated by semicolons, opening with a UTF-8 byte order mark,
 	// with Danish column names. The caller closes the returned stream.
@@ -68,7 +69,15 @@ type Customer interface {
 	// Like the other exports, the MålepunktsID column holds each ID with a tab before it.
 	// Both were checked against the live API on 2026-10-07.
 	ExportTimeSeries(meteringPointIDs []string, from, to time.Time, aggregation Aggregation) (io.ReadCloser, error)
+
+	// ExportMasterdata exports the master data of the metering points as a CSV file like
+	// the time series export's, one row per metering point, in 103 columns that llms.md
+	// lists. The caller closes the returned stream.
 	ExportMasterdata(meteringPointIDs []string) (io.ReadCloser, error)
+
+	// ExportCharges exports the charges of the metering points as a CSV file like the time
+	// series export's, one row per charge and tariff position, in 11 columns that llms.md
+	// lists. The caller closes the returned stream.
 	ExportCharges(meteringPointIDs []string) (io.ReadCloser, error)
 }
 

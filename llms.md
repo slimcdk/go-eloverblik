@@ -737,7 +737,35 @@ if _, err := io.Copy(file, stream); err != nil {
 // PURPOSE: Export metering point master data as CSV
 // SIGNATURE: ExportMasterdata(meteringPointIDs []string) (io.ReadCloser, error)
 // OUTPUTS:
-//   - io.ReadCloser: CSV stream with the master data columns. Caller closes.
+//   - io.ReadCloser: CSV stream, one row per metering point. Caller closes.
+// CSV COLUMNS (103, checked 2026-10-07; MålepunktsID holds each ID with a tab before it):
+//     MålepunktsID, MålepunktsID_hovedmåler, Alias, Målepunktstype_Kode, Målepunktstype,
+//     Netområde, Nettoafregningsgruppe, Tilslutningsstatus_Kode, Tilslutningsstatus,
+//     Branchekode, Effektgrænse_kW, Effektgrænse_ampere, Målepunktsart_Kode, Målepunktsart,
+//     Aftagepligt_Kode, Aftagepligt, Anlægskapacitet, Tilslutningstype_Kode,
+//     Tilslutningstype, Afbrydelsesart_Kode, Afbrydelsesart, Produkt_Kode, Produkt,
+//     Måleenhed, Adressekode, Vejnavn, Husnummer, Etage, Dørnummer, Postnummer, By,
+//     Stednavn, Kommunekode, Målepunktskommentar, Kundenavn, Kundenavn_2, CVR-nummer,
+//     DataadgangsCVR-nummer, Afregningsform_Kode, Afregningsform, Elleverandør,
+//     Elleverandørstartdato, Kunde_start_dato, Aflæsningsfrekvens_Kode, Aflæsningsfrekvens,
+//     Anslået_årsforbrug, Aflæsningsmåde_Kode, Aflæsningsmåde, Målernummer, Målercifre,
+//     Måleromregningsfaktor, Målerenhed, Målertype_Kode, Målertype,
+//     Reduceret_elafgift_Kode, Reduceret_elafgift, Elvarmestartdato, Netvirksomhed,
+//     Teknisk_kontakt_Navn, Teknisk_kontakt_Navn2, Teknisk_kontakt_Vejnavn,
+//     Teknisk_kontakt_Husnr., Teknisk_kontakt_Etage, Teknisk_kontakt_Dør,
+//     Teknisk_kontakt_Postnr, Teknisk_kontakt_By, Teknisk_kontakt_Stednavn,
+//     Teknisk_kontakt_Land, Teknisk_kontakt_Telefonnr., Teknisk_kontakt_Mobilnr.,
+//     Teknisk_kontakt_E-mail, Teknisk_kontakt_Attention, Teknisk_kontakt_Postbox,
+//     Teknisk_kontakt_beskyttet_adresse_Kode, Teknisk_kontakt_beskyttet_adresse,
+//     Juridisk_kontakt_Navn, Juridisk_kontakt_Navn2, Juridisk_kontakt_Vejnavn,
+//     Juridisk_kontakt_Husnr., Juridisk_kontakt_Etage, Juridisk_kontakt_Dør,
+//     Juridisk_kontakt_Postnr., Juridisk_kontakt_By, Juridisk_kontakt_Stednavn,
+//     Juridisk_kontakt_Land, Juridisk_kontakt_Telefonnr., Juridisk_kontakt_Mobilnr.,
+//     Juridisk_kontakt_E-mail, Juridisk_kontakt_Attention, Juridisk_kontakt_Postbox,
+//     Juridisk_kontakt_beskyttet_adresse_Kode, Juridisk_kontakt_beskyttet_adresse,
+//     DAR_adresse_konflikt_Kode, DAR_adresse_konflikt, DAR_reference, Beskyttet_Navn_Kode,
+//     Beskyttet_Navn, Energi_type_Kode, Energi_type, Elleverandør_Id, Elleverandør_Id_type,
+//     Netvirksomhed_Id, Netvirksomhed_Id_type
 //   - error: HTTP/network errors, or a non-2xx status, wrapped as
 //     "failed to export masterdata: <cause>" (as for ExportTimeSeries)
 // EXAMPLE:
@@ -758,6 +786,9 @@ io.Copy(os.Stdout, stream)
 //   - error: HTTP/network errors, or a non-2xx status, wrapped as
 //     "failed to export charges: <cause>" (as for ExportTimeSeries)
 // CSV STRUCTURE: One row per charge item, including hourly tariff positions
+// CSV COLUMNS (11, checked 2026-10-07; MålepunktsID holds each ID with a tab before it):
+//     MålepunktsID, Pristype, Pris_ID, Navn, Beskrivelse, Ejer, Gyldig_fra, Gyldig_til,
+//     Position, Pris (Ekskl. Moms), Mængde
 ```
 
 ```go

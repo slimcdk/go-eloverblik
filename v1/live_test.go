@@ -76,6 +76,44 @@ var (
 	liveExportColumns = []string{"MålepunktsID", "Fra_dato", "Til_dato", "Mængde", "Måleenhed", "Kvalitet", "Type", "Målepunktstype_Kode", "Målepunktstype"}
 )
 
+// The columns of the master data and charges exports, as llms.md lists them.
+var (
+	liveMasterdataColumns = []string{
+		"MålepunktsID", "MålepunktsID_hovedmåler", "Alias", "Målepunktstype_Kode", "Målepunktstype",
+		"Netområde", "Nettoafregningsgruppe", "Tilslutningsstatus_Kode", "Tilslutningsstatus",
+		"Branchekode", "Effektgrænse_kW", "Effektgrænse_ampere", "Målepunktsart_Kode",
+		"Målepunktsart", "Aftagepligt_Kode", "Aftagepligt", "Anlægskapacitet",
+		"Tilslutningstype_Kode", "Tilslutningstype", "Afbrydelsesart_Kode", "Afbrydelsesart",
+		"Produkt_Kode", "Produkt", "Måleenhed", "Adressekode", "Vejnavn", "Husnummer", "Etage",
+		"Dørnummer", "Postnummer", "By", "Stednavn", "Kommunekode", "Målepunktskommentar",
+		"Kundenavn", "Kundenavn_2", "CVR-nummer", "DataadgangsCVR-nummer", "Afregningsform_Kode",
+		"Afregningsform", "Elleverandør", "Elleverandørstartdato", "Kunde_start_dato",
+		"Aflæsningsfrekvens_Kode", "Aflæsningsfrekvens", "Anslået_årsforbrug",
+		"Aflæsningsmåde_Kode", "Aflæsningsmåde", "Målernummer", "Målercifre",
+		"Måleromregningsfaktor", "Målerenhed", "Målertype_Kode", "Målertype",
+		"Reduceret_elafgift_Kode", "Reduceret_elafgift", "Elvarmestartdato", "Netvirksomhed",
+		"Teknisk_kontakt_Navn", "Teknisk_kontakt_Navn2", "Teknisk_kontakt_Vejnavn",
+		"Teknisk_kontakt_Husnr.", "Teknisk_kontakt_Etage", "Teknisk_kontakt_Dør",
+		"Teknisk_kontakt_Postnr", "Teknisk_kontakt_By", "Teknisk_kontakt_Stednavn",
+		"Teknisk_kontakt_Land", "Teknisk_kontakt_Telefonnr.", "Teknisk_kontakt_Mobilnr.",
+		"Teknisk_kontakt_E-mail", "Teknisk_kontakt_Attention", "Teknisk_kontakt_Postbox",
+		"Teknisk_kontakt_beskyttet_adresse_Kode", "Teknisk_kontakt_beskyttet_adresse",
+		"Juridisk_kontakt_Navn", "Juridisk_kontakt_Navn2", "Juridisk_kontakt_Vejnavn",
+		"Juridisk_kontakt_Husnr.", "Juridisk_kontakt_Etage", "Juridisk_kontakt_Dør",
+		"Juridisk_kontakt_Postnr.", "Juridisk_kontakt_By", "Juridisk_kontakt_Stednavn",
+		"Juridisk_kontakt_Land", "Juridisk_kontakt_Telefonnr.", "Juridisk_kontakt_Mobilnr.",
+		"Juridisk_kontakt_E-mail", "Juridisk_kontakt_Attention", "Juridisk_kontakt_Postbox",
+		"Juridisk_kontakt_beskyttet_adresse_Kode", "Juridisk_kontakt_beskyttet_adresse",
+		"DAR_adresse_konflikt_Kode", "DAR_adresse_konflikt", "DAR_reference", "Beskyttet_Navn_Kode",
+		"Beskyttet_Navn", "Energi_type_Kode", "Energi_type", "Elleverandør_Id",
+		"Elleverandør_Id_type", "Netvirksomhed_Id", "Netvirksomhed_Id_type",
+	}
+	liveChargesColumns = []string{
+		"MålepunktsID", "Pristype", "Pris_ID", "Navn", "Beskrivelse", "Ejer", "Gyldig_fra",
+		"Gyldig_til", "Position", "Pris (Ekskl. Moms)", "Mængde",
+	}
+)
+
 // liveRecorder keeps the body of the last response, for the field checks. The /token
 // response is never kept.
 type liveRecorder struct {
@@ -399,8 +437,8 @@ func liveCustomer(t *testing.T, c *client, rec *liveRecorder) {
 
 	t.Run("exports", func(t *testing.T) {
 		liveExportTimeSeries(t, c, connected, from, to)
-		liveExport(t, "ExportMasterdata", func() (io.ReadCloser, error) { return c.ExportMasterdata(ids) })
-		liveExport(t, "ExportCharges", func() (io.ReadCloser, error) { return c.ExportCharges(ids) })
+		liveExport(t, "ExportMasterdata", liveMasterdataColumns, func() (io.ReadCloser, error) { return c.ExportMasterdata(ids) })
+		liveExport(t, "ExportCharges", liveChargesColumns, func() (io.ReadCloser, error) { return c.ExportCharges(ids) })
 	})
 }
 
@@ -1117,12 +1155,41 @@ func liveExportIDs(t *testing.T, what string, rows [][]string, column int) {
 	}
 }
 
-func liveExport(t *testing.T, what string, export func() (io.ReadCloser, error)) {
+// liveExport reads an export and checks its columns against the documented ones.
+func liveExport(t *testing.T, what string, columns []string, export func() (io.ReadCloser, error)) {
 	t.Helper()
 	stream, err := export()
-	if liveOK(t, what, err) {
-		liveCSV(t, what, stream)
+	if !liveOK(t, what, err) {
+		return
 	}
+	if header, _, named := liveCSV(t, what, stream); header != nil {
+		liveColumns(t, what, header, named, columns)
+	}
+}
+
+// liveColumns reports a header that is not the documented columns, naming the documented
+// columns it lacks and, when the header holds column names, the columns it adds.
+func liveColumns(t *testing.T, what string, header []string, named bool, columns []string) bool {
+	t.Helper()
+	if slices.Equal(header, columns) {
+		return true
+	}
+
+	var missing, unexpected []string
+	for _, name := range columns {
+		if !slices.Contains(header, name) {
+			missing = append(missing, name)
+		}
+	}
+	if named {
+		for _, name := range header {
+			if !slices.Contains(columns, name) {
+				unexpected = append(unexpected, name)
+			}
+		}
+	}
+	t.Errorf("%s: %d columns where llms.md documents %d; missing %q, not documented %q", what, len(header), len(columns), missing, unexpected)
+	return false
 }
 
 // liveExportTimeSeries checks the documented columns of a time series export, and that
@@ -1145,24 +1212,7 @@ func liveExportTimeSeries(t *testing.T, c *client, ids []string, from, to time.T
 		return
 	}
 	header, rows, named := liveCSV(t, what, stream)
-	if header == nil {
-		return
-	}
-	if !slices.Equal(header, liveExportColumns) {
-		var missing, unexpected []string
-		for _, name := range liveExportColumns {
-			if !slices.Contains(header, name) {
-				missing = append(missing, name)
-			}
-		}
-		if named {
-			for _, name := range header {
-				if !slices.Contains(liveExportColumns, name) {
-					unexpected = append(unexpected, name)
-				}
-			}
-		}
-		t.Errorf("%s: %d columns where llms.md documents %d; missing %q, not documented %q", what, len(header), len(liveExportColumns), missing, unexpected)
+	if header == nil || !liveColumns(t, what, header, named, liveExportColumns) {
 		return
 	}
 
