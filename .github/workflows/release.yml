@@ -4,8 +4,9 @@ on:
   push:
     tags:
       - "v*"
-  # Manual dry run: builds the full matrix and renders the changelog without
-  # publishing anything or needing a tag.
+  # Manual dry run: builds the full matrix and the archives without publishing a
+  # release or needing a tag. As a snapshot it renders no changelog and no
+  # release notes.
   workflow_dispatch:
 
 # Least privilege by default: read-only for the whole workflow. Only the job
@@ -66,11 +67,13 @@ jobs:
           QEMU_CPU: arm1176
         run: go test -exec qemu-arm ./...
 
-  # Real release: only ever runs for a pushed v* tag.
+  # Real release: only ever runs for a pushed v* tag. The event check matters: a
+  # manual run started from a v* tag also has a refs/tags/v* ref, and must stay
+  # a dry run.
   release:
     name: Release
     needs: test
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       # Needed to create the GitHub Release and upload the archives + checksums.
@@ -121,7 +124,8 @@ jobs:
           # The default job token; no PAT and no org secret involved.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Dry run: same build, same changelog, publishes nothing. Stays read-only.
+  # Dry run: same build matrix, as a snapshot (no changelog, no release notes);
+  # publishes nothing. Stays read-only.
   dry-run:
     name: Dry run
     needs: test
