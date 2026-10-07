@@ -97,7 +97,10 @@ const dataAccessTokenRenewalMargin = 5 * time.Minute
 //
 // A data access token lasts about 24 hours. Once the cached one has expired, or expires
 // within five minutes, according to its exp claim, the next call fetches a new one, so a
-// long running client keeps working. A token whose expiry cannot be read is kept.
+// long running client keeps working. A token whose expiry cannot be read is kept. If the
+// renewal fails before the cached token has expired, the call returns the cached token,
+// which still works for a few minutes, and the next call tries again; once it has
+// expired, the call returns the error.
 //
 // It is safe for concurrent use: goroutines that need a token at the same time wait for a
 // single /token request, which matters because the API allows only 2 of those a minute.
@@ -107,8 +110,18 @@ func (c *client) GetDataAccessToken() (string, error) {
 
 	if c.accessToken == "" || expiresWithin(c.accessToken, dataAccessTokenRenewalMargin) {
 		if err := c.authenticate(); err != nil {
-			return "", err
+			return c.cachedTokenOr(err)
 		}
+	}
+	return c.accessToken, nil
+}
+
+// cachedTokenOr is the outcome of a /token request that failed with err. A cached token
+// inside the renewal margin still works for a few minutes, so it is returned in place of
+// the error until it has actually expired. The caller must hold c.tokenMu.
+func (c *client) cachedTokenOr(err error) (string, error) {
+	if c.accessToken == "" || expiresWithin(c.accessToken, 0) {
+		return "", err
 	}
 	return c.accessToken, nil
 }

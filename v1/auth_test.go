@@ -209,23 +209,65 @@ func TestGetDataAccessTokenRenewal(t *testing.T) {
 		})
 	}
 
-	t.Run("failed renewal reports the error, not the expired token", func(t *testing.T) {
-		c := NewThirdParty("test-refresh-token", WithoutRetry()).(*client)
-		httpmock.ActivateNonDefault(c.resty.GetClient())
-		defer httpmock.DeactivateAndReset()
+	// A token inside the renewal margin still works for a few minutes. Its renewal failing
+	// used to fail the call as well, although the token in hand would have done
+	failedRenewals := []struct {
+		name   string
+		cached string
+		err    error
+	}{
+		{
+			name:   "failed renewal of a token that has not expired returns that token",
+			cached: dataAccessToken(t, time.Now().Add(2*time.Minute)),
+		},
+		{
+			name:   "failed renewal of an expired token reports the error",
+			cached: dataAccessToken(t, time.Now().Add(-time.Hour)),
+			err:    ErrorTooManyRequests,
+		},
+	}
 
-		expired := dataAccessToken(t, time.Now().Add(-time.Hour))
-		httpmock.RegisterResponder(http.MethodGet, c.resty.BaseURL+"/token",
-			httpmock.NewJsonResponderOrPanic(http.StatusOK, map[string]string{"result": expired}).
-				Then(httpmock.NewStringResponder(http.StatusTooManyRequests, "")))
+	for _, test := range failedRenewals {
+		t.Run(test.name, func(t *testing.T) {
+			c := NewThirdParty("test-refresh-token", WithoutRetry()).(*client)
+			httpmock.ActivateNonDefault(c.resty.GetClient())
+			defer httpmock.DeactivateAndReset()
 
-		_, err := c.GetDataAccessToken()
-		require.NoError(t, err)
+			// /token hands out the token under test, then fails the renewal, then succeeds
+			tokenCalls := 0
+			httpmock.RegisterResponder(http.MethodGet, c.resty.BaseURL+"/token",
+				func(*http.Request) (*http.Response, error) {
+					tokenCalls++
+					switch tokenCalls {
+					case 1:
+						return httpmock.NewJsonResponse(http.StatusOK, map[string]string{"result": test.cached})
+					case 2:
+						return httpmock.NewStringResponse(http.StatusTooManyRequests, ""), nil
+					default:
+						return httpmock.NewJsonResponse(http.StatusOK, map[string]string{"result": fresh})
+					}
+				})
 
-		token, err := c.GetDataAccessToken()
-		require.ErrorIs(t, err, ErrorTooManyRequests)
-		assert.Empty(t, token)
-	})
+			_, err := c.GetDataAccessToken()
+			require.NoError(t, err)
+
+			token, err := c.GetDataAccessToken()
+			if test.err != nil {
+				require.ErrorIs(t, err, test.err)
+				assert.Empty(t, token, "an expired token must not be handed out")
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, test.cached, token, "the token that still works must be handed out")
+			}
+			assert.Equal(t, 2, tokenCalls, "the token must have been due for renewal")
+
+			// The failure is not remembered: the next call tries the renewal again
+			token, err = c.GetDataAccessToken()
+			require.NoError(t, err)
+			assert.Equal(t, fresh, token)
+			assert.Equal(t, 3, tokenCalls)
+		})
+	}
 }
 
 // dataAccessToken builds a data access token that expires at exp.
