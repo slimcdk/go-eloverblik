@@ -83,8 +83,9 @@ func (b *apiErrorBody) UnmarshalJSON(data []byte) error {
 // It keeps the parts worth having: the status, the title, the detail and the trace ID -
 // Energinet support asks for the trace ID, so it must reach the caller.
 //
-// Where the document does carry a known API error code, and for the statuses that have a
-// sentinel of their own, APIError unwraps to that sentinel, so errors.Is keeps working:
+// Where the document carries an API error code the client has a sentinel for, APIError
+// unwraps to that sentinel; otherwise it unwraps to the sentinel of its status, for the
+// statuses that have one. Either way errors.Is keeps working:
 //
 //	var apiErr *eloverblik.APIError
 //	if errors.As(err, &apiErr) {
@@ -95,8 +96,10 @@ type APIError struct {
 	// precedence over the one the response arrived with, they only ever differ if the API
 	// contradicts itself.
 	StatusCode int
-	// Code is the API error code, e.g. 20010. Zero when the document carries none, which is
-	// the usual case.
+	// Code is the API error code the detail opens with, e.g. 30004 out of
+	// "[30004] Invalid date format in request". It is set for a code the client has no
+	// sentinel for too, so a new code can still be told apart. Zero when the detail carries
+	// none, which is the usual case.
 	Code uint64
 	// Type is the URI the problem document identifies the problem type with.
 	Type string
@@ -138,6 +141,9 @@ func (e *APIError) Error() string {
 
 // Unwrap returns the sentinel error the problem maps to, so a caller can keep matching on
 // errors.Is(err, ErrorUnauthorized) no matter which of the two shapes the API answered with.
+// That is the sentinel of Code when the client has one for it, otherwise the sentinel of
+// StatusCode: ErrorUnauthorized for a 401, ErrorEndpointRetired for a 410 and
+// ErrorTooManyRequests for a 429. Any other status unwraps to nil.
 func (e *APIError) Unwrap() error { return e.err }
 
 // newAPIError builds the error a problem document is reported with. statusCode is the
@@ -159,11 +165,12 @@ func newAPIError(problem *problemDetails, statusCode int) *APIError {
 	}
 
 	// A problem document has no field for an API error code, but nothing stops the API from
-	// writing one into the detail. Read it when it is there, so a code keeps mapping to the
-	// sentinel it always mapped to; otherwise fall back to what the status alone tells.
+	// writing one into the detail. Read it when it is there and keep it, whether the client
+	// knows it or not. A code with a sentinel keeps mapping to the sentinel it always mapped
+	// to; any other falls back to what the status alone tells.
 	if code, ok := apiErrorCode(problem.Detail); ok {
-		if sentinel, known := apiErrorMap[code]; known && sentinel != nil {
-			apiErr.Code = code
+		apiErr.Code = code
+		if sentinel := apiErrorMap[code]; sentinel != nil {
 			apiErr.err = sentinel
 			return apiErr
 		}

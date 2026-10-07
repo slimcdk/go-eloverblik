@@ -129,6 +129,32 @@ func TestApiErrorFromBody(t *testing.T) {
 		assert.EqualError(t, err, "eloverblik: 400 Bad Request: [30004] Invalid date format in request")
 	})
 
+	t.Run("keeps a code in its detail the client has no sentinel for", func(t *testing.T) {
+		tests := []struct {
+			status int
+			detail string
+			code   uint64
+			want   error // the status sentinel, nil for a status without one
+		}{
+			{http.StatusBadRequest, "[99999] A completely new and unknown error", 99999, nil},
+			{http.StatusUnauthorized, "[99999] A completely new and unknown error", 99999, ErrorUnauthorized},
+			{http.StatusGone, "[99999] A completely new and unknown error", 99999, ErrorEndpointRetired},
+			{http.StatusTooManyRequests, "[99999] A completely new and unknown error", 99999, ErrorTooManyRequests},
+			{http.StatusTooManyRequests, "[10000] No error", 10000, ErrorTooManyRequests},
+		}
+
+		for _, test := range tests {
+			err := apiErrorFromBody(apiErrorBody{Problem: &problemDetails{
+				Title: http.StatusText(test.status), Status: test.status, Detail: test.detail,
+			}}, test.status)
+
+			var apiErr *APIError
+			require.ErrorAs(t, err, &apiErr, "status %d, detail %q", test.status, test.detail)
+			assert.Equal(t, test.code, apiErr.Code, "status %d, detail %q", test.status, test.detail)
+			assert.Equal(t, test.want, apiErr.Unwrap(), "status %d, detail %q", test.status, test.detail)
+		}
+	})
+
 	t.Run("does not report a problem document on a successful status", func(t *testing.T) {
 		assert.NoError(t, apiErrorFromBody(apiErrorBody{Problem: &problemDetails{Title: "Not Found"}}, 200))
 	})
