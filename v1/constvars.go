@@ -1,6 +1,15 @@
 package eloverblik
 
-import "time"
+import (
+	"fmt"
+	"time"
+
+	// The client works in Copenhagen time on every platform. time.LoadLocation reads the
+	// host's zone database first, but Windows has none of its own, and neither have
+	// minimal container images: the embedded copy is the fallback that makes
+	// Europe/Copenhagen load there too.
+	_ "time/tzdata"
+)
 
 type Aggregation string
 type APIType string
@@ -21,8 +30,19 @@ var (
 	Mode    string  = TestMode
 	ApiType APIType = customerApiAtype
 
-	cph, _ = time.LoadLocation("Europe/Copenhagen")
+	cph = mustLoadLocation("Europe/Copenhagen")
 )
+
+// mustLoadLocation loads a time zone from the host's database or, failing that, the
+// embedded one. It cannot fail for a valid name; a panic at start-up still beats the nil
+// *time.Location the error used to leave behind, which panicked later in every Time.In.
+func mustLoadLocation(name string) *time.Location {
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		panic(fmt.Errorf("eloverblik: load time zone %s: %w", name, err))
+	}
+	return loc
+}
 
 const (
 	Actual  Aggregation = "Actual"

@@ -65,6 +65,13 @@ it refuses to build the module.
 
 ### Fixed
 
+- The Windows release binary panicked with `time: missing Location in call to Time.In` on
+  everything that handles a date: `token`, `timeseries`, `export-timeseries` and
+  `charge-links`. So did any build of the CLI, or of a program using the library, in a
+  container image without `/usr/share/zoneinfo` (alpine, busybox, scratch). Windows has no
+  time zone database of its own and a `-trimpath` build cannot use Go's, so
+  Europe/Copenhagen failed to load, and the error was discarded. The package now embeds the
+  database (`time/tzdata`, about 400 KB).
 - `timeseries --flatten` crashed with `index out of range [0]` as soon as one metering point
   failed on its own, e.g. with 30018 for a period that starts before it was registered.
 - A failed export left its response body open, and with it the connection. The body is
