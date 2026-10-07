@@ -222,68 +222,61 @@ func TestMeteringPointArgs(t *testing.T) {
 	})
 }
 
-func TestParseDate(t *testing.T) {
-	testCases := []struct {
-		input     string
-		expectErr bool
-		checkFunc func(t *testing.T, got time.Time)
-	}{
-		{
-			input: "2026-02-28",
-			checkFunc: func(t *testing.T, got time.Time) {
-				expected := time.Date(2026, 2, 28, 0, 0, 0, 0, time.UTC)
-				assert.Equal(t, expected, got)
-			},
-		},
-		{
-			input: "now",
-			checkFunc: func(t *testing.T, got time.Time) {
-				assert.WithinDuration(t, time.Now(), got, time.Second)
-			},
-		},
-		{
-			input: "now-1d",
-			checkFunc: func(t *testing.T, got time.Time) {
-				assert.WithinDuration(t, time.Now().AddDate(0, 0, -1), got, time.Second)
-			},
-		},
-		{
-			input: "now-2w",
-			checkFunc: func(t *testing.T, got time.Time) {
-				assert.WithinDuration(t, time.Now().AddDate(0, 0, -14), got, time.Second)
-			},
-		},
-		{
-			input: "now-3m",
-			checkFunc: func(t *testing.T, got time.Time) {
-				assert.WithinDuration(t, time.Now().AddDate(0, -3, 0), got, time.Second)
-			},
-		},
-		{
-			input: "now-4y",
-			checkFunc: func(t *testing.T, got time.Time) {
-				assert.WithinDuration(t, time.Now().AddDate(-4, 0, 0), got, time.Second)
-			},
-		},
-		{
-			input:     "invalid-date",
-			expectErr: true,
-		},
-		{
-			input:     "now-5z",
-			expectErr: true,
-		},
-	}
+// copenhagenForTest loads Europe/Copenhagen, the zone the CLI reads dates in.
+func copenhagenForTest(t *testing.T) *time.Location {
+	t.Helper()
+	loc, err := time.LoadLocation("Europe/Copenhagen")
+	require.NoError(t, err)
+	return loc
+}
 
-	for _, tc := range testCases {
+// stubClock makes parseDate read instant as the current time for the rest of the test.
+func stubClock(t *testing.T, instant time.Time) {
+	t.Helper()
+	old := clock
+	clock = func() time.Time { return instant }
+	t.Cleanup(func() { clock = old })
+}
+
+// zoned renders a time with its offset and zone abbreviation, so an assertion compares
+// both the instant and the zone it is read in.
+func zoned(tm time.Time) string {
+	return tm.Format("2006-01-02T15:04:05Z07:00 MST")
+}
+
+// TestParseDate covers the dates the CLI accepts. A date is a Danish calendar day, so
+// YYYY-MM-DD is midnight in Copenhagen, and now-Nd/w/m/y count back on the Copenhagen
+// calendar from the current time, whatever the host's own zone. The clock is pinned to
+// 00:30 on 30 March 2026 in Copenhagen: still 29 March in UTC, and the first night of
+// summer time, so a day back is 23 hours.
+func TestParseDate(t *testing.T) {
+	cph := copenhagenForTest(t)
+	stubClock(t, time.Date(2026, 3, 29, 22, 30, 0, 0, time.UTC))
+
+	valid := []struct {
+		input string
+		want  time.Time
+	}{
+		{"2026-02-28", time.Date(2026, 2, 28, 0, 0, 0, 0, cph)},
+		{"2026-07-01", time.Date(2026, 7, 1, 0, 0, 0, 0, cph)},
+		{"now", time.Date(2026, 3, 30, 0, 30, 0, 0, cph)},
+		{"now-1d", time.Date(2026, 3, 29, 0, 30, 0, 0, cph)},
+		{"now-2w", time.Date(2026, 3, 16, 0, 30, 0, 0, cph)},
+		{"now-3m", time.Date(2025, 12, 30, 0, 30, 0, 0, cph)},
+		{"now-4y", time.Date(2022, 3, 30, 0, 30, 0, 0, cph)},
+	}
+	for _, tc := range valid {
 		t.Run(tc.input, func(t *testing.T) {
 			got, err := parseDate(tc.input)
-			if tc.expectErr {
-				assert.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				tc.checkFunc(t, got)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, zoned(tc.want), zoned(got))
+		})
+	}
+
+	for _, input := range []string{"invalid-date", "now-5z", "2026-02-30"} {
+		t.Run(input, func(t *testing.T) {
+			_, err := parseDate(input)
+			assert.Error(t, err)
 		})
 	}
 }
@@ -294,6 +287,8 @@ type MockClient struct {
 	GetTimeSeriesFunc           func(meteringPointIDs []string, from, to time.Time, aggregation eloverblik.Aggregation) ([]eloverblik.TimeSeries, error)
 	ExportTimeSeriesFunc        func(meteringPointIDs []string, from, to time.Time, aggregation eloverblik.Aggregation) (io.ReadCloser, error)
 	ExportMasterdataFunc        func(meteringPointIDs []string) (io.ReadCloser, error)
+
+	GetChargeLinksWithChargesFunc func(meteringPointIDs []string, from, to time.Time) (*eloverblik.ChargeLinksWithChargesResponse, error)
 }
 
 type MockCustomerClient struct {
@@ -345,6 +340,13 @@ func (m *MockClient) ExportMasterdata(meteringPointIDs []string) (io.ReadCloser,
 		return m.ExportMasterdataFunc(meteringPointIDs)
 	}
 	return nil, nil
+}
+
+func (m *MockClient) GetChargeLinksWithCharges(meteringPointIDs []string, from, to time.Time) (*eloverblik.ChargeLinksWithChargesResponse, error) {
+	if m.GetChargeLinksWithChargesFunc != nil {
+		return m.GetChargeLinksWithChargesFunc(meteringPointIDs, from, to)
+	}
+	return &eloverblik.ChargeLinksWithChargesResponse{}, nil
 }
 
 func TestDetailsCmd(t *testing.T) {
@@ -529,5 +531,44 @@ func TestTimeseriesCmdFlattenRepeatedMeteringPoint(t *testing.T) {
 	if assert.Len(t, flattened["571313174002485069"], 2) {
 		assert.InDelta(t, 7.5, flattened["571313174002485069"][0].Measurement, 1e-9)
 		assert.InDelta(t, 8.5, flattened["571313174002485069"][1].Measurement, 1e-9)
+	}
+}
+
+// TestTimeseriesCmdsSendCalendarDates proves that reading a date as midnight in Copenhagen
+// rather than in UTC changes nothing for timeseries and export-timeseries. The client sends
+// them the Copenhagen calendar date of from and to, and midnight in UTC falls on the same
+// Copenhagen date as midnight in Copenhagen, in winter and in summer time alike.
+func TestTimeseriesCmdsSendCalendarDates(t *testing.T) {
+	cph := copenhagenForTest(t)
+	// sentDate is the date the client puts in the URL: GetTimeSeries and ExportTimeSeries
+	// send the Copenhagen calendar date and drop the time of day.
+	sentDate := func(tm time.Time) string { return tm.In(cph).Format(time.DateOnly) }
+
+	for _, command := range []string{"timeseries", "export-timeseries"} {
+		t.Run(command, func(t *testing.T) {
+			var from, to time.Time
+			mock := &MockCustomerClient{}
+			mock.GetTimeSeriesFunc = func(_ []string, f, tt time.Time, _ eloverblik.Aggregation) ([]eloverblik.TimeSeries, error) {
+				from, to = f, tt
+				return []eloverblik.TimeSeries{}, nil
+			}
+			mock.ExportTimeSeriesFunc = func(_ []string, f, tt time.Time, _ eloverblik.Aggregation) (io.ReadCloser, error) {
+				from, to = f, tt
+				return io.NopCloser(strings.NewReader("")), nil
+			}
+			clientInstance = mock
+			defer func() { clientInstance = nil }()
+
+			oldOutput := output
+			output = io.Discard
+			defer func() { output = oldOutput }()
+
+			_, err := execute(t, "customer", command, "571313174002485069",
+				"--from", "2026-01-01", "--to", "2026-07-01", "--token", "dummy")
+
+			require.NoError(t, err)
+			assert.Equal(t, "2026-01-01", sentDate(from))
+			assert.Equal(t, "2026-07-01", sentDate(to))
+		})
 	}
 }

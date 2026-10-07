@@ -25,6 +25,19 @@ var output io.Writer = os.Stdout
 // stderr so stdout stays clean, parseable JSON.
 var warningOutput io.Writer = os.Stderr
 
+// clock is what parseDate reads the current time from (configurable for testing).
+var clock = time.Now
+
+// copenhagen is the zone parseDate reads dates in. The v1 package embeds time/tzdata, so
+// it loads on every platform, Windows and minimal container images included.
+var copenhagen = func() *time.Location {
+	loc, err := time.LoadLocation("Europe/Copenhagen")
+	if err != nil {
+		panic(fmt.Errorf("load time zone Europe/Copenhagen: %w", err))
+	}
+	return loc
+}()
+
 func meteringPointArgs(cmd *cobra.Command, args []string) error {
 	if err := cobra.MinimumNArgs(1)(cmd, args); err != nil {
 		return err
@@ -91,20 +104,24 @@ func csvToJSON(stream io.ReadCloser) error {
 	return encoder.Encode(records)
 }
 
-// parseDate supports various date formats:
-// - YYYY-MM-DD
-// - now
-// - now-30d (days)
-// - now-4w (weeks)
-// - now-2m (months)
-// - now-1y (years)
+// parseDate reads a date given on the command line. Eloverblik counts in Danish days, so
+// every form is read in Copenhagen time, whatever the host's own zone:
+//   - YYYY-MM-DD: midnight at the start of that day in Copenhagen
+//   - now: the current time
+//   - now-30d, now-4w, now-2m, now-1y: the current time, that many days, weeks, months or
+//     years back on the Copenhagen calendar
+//
+// The result matters for charge-links, which sends timestamps: 2026-07-01 goes out as
+// 2026-07-01T00:00:00+02:00. timeseries and export-timeseries send only the Copenhagen
+// date of the result.
 func parseDate(dateStr string) (time.Time, error) {
+	now := clock().In(copenhagen)
 	if dateStr == "now" {
-		return time.Now(), nil
+		return now, nil
 	}
 
 	// Standard date format
-	if t, err := time.Parse(time.DateOnly, dateStr); err == nil {
+	if t, err := time.ParseInLocation(time.DateOnly, dateStr, copenhagen); err == nil {
 		return t, nil
 	}
 
@@ -115,7 +132,6 @@ func parseDate(dateStr string) (time.Time, error) {
 	if len(matches) == 3 {
 		value, _ := strconv.Atoi(matches[1])
 		unit := matches[2]
-		now := time.Now()
 
 		switch unit {
 		case "d":
