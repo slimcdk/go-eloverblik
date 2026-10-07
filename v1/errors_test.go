@@ -167,11 +167,79 @@ func TestApiErrorCode(t *testing.T) {
 		assert.Equal(t, uint64(20010), code)
 	})
 
+	t.Run("reads the code out of a message that is only the code", func(t *testing.T) {
+		code, ok := apiErrorCode("[30004]")
+		assert.True(t, ok)
+		assert.Equal(t, uint64(30004), code)
+	})
+
 	t.Run("reports no code for a message that carries none", func(t *testing.T) {
 		for _, msg := range []string{"", "no", "Not Found", "Request 20010 failed", "[abcde] nonsense"} {
 			_, ok := apiErrorCode(msg)
 			assert.False(t, ok, "message %q", msg)
 		}
+	})
+
+	// An API error code is five digits in brackets. A bracketed number of any other length
+	// is something else, such as a date, and its first five digits are no code.
+	t.Run("reports no code for a bracket that does not close after five digits", func(t *testing.T) {
+		for _, msg := range []string{
+			"[123456] Some other number",
+			"[200101] Starts with the digits of a known code",
+			"[20240101] A date",
+			"[2001] Too short",
+			"[20010",
+			"[20010 Relation not found",
+		} {
+			code, ok := apiErrorCode(msg)
+			assert.False(t, ok, "message %q", msg)
+			assert.Zero(t, code, "message %q", msg)
+		}
+	})
+}
+
+// TestApiErrorBracketedNumberIsNoCode covers a message that opens with a bracketed number
+// that is not five digits long. Its first five digits were read as a code, so a date could
+// set APIError.Code, and a bare-string message could match the sentinel of a code the API
+// never sent.
+func TestApiErrorBracketedNumberIsNoCode(t *testing.T) {
+	t.Run("a problem document detail sets no code", func(t *testing.T) {
+		for _, detail := range []string{"[123456] Some other number", "[20240101] A date"} {
+			err := apiErrorFromBody(apiErrorBody{Problem: &problemDetails{
+				Title: "Bad Request", Status: http.StatusBadRequest, Detail: detail,
+			}}, http.StatusBadRequest)
+
+			var apiErr *APIError
+			require.ErrorAs(t, err, &apiErr, "detail %q", detail)
+			assert.Zero(t, apiErr.Code, "detail %q", detail)
+			assert.NoError(t, apiErr.Unwrap(), "detail %q", detail)
+		}
+	})
+
+	t.Run("a problem document detail maps to no sentinel of a code it does not carry", func(t *testing.T) {
+		err := apiErrorFromBody(apiErrorBody{Problem: &problemDetails{
+			Title: "Not Found", Status: http.StatusNotFound, Detail: "[200101] Not a relation error",
+		}}, http.StatusNotFound)
+
+		assert.NotErrorIs(t, err, ErrorRelationNotFound)
+	})
+
+	t.Run("a bare-string message maps to no sentinel of a code it does not carry", func(t *testing.T) {
+		const msg = "[200101] Not a relation error"
+
+		err := apiErrorFromBody(apiErrorBody{Message: msg}, http.StatusNotFound)
+
+		require.NotErrorIs(t, err, ErrorRelationNotFound)
+		assert.EqualError(t, err, "failed to parse error in api error message "+msg)
+	})
+
+	t.Run("a bare-string message on a status with a sentinel is that sentinel", func(t *testing.T) {
+		const msg = "[20240101] A date"
+
+		err := apiError(msg, http.StatusUnauthorized)
+
+		require.ErrorIs(t, err, ErrorUnauthorized)
+		assert.EqualError(t, err, ErrorUnauthorized.Error()+": "+msg)
 	})
 }
 

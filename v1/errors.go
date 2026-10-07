@@ -223,9 +223,12 @@ func statusSentinel(statusCode int) error {
 }
 
 // apiErrorCode reads the API error code out of a message, e.g. 20010 out of
-// "[20010] Relation not found". ok is false when the message carries no code.
+// "[20010] Relation not found". ok is false when the message carries no code. A code is
+// exactly five digits in brackets: a message that opens with a bracketed number of any
+// other length, such as "[20240101] ...", carries no code, rather than one made of its
+// first five digits.
 func apiErrorCode(msg string) (code uint64, ok bool) {
-	if len(msg) < 6 || msg[0] != '[' {
+	if len(msg) < 7 || msg[0] != '[' || msg[6] != ']' {
 		return 0, false
 	}
 
