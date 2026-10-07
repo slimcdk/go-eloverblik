@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/slimcdk/go-eloverblik/workflows/Tests/badge.svg)](https://github.com/slimcdk/go-eloverblik/actions?query=workflow%3ATests)
 [![Go Report Card](https://goreportcard.com/badge/github.com/slimcdk/go-eloverblik)](https://goreportcard.com/report/github.com/slimcdk/go-eloverblik)
-[![Go Reference](https://pkg.go.dev/badge/github.com/slimcdk/go-eloverblik.svg)](https://pkg.go.dev/github.com/slimcdk/go-eloverblik)
+[![Go Reference](https://pkg.go.dev/badge/github.com/slimcdk/go-eloverblik/v1.svg)](https://pkg.go.dev/github.com/slimcdk/go-eloverblik/v1)
 [![License](https://img.shields.io/github/license/slimcdk/go-eloverblik)](LICENSE)
 
 A comprehensive Go client library and CLI tool for the Danish energy data platform [Eloverblik](https://eloverblik.dk/). Access electricity consumption data, metering points, charges, and more through both the Customer API and Third-Party API.
@@ -10,11 +10,12 @@ A comprehensive Go client library and CLI tool for the Danish energy data platfo
 ## Features
 
 - **Complete API Coverage**: Every endpoint both OpenAPI documents declare, for the Customer and the Third-Party API alike (including `getchargelinkswithcharges`, which Energinet has not switched on yet — see [the note](#note-on-charge-links))
-- **Data Export**: Export timeseries, masterdata, and charges in CSV or JSON format
+- **Data Export**: Export timeseries, masterdata, and charges as the CSV files the API generates; the CLI can convert them to JSON
 - **Rate Limit Aware**: Retries the documented 429 and 503 responses, honouring `Retry-After`
+- **Token Renewal**: Fetches the data access token on first use, caches it and renews it before it expires; one client is safe to share between goroutines
 - **Token Introspection**: Read a token's API, roles and expiry without spending a call
 - **Debuggable**: `--print-response-headers` shows what the API actually answered
-- **Well-Tested**: 93% statement coverage of the library, verified against the live API
+- **Well-Tested**: 93% statement coverage of the library, with test fixtures taken from live API responses
 - **Multi-Platform**: Binaries for Linux (x86-64, ARM64 and 32-bit ARM, Raspberry Pi included), macOS and Windows (x86-64 and ARM64), tested on all three operating systems and as 32-bit code
 
 ## Table of Contents
@@ -35,11 +36,11 @@ A comprehensive Go client library and CLI tool for the Danish energy data platfo
 - [Contributing](#contributing)
 - [License](#license)
 
-> **Access tokens are not refreshed automatically.** The client exchanges the refresh token
-> for a data access token on the first call that needs one and caches it for its own
-> lifetime. A data access token lasts about 24 hours, so a long-running process should
-> check [the expiry](#reading-token-claims) and build a new client, rather than assume the
-> old one keeps working.
+> **For integrators and AI agents:** [`llms.md`](llms.md) is the full reference for the
+> library and the CLI in one file. The package documentation is on
+> [pkg.go.dev](https://pkg.go.dev/github.com/slimcdk/go-eloverblik/v1), and
+> `go-eloverblik --help` states the rules every command shares, while each command's own
+> `--help` gives its endpoint, arguments, output and examples.
 
 ## Installation
 
@@ -155,7 +156,7 @@ go-eloverblik --token=$ELO_TOKEN customer timeseries 571313155411053087 \
 go-eloverblik --token=$ELO_TOKEN customer timeseries 571313155411053087 \
   --period=last_month --aggregation=Day --flatten
 
-# Export data as JSON
+# Export data as JSON, converted by the CLI from the CSV the API returns
 go-eloverblik --token=$ELO_TOKEN customer export-charges 571313155411053087 \
   --format=json
 
@@ -312,13 +313,63 @@ endpoints and its `api-version` of 1.0, but what it answers changed in places:
 
 ### Help Output
 
-Running `go-eloverblik --help` shows a grouped command tree:
+Running `go-eloverblik --help` prints what the tool is, the rules every command shares,
+examples and a grouped command tree:
 
 ```
-A CLI for the Danish Eloverblik platform
+A CLI for the Danish Eloverblik platform: electricity metering data from Energinet's
+DataHub, read through Eloverblik's two APIs at api.eloverblik.dk.
+
+  customer     The Customer API: the metering points of the person or company the
+               refresh token belongs to.
+  thirdparty   The Third-Party API: the metering points customers have authorized a
+               third party to read, through powers of attorney.
+  token        Decode the token given with --token, e.g. to see which API it is for.
+
+Authentication
+  Pass the refresh token created at eloverblik.dk with --token, e.g. --token "$ELO_TOKEN".
+  Every customer, thirdparty and token command requires it. A token works with the API
+  it was issued for only; "go-eloverblik token" prints its tokenType, which names it.
+  The CLI exchanges the refresh token for a short lived data access token itself
+  (GET /token) and never prints that one. Every run that sends an authenticated request
+  fetches one, and the API allows 2 /token calls a minute per IP, so pass up to 10
+  metering points to one run rather than running once per metering point.
+
+Rules that change the result
+  - Dates are Copenhagen calendar dates, and a range is half-open, [from, to): --from is
+    included, --to is not. --to defaults to today, so the range ends with yesterday.
+    --from 2026-09-01 --to 2026-10-01 is all of September. For timeseries and
+    export-timeseries, from and to on the same date is rejected (API error 30002).
+  - A time series range spans at most 730 days (API error 30014).
+  - Commands that take metering point IDs take 1 to 10 of them, each exactly 18 digits.
+  - Results go to stdout as JSON, except export-* (CSV unless --format json) and alive
+    (one line of text). Warnings, errors and the headers --print-response-headers prints
+    go to stderr. A failed command exits with status 1.
+  - A metering point can fail on its own inside a successful response, and the command
+    still exits with status 0: check "success", "errorCode" and "errorText" of every
+    element ("error" of every result for charge-links). timeseries --flatten leaves a
+    failed metering point out and reports it as a warning on stderr instead. The same
+    metering point can also come back once per access period.
+  - charges returns the charges valid now or taking effect later, never past prices.
+  - charge-links currently answers 404 on both APIs: Energinet has not enabled it.
+  - add-relation-by-code and delete-relation are retired: Energinet retired their
+    endpoints with DataHub 3.0, and both commands fail without calling the API.
+  - A 429 (rate limit) or 503 (DataHub busy) answer is retried up to twice, after a wait
+    of several seconds, so a command can take a while before it answers or fails.
+
+Full reference for the CLI and the Go library:
+https://github.com/slimcdk/go-eloverblik/blob/master/llms.md
 
 Usage:
   go-eloverblik [command]
+
+Examples:
+  export ELO_TOKEN='<refresh token from eloverblik.dk>'
+  go-eloverblik token --token "$ELO_TOKEN"
+  go-eloverblik customer installations --token "$ELO_TOKEN"
+  go-eloverblik customer timeseries 571313000000000001 --from 2026-09-01 --to 2026-10-01 --aggregation Day --token "$ELO_TOKEN"
+  go-eloverblik thirdparty authorizations --token "$ELO_TOKEN"
+  go-eloverblik customer timeseries --help
 
 Available Commands:
 
@@ -331,19 +382,19 @@ Available Commands:
   customer
     add-relation             Link one or more metering points to the authenticated user by ID
     alive                    Check if the API is operational
-    charge-links             Get charge links with dated charge prices (Eloverblik has not deployed this endpoint: it answers 404)
+    charge-links             Get charge links with dated charge prices (404 while the feature is disabled)
     charges                  Get charges (subscriptions, fees, tariffs) for one or more metering points
     details                  Get metering point details
     export-charges           Export charges (customer API only)
     export-masterdata        Export metering point masterdata (customer API only)
-    export-timeseries        Export time series as a raw stream (customer API only)
+    export-timeseries        Export time series as CSV or JSON (customer API only)
     installations            Get metering points (installations)
     timeseries               Get time series for one or more metering points
 
   thirdparty
     alive                    Check if the API is operational
     authorizations           Get authorizations (powers of attorney) granted by customers
-    charge-links             Get charge links with dated charge prices (Eloverblik has not deployed this endpoint: it answers 404)
+    charge-links             Get charge links with dated charge prices (404 while the feature is disabled)
     charges                  Get charges (subscriptions, tariffs) for one or more metering points
     details                  Get metering point details
     metering-point-ids       Get metering point IDs accessible under a specific authorization scope
@@ -354,7 +405,7 @@ Available Commands:
 Flags:
   -h, --help                     help for go-eloverblik
       --print-response-headers   Print HTTP response headers from the Eloverblik API to stderr
-      --token string             Eloverblik refresh token (required)
+      --token string             Eloverblik refresh token, created at eloverblik.dk (required by the customer, thirdparty and token commands)
 
 Use "go-eloverblik [command] --help" for more information about a command.
 ```
@@ -363,12 +414,22 @@ Use "go-eloverblik [command] --help" for more information about a command.
 Energinet has not enabled `getchargelinkswithcharges` on either API. See
 [the note above](#note-on-charge-links).
 
+Every command below the root has cobra's full help. For a command such as
+`go-eloverblik customer timeseries --help`, it names the endpoint the command calls, its
+arguments and flags, the JSON it prints and examples, followed by the global flags.
+
 ### Global Flags
 
+Every command below the root lists them in its help:
+
 ```
---token string               Eloverblik refresh token (required)
---print-response-headers     Print HTTP response headers from the Eloverblik API to stderr
+Global Flags:
+      --print-response-headers   Print HTTP response headers from the Eloverblik API to stderr
+      --token string             Eloverblik refresh token, created at eloverblik.dk (required by the customer, thirdparty and token commands)
 ```
+
+`help` and `completion` do not need `--token`, so `go-eloverblik help <command>` and
+`go-eloverblik completion bash` work without one.
 
 `--print-response-headers` is a debugging aid. The headers of every API call, including
 the token call, are written to stderr, so stdout stays clean, parseable output:
@@ -377,10 +438,14 @@ the token call, are written to stderr, so stdout stays clean, parseable output:
 go-eloverblik customer details <metering-id> --token=$TOKEN --print-response-headers 2>headers.txt
 ```
 
+Truncated: the token call's block below shows only some of its headers, and the block of
+the `details` call follows it.
+
 ```
 < GET https://api.eloverblik.dk/customerapi/api/token -> 200 OK
 < Content-Type: application/json; charset=utf-8
 < Date: Mon, 01 Jan 2024 00:00:00 GMT
+...
 ```
 
 ### Inspecting a Token
@@ -435,14 +500,20 @@ go-eloverblik customer add-relation <metering-id>...    # Add relation by ID
 go-eloverblik customer timeseries <metering-id>... --period=last_month
 go-eloverblik customer timeseries <metering-id>... --from=now-30d --to=now
 
-# Use --from/--to for specific ranges:
-#   YYYY-MM-DD
+# Use --from/--to for specific ranges, read in Copenhagen time whatever the host's zone.
+# --from is included; --to is excluded and defaults to today's date in Copenhagen, so the
+# range ends with yesterday.
+# Both take:
+#   YYYY-MM-DD   (midnight at the start of that day in Copenhagen)
 #   now
 #   now-30d (days), now-4w (weeks), now-2m (months), now-1y (years)
 #
 # Use --period for common ranges (cannot be used with --from/--to):
 #   yesterday, this_week, last_week, this_month, last_month,
 #   this_year, last_year
+# Weeks start on Monday. For timeseries and export-timeseries a this_* period ends with
+# yesterday; for charge-links it runs up to now, today included. A this_* period fails on
+# its first day (a Monday, the 1st, 1 January), which has no complete day yet.
 
 go-eloverblik customer timeseries <metering-id>... \
   --from=YYYY-MM-DD \
@@ -461,11 +532,13 @@ go-eloverblik customer charges <metering-id>...         # Get charges and tariff
 # with a valid customer token, the Customer API answered 404 while 'charges' answered 200.
 # The command implements the endpoint as specified, with one interval for all metering
 # points, and is ready for the day it is enabled; today it returns a 404 error. Until then,
-# 'charges' above is the closest data available.
+# 'charges' above is the closest data available. --to is excluded, as for timeseries.
 go-eloverblik customer charge-links <metering-id>... --period=last_month
 go-eloverblik customer charge-links <metering-id>... --from=YYYY-MM-DD --to=YYYY-MM-DD
 
-# Data Export (CSV or JSON)
+# Data Export (CSV or JSON). The API returns CSV; --format=json makes the CLI convert it to
+# an array of objects keyed by the CSV header, without the byte order mark the CSV starts
+# with, and [] when there are no rows.
 go-eloverblik customer export-timeseries <metering-id>... --period=last_year
 
 go-eloverblik customer export-timeseries <metering-id>... \
@@ -487,7 +560,7 @@ go-eloverblik customer alive                            # Check API status
 
 ```bash
 # Authorization Management
-go-eloverblik thirdparty authorizations                 # List valid and active authorizations
+go-eloverblik thirdparty authorizations                 # List valid or active authorizations
 
 # Metering Points
 go-eloverblik thirdparty metering-points <scope> <identifier>
@@ -513,7 +586,7 @@ go-eloverblik thirdparty charges <metering-id>...
 # with a valid third-party token, the Third-Party API answered 404 while 'charges' answered
 # 200 — exactly as the Customer API did. The command implements the endpoint as specified,
 # with one interval for all metering points, and is ready for the day it is enabled; today
-# it returns a 404 error.
+# it returns a 404 error. --to is excluded, as for timeseries.
 go-eloverblik thirdparty charge-links <metering-id>... --period=last_month
 go-eloverblik thirdparty charge-links <metering-id>... --from=YYYY-MM-DD --to=YYYY-MM-DD
 
@@ -535,7 +608,24 @@ customer := eloverblik.NewCustomer("refresh-token")
 thirdparty := eloverblik.NewThirdParty("refresh-token")
 ```
 
-Both constructors accept optional options.
+Both constructors accept optional options. Both clients always call the production API at
+`api.eloverblik.dk`. The package variables `Mode`, `TestMode`, `ReleaseMode` and `ApiType`,
+and the `APIType` type, are deprecated and have no effect; `TokenClaims.APIType()` is
+unrelated and not deprecated.
+
+Create one client per refresh token and share it: it is safe for concurrent use by
+multiple goroutines. It exchanges the refresh token for a data access token at `/token` on
+the first call that needs one, caches it, and fetches a new one once the cached token has
+expired or expires within five minutes, so a long-running process can keep the same
+client. A data access token lasts about 24 hours.
+
+The API allows 2 `/token` calls a minute per IP, so goroutines that need a token while one
+is being fetched wait for that request and share its outcome, the token or the error,
+instead of sending their own. When a renewal fails while the cached token has not expired
+yet, the call gets the cached token and the next call tries again. A data access token
+whose expiry cannot be read, because it is not a JWT or its `exp` claim is missing, null,
+zero or negative, counts as never expiring: the client keeps it and leaves it to the API to
+reject it.
 
 ### Debugging Response Headers
 
@@ -546,10 +636,13 @@ the token call and the streamed exports, to the given `io.Writer`:
 customer := eloverblik.NewCustomer("refresh-token", eloverblik.WithResponseHeaderOutput(os.Stderr))
 ```
 
+Truncated, with only some of the headers of one call:
+
 ```
 < GET https://api.eloverblik.dk/customerapi/api/token -> 200 OK
 < Content-Type: application/json; charset=utf-8
 < Date: Mon, 01 Jan 2024 00:00:00 GMT
+...
 ```
 
 ### Reading Token Claims
@@ -560,16 +653,16 @@ client can read its own:
 ```go
 claims, err := eloverblik.ParseToken(refreshToken)
 
-claims.TokenName    // the name given to the token in the portal
-claims.Roles        // []string{"ReadPrivate", "ReadBusiness"}
-claims.Company      // "Styr paa ApS"
-claims.ExpiresAt    // time.Time, in Copenhagen time
-claims.IsExpired()  // no request needed to find out
-claims.APIType()    // (eloverblik.ThirdPartyApi, nil), read from the token type; an error when it names neither API
+claims.TokenName   // the name given to the token in the portal
+claims.Roles       // []string{"ReadPrivate", "ReadBusiness"}
+claims.Company     // "Styr paa ApS"
+claims.ExpiresAt   // time.Time, in Copenhagen time; zero when exp is missing, null, zero or negative
+claims.IsExpired() // no request needed to find out; false when the token carries no expiry
+claims.APIType()   // (eloverblik.ThirdPartyApi, nil), read from the token type; an error when it names neither API
 
 client := eloverblik.NewThirdParty(refreshToken) // a third-party token, as APIType() said
-claims, err = client.RefreshTokenClaims()     // no request
-claims, err = client.DataAccessTokenClaims()  // fetches a data access token first
+claims, err = client.RefreshTokenClaims()        // no request
+claims, err = client.DataAccessTokenClaims()     // fetches or renews the data access token first when needed
 ```
 
 The claims are decoded, not verified: only Energinet holds the signing key, so a token can
@@ -638,17 +731,40 @@ for _, result := range links.Results {
 Multiply a price point by the consumption in the same interval and by the `Factor` of the
 charge link period covering it to get the amount charged.
 
+### Exports
+
+`ExportTimeSeries`, `ExportMasterdata` and `ExportCharges` (Customer API only) return the
+CSV file the API generates, as an `io.ReadCloser` streamed as it arrives, and the caller
+must close it. The CSV is separated by semicolons, starts with a UTF-8 byte order mark and
+has Danish column names. The library returns it as it is: JSON exists only in the CLI,
+whose `--format json` converts the CSV.
+
+```go
+csv, err := client.ExportTimeSeries(ids, from, to, eloverblik.Day) // client is a Customer
+if err != nil {
+    log.Fatal(err)
+}
+defer csv.Close()
+
+if _, err := io.Copy(os.Stdout, csv); err != nil {
+    log.Fatal(err)
+}
+```
+
+When an export is retried after a 429 or a 503, the client closes the body of every
+attempt it discards; when it fails, the client closes the body itself.
+
 ### Aggregation Levels
 
 The aggregation you ask for:
 
 ```go
-eloverblik.Actual   // Raw meter readings
-eloverblik.Quarter  // 15-minute aggregation
-eloverblik.Hour     // Hourly aggregation
-eloverblik.Day      // Daily aggregation
-eloverblik.Month    // Monthly aggregation
-eloverblik.Year     // Yearly aggregation
+eloverblik.Actual  // Raw meter readings
+eloverblik.Quarter // 15-minute aggregation
+eloverblik.Hour    // Hourly aggregation
+eloverblik.Day     // Daily aggregation
+eloverblik.Month   // Monthly aggregation
+eloverblik.Year    // Yearly aggregation
 ```
 
 The resolution the API answers with is a different vocabulary, and it is worth knowing
@@ -671,9 +787,9 @@ year. A metering point read hourly answers `PT1H` even when you ask for `Quarter
 ### Authorization Scopes (Third-Party API)
 
 ```go
-eloverblik.AuthScopeID           // Scope by authorization ID
-eloverblik.AuthScopeCustomerCVR  // Scope by customer CVR number
-eloverblik.AuthScopeCustomerKey  // Scope by customer key
+eloverblik.AuthScopeID          // Scope by authorization ID
+eloverblik.AuthScopeCustomerCVR // Scope by customer CVR number
+eloverblik.AuthScopeCustomerKey // Scope by customer key
 ```
 
 ### Dates Are Half-Open
@@ -697,6 +813,9 @@ timeseries, err := client.GetTimeSeries(ids, from, to, eloverblik.Day)
 `GetTimeSeries` (and `ExportTimeSeries`) convert `from` and `to` to Copenhagen time and
 send only the date, so build them in `Europe/Copenhagen` or UTC. On a host east of
 Copenhagen, local midnight is still the previous day in Copenhagen.
+`GetChargeLinksWithCharges` is the exception: it sends both bounds as timestamps in
+Copenhagen time and keeps the time of day, so pass Copenhagen midnights to ask for whole
+days.
 
 So to get a single day, ask for that day and the next one. This is the off-by-one that
 makes `--period yesterday` sound like it should send the same date twice; it must not.
@@ -704,10 +823,36 @@ makes `--period yesterday` sound like it should send the same date twice; it mus
 ### Period Constants
 
 The `Period` type and `GetDatesFromPeriod` cover the common ranges and already return an
-exclusive `to`, so a period never drops its own last day.
+exclusive `to`, so a period never drops its own last day. They work in Copenhagen time
+(`Europe/Copenhagen`) whatever the host's time zone: today is the current date in
+Copenhagen, `from` and `to` are returned in `Europe/Copenhagen`, and weeks run from Monday
+to Sunday.
+
+| Period | `from` | `to` (excluded) |
+|--------|--------|-----------------|
+| `Yesterday` | 00:00 yesterday | 00:00 today |
+| `ThisWeek` | 00:00 on this week's Monday | now |
+| `LastWeek` | 00:00 on last week's Monday | 00:00 on this week's Monday |
+| `ThisMonth` | 00:00 on the 1st of this month | now |
+| `LastMonth` | 00:00 on the 1st of last month | 00:00 on the 1st of this month |
+| `ThisYear` | 00:00 on 1 January this year | now |
+| `LastYear` | 00:00 on 1 January last year | 00:00 on 1 January this year |
+
+A this_* period runs up to now, so a date-based call such as `GetTimeSeries` stops before
+today, which is not complete. On its first day (a Monday for `ThisWeek`, the 1st for
+`ThisMonth`, 1 January for `ThisYear`) `from` and `to` would fall on the same date, which
+the API rejects with error 30002, so `GetDatesFromPeriod` returns an error wrapping
+`ErrorPeriodHasNoCompleteDay` instead, e.g. "this_week: period started today and has no
+complete day yet". The error is returned whichever call the bounds are for,
+`GetChargeLinksWithCharges` included. On the other days that call, which sends timestamps,
+gets a this_* period up to now, today included.
 
 ```go
-import eloverblik "github.com/slimcdk/go-eloverblik/v1"
+import (
+    "errors"
+
+    eloverblik "github.com/slimcdk/go-eloverblik/v1"
+)
 
 // Last month, in full: from is the 1st of last month, to is the 1st of this month
 from, to, err := eloverblik.GetDatesFromPeriod(eloverblik.LastMonth)
@@ -716,9 +861,11 @@ if err != nil {
 }
 timeseries, err := client.GetTimeSeries(ids, from, to, eloverblik.Day)
 
-// Available Period constants:
-// Yesterday, ThisWeek, LastWeek, ThisMonth, LastMonth,
-// ThisYear, LastYear
+// This month so far, or last month on the 1st, when this month has no complete day yet
+from, to, err = eloverblik.GetDatesFromPeriod(eloverblik.ThisMonth)
+if errors.Is(err, eloverblik.ErrorPeriodHasNoCompleteDay) {
+    from, to, err = eloverblik.GetDatesFromPeriod(eloverblik.LastMonth)
+}
 ```
 
 The API only holds time series for the previous five years plus the current one. It
@@ -746,8 +893,10 @@ client = eloverblik.NewCustomer(refreshToken, eloverblik.WithoutRetry())
 request timeout and no method takes a context, so a call still blocks until the API answers
 or the connection fails.
 
-The API's own advice is to ask for **at most 10 metering points per request**, which is
-also what the CLI enforces.
+Energinet's documents recommend asking for **at most 10 metering points per request**.
+They do not say that the API rejects more, and whether it does has not been verified. The
+CLI enforces 1 to 10; the library does not limit it and sends every ID in one request, so
+split a longer list yourself, e.g. with `slices.Chunk(ids, 10)`.
 
 ## Examples
 
@@ -892,8 +1041,8 @@ for _, auth := range auths {
 
     // Get metering points for this authorization
     meteringPoints, err := client.GetMeteringPointsForScope(
-        eloverblik.AuthScopeCustomerKey,
-        auth.CustomerKey,
+        eloverblik.AuthScopeID,
+        auth.ID,
     )
     if err != nil {
         log.Printf("Error: %v", err)
@@ -921,7 +1070,8 @@ if claims.IsExpired() {
     log.Fatalf("token %q expired at %s — generate a new one in the portal",
         claims.TokenName, claims.ExpiresAt.Format(time.RFC1123))
 }
-if claims.ExpiresIn() < 7*24*time.Hour {
+// ExpiresIn is zero too when the token carries no expiry
+if !claims.ExpiresAt.IsZero() && claims.ExpiresIn() < 7*24*time.Hour {
     log.Printf("warning: token %q expires in %s", claims.TokenName, claims.ExpiresIn())
 }
 
@@ -947,8 +1097,9 @@ go-eloverblik token --token=$TOKEN | jq '{tokenName, roles, expiresAt}'
 
 ### Third-Party: From Authorization to Consumption
 
-The full path a third party walks: list the powers of attorney customers have granted, take
-the metering points of one of them, and read yesterday's consumption.
+The full path a third party walks: list the powers of attorney customers have granted,
+collect the metering points of all of them, and read yesterday's consumption, 10 metering
+points at a time.
 
 ```go
 client := eloverblik.NewThirdParty(refreshToken)
@@ -958,43 +1109,59 @@ if err != nil {
     log.Fatal(err)
 }
 
+// Pool the metering points of every authorization before batching them
+var ids []string
 for _, auth := range authorizations {
     log.Printf("%s (CVR %s), valid until %s", auth.CustomerName, auth.CustomerCVR, auth.ValidTo)
 
-    ids, err := client.GetMeteringPointIDsForScope(eloverblik.AuthScopeID, auth.ID)
+    authIDs, err := client.GetMeteringPointIDsForScope(eloverblik.AuthScopeID, auth.ID)
     if err != nil {
         log.Printf("  %v", err)
         continue
     }
+    ids = append(ids, authIDs...)
+}
 
-    // The API asks for at most 10 metering points per request
-    for batch := range slices.Chunk(ids, 10) {
-        from, to, err := eloverblik.GetDatesFromPeriod(eloverblik.Yesterday)
-        if err != nil {
-            log.Fatal(err)
-        }
+// Ask for each metering point once, should two authorizations cover the same one
+slices.Sort(ids)
+ids = slices.Compact(ids)
 
-        timeseries, err := client.GetTimeSeries(batch, from, to, eloverblik.Hour)
-        if err != nil {
-            log.Printf("  %v", err)
+from, to, err := eloverblik.GetDatesFromPeriod(eloverblik.Yesterday)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Energinet recommends at most 10 metering points per request
+for batch := range slices.Chunk(ids, 10) {
+    timeseries, err := client.GetTimeSeries(batch, from, to, eloverblik.Hour)
+    if err != nil {
+        log.Print(err)
+        continue
+    }
+
+    for _, ts := range timeseries {
+        // A metering point can fail on its own while the others succeed
+        if err := ts.Err(); err != nil {
+            log.Printf("skipping: %v", err)
             continue
         }
-
-        for _, ts := range timeseries {
-            for _, point := range ts.Flatten() {
-                fmt.Printf("  %s  %s → %s  %.2f %s\n",
-                    ts.MyEnergyDataMarketDocument.TimeSeries[0].MRID,
-                    point.From.Format(time.RFC3339), point.To.Format(time.RFC3339),
-                    point.Measurement, point.Unit)
-            }
+        for _, point := range ts.Flatten() {
+            fmt.Printf("%s  %s → %s  %.2f %s\n",
+                ts.ID,
+                point.From.Format(time.RFC3339), point.To.Format(time.RFC3339),
+                point.Measurement, point.Unit)
         }
     }
 }
 ```
 
-Note the batching. A third party with a few hundred metering points will otherwise walk
-straight into the 120 calls per minute limit; the client retries the resulting 429, but
-not making the call at all is faster.
+Note the pooling and the batching. Listing the IDs takes a call per authorization, but the
+time series then take one call per 10 metering points, however they are spread over the
+authorizations; batching per authorization would send at least one time series request
+per authorization, even for one that covers a single metering point. Without batching, a
+third party with a few hundred metering points walks straight into the 120 calls per
+minute limit; the client retries the resulting 429, but not making the call at all is
+faster.
 
 ### Debug a Call That Fails
 
@@ -1009,11 +1176,15 @@ go-eloverblik customer timeseries 571313180400000000 \
 cat headers.txt
 ```
 
+Truncated: only some of the token call's headers are shown, and the block of the
+`timeseries` call follows it.
+
 ```
 < GET https://api.eloverblik.dk/customerapi/api/token -> 200 OK
 < Api-Supported-Versions: 1.0
 < Content-Type: application/json; charset=utf-8
 < Date: Mon, 13 Jul 2026 00:24:46 GMT
+...
 ```
 
 In the library, the same switch is an option, and it covers the token call and the
@@ -1029,19 +1200,25 @@ client := eloverblik.NewCustomer(refreshToken,
 Failures arrive at two levels, and both matter.
 
 **The call itself** fails with an error. When the API names an error code the client knows,
-or answers 401, 410 or 429, that error matches a sentinel with `errors.Is`. Anything else
-matches none and lands in the `err != nil` branch. That includes a 503 that still fails
-after the retries, and a problem document such as the 404 that `getchargelinkswithcharges`
-answers today, which arrives as an `*APIError` carrying the status, title and trace ID:
+or answers 401, 410 or 429, that error matches a sentinel with `errors.Is`; on those three
+statuses it does so for a code the client does not know, too. A code is read only from
+five digits in brackets at the start of the message, as in `[20010] Relation not found`.
+Anything else matches none and lands in the `err != nil` branch. That includes a 503 that
+still fails after the retries, and a problem document such as the 404 that
+`getchargelinkswithcharges` answers today, which arrives as an `*APIError` carrying the
+status, title and trace ID, and in `Code` the API error code its detail opens with, if
+any, also one the client has no sentinel for:
 
 ```go
 timeseries, err := client.GetTimeSeries(ids, from, to, eloverblik.Day)
 switch {
+case errors.Is(err, eloverblik.ErrorTokenNotValid):
+    // API code 50001: the refresh token is invalid, has expired or been revoked;
+    // generate a new one
 case errors.Is(err, eloverblik.ErrorUnauthorized):
-    // a 401 without an API code of its own, or API code 20012: the refresh token is wrong
-    // or has expired (generate a new one), this client's cached data access token has
-    // outlived its 24 hours (build a new client), or there is no active relation or
-    // authorization for the metering point
+    // a 401 whose API code, if any, has no sentinel of its own, or API code 20012, e.g. no
+    // active relation or authorization for the metering point. The client renews its own
+    // data access token before it expires.
 case errors.Is(err, eloverblik.ErrorTooManyRequests):
     // still rate limited after the retries; back off for a minute
 case errors.Is(err, eloverblik.ErrorNoCprConsent):
@@ -1056,7 +1233,8 @@ case err != nil:
 ```
 
 A call to an endpoint Energinet has retired, such as `AddRelationByWebAccessCode`, fails
-with `ErrorEndpointRetired`.
+with `ErrorEndpointRetired`. `ErrorNoError` is deprecated: API code 10000 means success,
+and no call returns it.
 
 **Individual metering points** can fail inside an otherwise successful response — one
 missing relation does not fail the batch, it fails that item. `Err()` reports it, nil when
@@ -1093,41 +1271,11 @@ away, because retrying it would only waste a call against the rate limit.
 
 ## Development
 
-### Running Tests
-
-```bash
-# Run all tests
-go test ./...
-
-# Run tests for a specific package
-go test ./v1
-go test ./cmd
-```
-
-### Running Linter
-
-The config is in the golangci-lint **v2** format, so v1 will not read it. CI pins v2.14;
-match it locally:
-
-```bash
-# Install the golangci-lint version CI runs
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
-
-# Run linter — the same command CI runs
-golangci-lint run --timeout=5m
-```
-
-### Building
-
-```bash
-# Build for current platform
-go build .
-
-# Cross-compile for different platforms
-GOOS=linux GOARCH=amd64 go build -o go-eloverblik-linux-amd64 .
-GOOS=darwin GOARCH=arm64 go build -o go-eloverblik-darwin-arm64 .
-GOOS=windows GOARCH=amd64 go build -o go-eloverblik-windows-amd64.exe .
-```
+`go build .` builds the CLI and `go test ./...` runs the tests. The checks to run before
+every commit are kept in one place, [AGENTS.md](AGENTS.md): the full list and how CI runs
+each one, including golangci-lint pinned to v2.14.0, the 32-bit runs, and
+`go mod tidy -diff`, which the release gate and GoReleaser run too. It also holds the
+project's conventions and how a release is cut.
 
 ## Project Structure
 
@@ -1145,12 +1293,14 @@ GOOS=windows GOARCH=amd64 go build -o go-eloverblik-windows-amd64.exe .
 │   ├── relations.go        # Relation commands
 │   ├── root.go             # Root command and initialization
 │   ├── thirdparty.go       # Third-party specific commands
-│   └── token.go            # Token inspection command
+│   ├── token.go            # Token inspection command
+│   └── *_test.go           # CLI tests
 ├── v1/                     # Library implementation
 │   ├── auth.go             # Token exchange, IsAlive and the third-party authorization endpoints
 │   ├── chargelinks.go      # Charge links endpoints
 │   ├── charges.go          # Charges endpoints
 │   ├── constvars.go        # Aggregations, resolutions and other constants
+│   ├── doc.go              # Package overview, the start of the godoc
 │   ├── eloverblik.go       # Client initialization
 │   ├── errors.go           # Error handling
 │   ├── export.go           # Streamed export responses
@@ -1163,17 +1313,24 @@ GOOS=windows GOARCH=amd64 go build -o go-eloverblik-windows-amd64.exe .
 │   ├── relations.go        # Relations endpoints
 │   ├── timeseries.go       # Timeseries endpoints
 │   ├── utils.go            # Internal helpers
-│   └── *_test.go           # Unit tests
+│   └── *_test.go           # Unit tests, and the examples on pkg.go.dev (example_test.go)
 ├── docs/                   # Energinet's API documentation, see docs/README.md
 ├── .github/
+│   ├── dependabot.yml      # Dependabot updates of the Go modules, Actions and devcontainer
 │   └── workflows/
-│       ├── release.yml     # Tag-triggered GoReleaser build
+│       ├── release.yml     # Tag-triggered test gate and GoReleaser build
 │       ├── security.yml    # govulncheck and CodeQL
 │       └── test.yml        # Test, lint, tidy and build
 ├── .golangci.yml           # Linter configuration
 ├── .goreleaser.yaml        # Release build configuration
+├── AGENTS.md               # Checks and conventions for contributors and coding agents
+├── CHANGELOG.md            # Notable changes per release, published as the release notes
+├── CLAUDE.md               # Symbolic link to AGENTS.md
+├── LICENSE                 # MIT license
+├── README.md               # This file
 ├── go.mod                  # Go module definition
 ├── go.sum                  # Dependency checksums
+├── llms.md                 # Full reference for the library and the CLI, for integrators and AI agents
 └── main.go                 # CLI entry point
 ```
 
@@ -1184,11 +1341,10 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
 3. Make your changes
-4. Run tests (`go test ./...`)
-5. Run linter (`golangci-lint run`)
-6. Commit your changes (`git commit -m 'Add some amazing feature'`)
-7. Push to the branch (`git push origin feature/amazing-feature`)
-8. Open a Pull Request
+4. Run the checks listed in [AGENTS.md](AGENTS.md#checks)
+5. Commit your changes (`git commit -m 'Add some amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
 
 ### Development Guidelines
 
@@ -1210,13 +1366,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
+- [Full reference for the library and the CLI (llms.md)](llms.md)
+- [Package documentation on pkg.go.dev](https://pkg.go.dev/github.com/slimcdk/go-eloverblik/v1)
 - [API Documentation](https://api.eloverblik.dk/customerapi/index.html)
 - [Report Issues](https://github.com/slimcdk/go-eloverblik/issues)
-- [Discussions](https://github.com/slimcdk/go-eloverblik/discussions)
 
 ## Related Projects
 
-- [Eloverblik API Documentation](https://api.eloverblik.dk/)
+- [Eloverblik API Documentation](https://docs.eloverblik.dk/)
 - [Eloverblik Portal](https://eloverblik.dk/)
 
 ---
