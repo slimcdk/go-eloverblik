@@ -4,9 +4,16 @@ run:
   tests: true
 linters:
   enable:
+    - errorlint # errors compared with == or formatted with %v instead of wrapped
+    - gocritic
     - gosec
     - misspell
+    - modernize # what go fix proposes, kept from creeping back in
+    - nilnesserr
+    - nolintlint
     - revive
+    - unconvert
+    - usestdlibvars
   settings:
     errcheck:
       check-type-assertions: false

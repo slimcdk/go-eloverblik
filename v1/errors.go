@@ -411,7 +411,7 @@ var (
 )
 
 var apiErrorMap = map[uint64]error{
-	10000: nil, //ErrorNoError,
+	10000: nil, // NoError: success maps to no sentinel
 	10001: ErrorWrongNumberOfArguments,
 	10002: ErrorToManyRequestItems,
 	10003: ErrorInternalServerError,
