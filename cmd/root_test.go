@@ -133,6 +133,64 @@ func TestSubcommandHelp(t *testing.T) {
 	})
 }
 
+// TestCommandsThatNeedNoToken covers the commands that never use --token: they must run
+// without it. The flag used to be marked required on the root, which cobra then demanded
+// of every command, help and the shell completion scripts included.
+func TestCommandsThatNeedNoToken(t *testing.T) {
+	t.Run("help", func(t *testing.T) {
+		out, err := execute(t, "help")
+		require.NoError(t, err)
+		assert.Contains(t, out, "A CLI for the Danish Eloverblik platform")
+	})
+
+	t.Run("help for a command", func(t *testing.T) {
+		out, err := execute(t, "help", "customer", "timeseries")
+		require.NoError(t, err)
+		assert.Contains(t, out, "go-eloverblik customer timeseries <metering-id>")
+	})
+
+	t.Run("completion", func(t *testing.T) {
+		// cobra's completion command writes to the stdout it found when the first Execute
+		// created it, a pipe an earlier test has closed. Remove it, so this Execute
+		// creates it again while this test's stdout is being captured.
+		for _, c := range rootCmd.Commands() {
+			if c.Name() == "completion" {
+				rootCmd.RemoveCommand(c)
+			}
+		}
+
+		out, err := execute(t, "completion", "bash")
+		require.NoError(t, err)
+		assert.Contains(t, out, "bash completion")
+	})
+}
+
+// TestCommandsRejectMissingToken covers the commands that use --token. cobra no longer
+// checks for it, so each must refuse to run without one, and say why, before it builds a
+// client.
+func TestCommandsRejectMissingToken(t *testing.T) {
+	saved := clientInstance
+	clientInstance = nil
+	t.Cleanup(func() { clientInstance = saved })
+
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{"customer", []string{"customer", "details", "571313174002485069"}},
+		{"thirdparty", []string{"thirdparty", "details", "571313174002485069"}},
+		{"token", []string{"token"}},
+		{"customer with an empty token", []string{"customer", "details", "571313174002485069", "--token", ""}},
+		{"token with an empty token", []string{"token", "--token", ""}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := execute(t, tc.args...)
+			require.EqualError(t, err, `required flag "token" not set`)
+			assert.Nil(t, clientInstance, "no client may be built without a token")
+		})
+	}
+}
+
 func TestPrintResponseHeadersFlag(t *testing.T) {
 	flag := rootCmd.PersistentFlags().Lookup("print-response-headers")
 	assert.NotNil(t, flag, "rootCmd should have a persistent --print-response-headers flag")

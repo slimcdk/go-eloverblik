@@ -80,8 +80,9 @@ func rootHelpFunc(cmd *cobra.Command, _ []string) {
 }
 
 func init() {
-	rootCmd.PersistentFlags().String("token", "", "Eloverblik refresh token (required)")
-	_ = rootCmd.MarkPersistentFlagRequired("token")
+	// --token is not marked required: cobra would then demand it of every command, help
+	// and completion included. The customer, thirdparty and token commands check it.
+	rootCmd.PersistentFlags().String("token", "", "Eloverblik refresh token (required by the customer, thirdparty and token commands)")
 	rootCmd.PersistentFlags().Bool("print-response-headers", false, "Print HTTP response headers from the Eloverblik API to stderr")
 	rootCmd.SetHelpFunc(helpFunc(rootCmd.HelpFunc()))
 }
