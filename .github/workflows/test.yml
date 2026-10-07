@@ -20,8 +20,18 @@ concurrency:
 
 jobs:
   test:
-    name: Test
-    runs-on: ubuntu-latest
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One OS failing must not hide whether the others pass.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        # The same shell on every runner, so each command line means the same thing on
+        # Windows (Git Bash ships with the runner image) as on Linux and macOS.
+        shell: bash
 
     steps:
     - name: Check out code
@@ -41,13 +51,43 @@ jobs:
     - name: Verify dependencies
       run: go mod verify
 
+    # The race detector runs on all three runners: linux/amd64, windows/amd64 (cgo
+    # through the image's MinGW gcc) and darwin/arm64.
     - name: Run tests
       run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
 
+    # A release binary is built with -trimpath, which leaves runtime.GOROOT() empty,
+    # so on a machine without Go nothing falls back to $GOROOT/lib/time/zoneinfo.zip.
+    # Windows has no system zoneinfo at all, so on windows-latest this is exactly what
+    # every user's Windows machine sees. The run above cannot see it: an untrimmed
+    # test binary still finds the toolchain's copy.
+    - name: Run tests without Go's zoneinfo (-trimpath, GOROOT unset)
+      run: env -u GOROOT -u ZONEINFO go test -count=1 -trimpath ./...
+
+    # The build .goreleaser.yaml makes (CGO_ENABLED=0, -trimpath, -s -w), run in
+    # busybox: no /usr/share/zoneinfo and no Go, like a minimal container image. The
+    # token command decodes a fake token offline and the container has no network,
+    # so nothing reaches Eloverblik.
+    - name: Run the release build where no time zone database exists
+      if: runner.os == 'Linux'
+      env:
+        CGO_ENABLED: "0"
+        # Header {"alg":"none"}, payload {"exp":1830000000,"aud":"CustomerApi"}.
+        FAKE_TOKEN: eyJhbGciOiJub25lIn0.eyJleHAiOjE4MzAwMDAwMDAsImF1ZCI6IkN1c3RvbWVyQXBpIn0.sig
+        # 1830000000 falls in Copenhagen winter time: +01:00 whatever the runner's zone.
+        WANT_EXPIRY: '"expiresAt":"2027-12-28T14:20:00+01:00"'
+      run: |
+        go build -trimpath -ldflags="-s -w" -o "$RUNNER_TEMP/go-eloverblik" .
+        out="$(docker run --rm --network none -v "$RUNNER_TEMP/go-eloverblik:/go-eloverblik:ro" busybox:stable /go-eloverblik token --token "$FAKE_TOKEN")"
+        echo "$out"
+        grep -qF -- "$WANT_EXPIRY" <<<"$out"
+
     # Forks do not get repository secrets, so CODECOV_TOKEN is empty there and the
     # action falls back to tokenless upload. fail_ci_if_error stays false so a
-    # missing token or a Codecov outage never fails an otherwise green build.
+    # missing token or a Codecov outage never fails an otherwise green build. One
+    # upload is enough: the coverage is the same code on every OS.
     - name: Upload coverage to Codecov
+      if: runner.os == 'Linux'
       uses: codecov/codecov-action@v7
       with:
         files: ./coverage.out
@@ -57,6 +97,47 @@ jobs:
 
     - name: Generate coverage report
       run: go tool cover -func=coverage.out
+
+  # The test job runs where int is 64 bits, so it cannot see a bug that exists only
+  # where int is 32 bits: strconv.Atoi on an 18-digit metering point ID rejected
+  # every ID on linux/arm while this workflow stayed green. Both steps run the whole
+  # suite as 32-bit code. No -race: the race detector supports neither 386 nor arm.
+  test-32bit:
+    name: Test (32-bit)
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v7
+
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version-file: go.mod
+
+    # 386 runs natively on the x86_64 runner: the cheapest 32-bit run there is.
+    - name: Run tests on linux/386
+      env:
+        GOARCH: "386"
+      run: go test ./...
+
+    # qemu-user runs each cross-compiled test binary through -exec, so there is no
+    # binfmt registration and no privileged container.
+    - name: Install qemu-user
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends qemu-user
+
+    # The shipped linux/arm build, on the CPU of the Raspberry Pi Zero and Pi 1
+    # (ARM1176, ARMv6). A GOARM=7 binary dies with SIGILL on this CPU, so the step
+    # also fails if GOARM is raised past what a Pi Zero can run.
+    - name: Run tests on linux/arm (ARMv6) under qemu
+      env:
+        GOARCH: arm
+        # Mirrors goarm in .goreleaser.yaml.
+        GOARM: "6"
+        QEMU_CPU: arm1176
+      run: go test -exec qemu-arm ./...
 
   tidy:
     name: Tidy

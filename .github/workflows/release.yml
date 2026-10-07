@@ -46,6 +46,26 @@ jobs:
       - name: Test
         run: go test -race ./...
 
+      # The same 32-bit runs as the test-32bit job in test.yml, so a tag cannot ship
+      # a linux/arm binary whose tests only ever ran as 64-bit code.
+      - name: Test on linux/386
+        env:
+          GOARCH: "386"
+        run: go test ./...
+
+      - name: Install qemu-user
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-user
+
+      - name: Test on linux/arm (ARMv6) under qemu
+        env:
+          GOARCH: arm
+          # Mirrors goarm in .goreleaser.yaml.
+          GOARM: "6"
+          QEMU_CPU: arm1176
+        run: go test -exec qemu-arm ./...
+
   # Real release: only ever runs for a pushed v* tag.
   release:
     name: Release
