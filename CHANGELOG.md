@@ -77,6 +77,19 @@ it refuses to build the module.
 - A DataHub 3.0 section in the README and in `llms.md`: the retired endpoints, the failures
   per metering point, metering point IDs that repeat once per access period, and the master
   data fields Energinet lists as retired or, for now, unavailable.
+- The OpenAPI documents in `docs/` are the ones Energinet publishes as of October 2026. The
+  previous ones dated from February, before `getchargelinkswithcharges` was specified.
+
+### Dependencies, CI and tooling
+
+- testify 1.12.1, httpmock 1.4.2 and golang.org/x/net 0.59.0. resty v3 is still a release
+  candidate, so the client stays on resty v2.
+- Every GitHub Action is on its current major, golangci-lint on v2.14 and govulncheck on
+  v1.8.0, pinned. The govulncheck job had failed every week since 14 September: its
+  `@latest` had started to require a newer Go than the job ran.
+- The code takes what `go fix` proposes for Go 1.27, and the linters now include errorlint,
+  testifylint, modernize and gocritic. errorlint found the export bug listed above.
+- The devcontainer runs Go 1.27.
 
 ## [1.3.0]
 

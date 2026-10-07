@@ -14,7 +14,7 @@ A comprehensive Go client library and CLI tool for the Danish energy data platfo
 - **Rate Limit Aware**: Retries the documented 429 and 503 responses, honouring `Retry-After`
 - **Token Introspection**: Read a token's API, roles and expiry without spending a call
 - **Debuggable**: `--print-response-headers` shows what the API actually answered
-- **Well-Tested**: 87% statement coverage of the library, verified against the live API
+- **Well-Tested**: 93% statement coverage of the library, verified against the live API
 - **Multi-Platform**: Cross-compiled binaries for Linux, macOS, and Windows
 
 ## Table of Contents
@@ -998,12 +998,12 @@ go test ./cmd
 
 ### Running Linter
 
-The config is in the golangci-lint **v2** format, so v1 will not read it. CI pins v2.12;
+The config is in the golangci-lint **v2** format, so v1 will not read it. CI pins v2.14;
 match it locally:
 
 ```bash
-# Install golangci-lint v2
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+# Install the golangci-lint version CI runs
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
 
 # Run linter — the same command CI runs
 golangci-lint run --timeout=5m
@@ -1045,6 +1045,7 @@ GOOS=windows GOARCH=amd64 go build -o go-eloverblik-windows-amd64.exe .
 │   ├── constvars.go        # Aggregations, resolutions and other constants
 │   ├── eloverblik.go       # Client initialization
 │   ├── errors.go           # Error handling
+│   ├── export.go           # Streamed export responses
 │   ├── interfaces.go       # API interfaces
 │   ├── jwt.go              # Token claim decoding
 │   ├── meters.go           # Metering point endpoints
