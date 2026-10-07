@@ -114,8 +114,8 @@ func (c *client) GetDataAccessToken() (string, error) {
 }
 
 // expiresWithin reports whether the token's exp claim is past or less than margin away. A
-// token without a readable expiry is treated as not expiring, so the client keeps it and
-// leaves it to the API to reject it.
+// token without a readable expiry, including one whose exp is null, zero or negative, is
+// treated as not expiring, so the client keeps it and leaves it to the API to reject it.
 func expiresWithin(token string, margin time.Duration) bool {
 	claims, err := ParseToken(token)
 	if err != nil || claims.ExpiresAt.IsZero() {

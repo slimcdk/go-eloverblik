@@ -105,6 +105,36 @@ func TestParseToken(t *testing.T) {
 		assert.Zero(t, claims.ExpiresIn())
 	})
 
+	// An exp of null, zero or below names no point in time. It used to be read as the Unix
+	// epoch or earlier, so the token reported itself as expired since 1970.
+	t.Run("exp that names no point in time reads as no expiry", func(t *testing.T) {
+		tests := map[string]any{
+			"null":     nil,
+			"zero":     0,
+			"negative": -1,
+		}
+
+		for name, exp := range tests {
+			t.Run(name, func(t *testing.T) {
+				claims, err := ParseToken(testToken(t, map[string]any{
+					"tokenType": "ThirdPartyApiDataAccess",
+					"exp":       exp,
+				}))
+
+				require.NoError(t, err)
+				assert.True(t, claims.ExpiresAt.IsZero(), "ExpiresAt is %v", claims.ExpiresAt)
+				assert.False(t, claims.IsExpired())
+				assert.Zero(t, claims.ExpiresIn())
+			})
+		}
+	})
+
+	t.Run("token carrying nothing but an exp that names no point in time is rejected", func(t *testing.T) {
+		_, err := ParseToken(testToken(t, map[string]any{"exp": 0}))
+
+		assert.Error(t, err)
+	})
+
 	t.Run("unknown token type cannot name its API", func(t *testing.T) {
 		claims, err := ParseToken(testToken(t, map[string]any{
 			"tokenType": "Something_Else",

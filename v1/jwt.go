@@ -50,7 +50,8 @@ type TokenClaims struct {
 	Audience string `json:"audience,omitempty"`
 
 	// ExpiresAt is when the token stops working. A data access token is short lived; a
-	// refresh token typically lasts a year.
+	// refresh token typically lasts a year. It is zero when the token carries no expiry,
+	// or one that is null, zero or negative.
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
@@ -108,7 +109,11 @@ func ParseToken(token string) (TokenClaims, error) {
 		if err := json.Unmarshal(expiry, &seconds); err != nil {
 			return claims, fmt.Errorf("could not parse token expiry: %w", err)
 		}
-		claims.ExpiresAt = time.Unix(seconds, 0).In(cph)
+		// A null, zero or negative exp names no point in time a token could expire at. Read
+		// as a time, it would make the token expired since 1970.
+		if seconds > 0 {
+			claims.ExpiresAt = time.Unix(seconds, 0).In(cph)
+		}
 	}
 
 	if claims.TokenType == "" && claims.ExpiresAt.IsZero() {

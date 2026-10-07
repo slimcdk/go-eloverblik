@@ -155,6 +155,23 @@ func TestGetDataAccessTokenRenewal(t *testing.T) {
 			cached:  withoutExpiry,
 			renewed: false,
 		},
+		// An exp that names no point in time used to read as 1 January 1970, so the token
+		// counted as expired and every call spent one of the 2 /token calls a minute on it
+		{
+			name:    "token whose exp is null is kept",
+			cached:  testToken(t, map[string]any{"tokenType": "ThirdPartyApiDataAccess", "exp": nil}),
+			renewed: false,
+		},
+		{
+			name:    "token whose exp is zero is kept",
+			cached:  testToken(t, map[string]any{"tokenType": "ThirdPartyApiDataAccess", "exp": 0}),
+			renewed: false,
+		},
+		{
+			name:    "token whose exp is negative is kept",
+			cached:  testToken(t, map[string]any{"tokenType": "ThirdPartyApiDataAccess", "exp": -1}),
+			renewed: false,
+		},
 	}
 
 	for _, test := range tests {
