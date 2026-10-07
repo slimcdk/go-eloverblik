@@ -66,7 +66,9 @@ type FlatTimeSeriesPoint struct {
 	Resolution   Resolution `json:"resolution"`
 }
 
-// GetTimeSeries fetches meter accumulated meter readings within the given aggregation
+// GetTimeSeries fetches the time series of the given metering points in the interval
+// [from, to), at the given aggregation. from and to are sent as calendar dates in
+// Copenhagen time; the time of day is dropped.
 func (c *client) GetTimeSeries(meteringPointIDs []string, from, to time.Time, aggregation Aggregation) ([]TimeSeries, error) {
 
 	// Ensure access token is fresh
@@ -142,9 +144,11 @@ func (ts *TimeSeries) Flatten() []FlatTimeSeriesPoint {
 // period with a single point therefore takes its interval verbatim, which also keeps a
 // partial period correct — a Year period may cover, say, only April to December.
 //
-// Periods with several points step by calendar unit rather than by a fixed duration, so
-// that a day containing a daylight saving transition (23 or 25 hours) and months of
-// unequal length still yield the correct boundaries.
+// Sub-day resolutions (PT15M, PT1H) step by a fixed duration from the period start, so a
+// day with a daylight saving transition holds its 23 or 25 hourly points at their true
+// instants. Day, month and year resolutions step by calendar unit instead, so a day
+// boundary stays at local midnight across a 23 or 25 hour day and months of unequal
+// length still yield the correct boundaries. PXD spreads the points evenly over the period.
 func pointInterval(resolution Resolution, interval TimeInterval, position, points int) (time.Time, time.Time) {
 
 	start := interval.Start.In(cph)

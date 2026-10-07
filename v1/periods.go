@@ -25,8 +25,10 @@ const (
 //
 // The API treats the requested range as half-open: it returns data from dateFrom up to
 // but not including dateTo, and it rejects a request where the two dates are equal with
-// error 30002. The returned to is therefore the start of the period that follows, not
-// the last instant of the period itself.
+// error 30002. For yesterday, last_week, last_month and last_year the returned to is
+// therefore the start of the period that follows, not the last instant of the period
+// itself. For this_week, this_month and this_year it is the current time, so the range
+// ends before today.
 func GetDatesFromPeriod(period Period) (from time.Time, to time.Time, err error) {
 	return getDatesFromPeriod(period, time.Now())
 }

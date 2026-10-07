@@ -23,9 +23,12 @@ func ErrorClientConnection(status int) error {
 //     "traceId":"00-9c48...-01"}. Both OpenAPI specs declare it for 400, 401, 403 and 404,
 //     and it is what a request to an endpoint that is not deployed actually comes back with.
 //
-// Only one of the two is ever set. Unmarshalling never fails: a body that cannot be read
-// is left empty and judged by its HTTP status, rather than making resty log a warning and
-// drop the response on the floor.
+// Only one of the two is ever set. UnmarshalJSON itself never fails: a well-formed body it
+// has no use for is left empty and judged by its HTTP status. A body that is not well-formed
+// JSON (empty, truncated, HTML) under a JSON Content-Type fails in encoding/json before
+// UnmarshalJSON runs; resty then logs a "Cannot unmarshal response body" warning, and the
+// error is still judged by its HTTP status. A body with a non-JSON Content-Type never
+// reaches UnmarshalJSON.
 type apiErrorBody struct {
 	// Message is the API error message when the body is a bare JSON string.
 	Message string
@@ -228,8 +231,8 @@ func apiErrorCode(msg string) (code uint64, ok bool) {
 }
 
 // apiErrorFromBody turns the error body of a response into an error. It is what every
-// request calls: apiErrorBody has already told the two shapes the API answers with apart,
-// and each is reported in the way that keeps the most of it.
+// request except IsAlive calls: apiErrorBody has already told the two shapes the API
+// answers with apart, and each is reported in the way that keeps the most of it.
 func apiErrorFromBody(body apiErrorBody, statusCode int) error {
 
 	// A problem document only ever accompanies a failure. On a success the result body is
@@ -330,7 +333,7 @@ func apiError(msg string, statusCode int) error {
 }
 
 var (
-	ErrorNoError                                        error = errors.New("no errors")                                                                     // status code 200 - api code 10000
+	ErrorNoError                                        error = errors.New("no errors")                                                                     // api code 10000 - never returned: 10000 maps to a nil error
 	ErrorWrongNumberOfArguments                         error = errors.New("wrong number of arguments")                                                     // status code 400 - api code 10001
 	ErrorToManyRequestItems                             error = errors.New("to many request items")                                                         // status code 412 - api code 10002
 	ErrorInternalServerError                            error = errors.New("internal server error")                                                         // status code 500 - api code 10003

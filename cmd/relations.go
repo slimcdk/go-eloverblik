@@ -28,12 +28,13 @@ var addRelationByIDCmd = &cobra.Command{
 
 // Energinet retired the endpoints behind add-relation-by-code and delete-relation with
 // DataHub 3.0; both answer 410 Gone. The commands stay, hidden, so a script that still runs
-// them is told why instead of "unknown command". They no longer call the API, because the
-// answer is already known.
+// them fails with the reason. Without them, cobra would not report an unknown command below
+// the root: it would print the customer help and exit 0. They no longer call the API,
+// because the answer is already known.
 
 var addRelationByCodeCmd = &cobra.Command{
 	Use:          "add-relation-by-code <metering-id> <web-access-code>",
-	Short:        "Link a metering point to the authenticated user via a web access code",
+	Short:        "Retired: linked a metering point to the authenticated user via a web access code",
 	Deprecated:   "Energinet retired web access codes with DataHub 3.0",
 	Args:         cobra.ExactArgs(2),
 	SilenceUsage: true,
@@ -45,7 +46,7 @@ var addRelationByCodeCmd = &cobra.Command{
 
 var deleteRelationCmd = &cobra.Command{
 	Use:          "delete-relation <metering-id>",
-	Short:        "Unlink a metering point from the authenticated user",
+	Short:        "Retired: unlinked a metering point from the authenticated user",
 	Deprecated:   "Energinet retired the endpoint with DataHub 3.0",
 	Args:         cobra.ExactArgs(1),
 	SilenceUsage: true,

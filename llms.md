@@ -5,7 +5,8 @@ This documentation is structured for AI agents to easily understand, parse, and 
 ## Package Information
 
 ```yaml
-package: github.com/slimcdk/go-eloverblik
+module: github.com/slimcdk/go-eloverblik   # the module root is the CLI (package main), not the library
+package: eloverblik                        # the identifier the import below binds
 import: github.com/slimcdk/go-eloverblik/v1
 install: go get github.com/slimcdk/go-eloverblik/v1
 language: Go
@@ -24,7 +25,9 @@ apis:
 User obtains refresh token → NewCustomer/NewThirdParty creates client → Client automatically:
   1. Uses refresh token to get a data access token on the first call that needs one
   2. Caches the data access token on the client
-  3. Adds the Authorization header to all requests
+  3. Sends the data access token as `Authorization: Bearer <token>` on every call except
+     IsAlive, which calls /isalive without authentication (the /token call itself carries
+     the refresh token)
 ```
 Note: the cached data access token is fetched once and kept for the life of the client. It
 is NOT re-fetched when it expires (a data access token lasts about 24 hours), so a long
@@ -131,7 +134,8 @@ Verified against the live API:
 ```yaml
 inclusive: dateFrom
 exclusive: dateTo
-granularity: date (the client formats both bounds with time.DateOnly in Europe/Copenhagen)
+granularity: date (GetTimeSeries and ExportTimeSeries format both bounds with time.DateOnly
+  in Europe/Copenhagen; GetChargeLinksWithCharges is the exception, see below)
 equal dates: rejected outright with API error 30002 (ErrorToDateCanNotBeEqualToFromDate)
 worked example:
   request: from=2026-07-01, to=2026-07-04, aggregation=Day
@@ -143,8 +147,10 @@ future to: a to later than tomorrow is rejected (30003); a to of tomorrow is mov
   today, so today's consumption is never returned
 ```
 
-`GetDatesFromPeriod` follows the same rule and returns an **exclusive** `to`, i.e. the start
-of the period that follows:
+`GetDatesFromPeriod` returns an **exclusive** `to`: for yesterday, last_week, last_month and
+last_year it is the start of the period that follows; for this_week, this_month and this_year
+it is the current instant (`now`), which the date-formatted calls turn into today's date, so
+today is never included:
 
 ```yaml
 yesterday:  [start of yesterday, start of today)
@@ -159,6 +165,11 @@ last_year:  [1 January last year, 1 January this year)
 Both `from` and `to` are converted to `Europe/Copenhagen` before being formatted, so a UTC
 `time.Time` near midnight can land on the neighbouring Danish date. Prefer building dates in
 Copenhagen local time or at midday UTC.
+
+GetChargeLinksWithCharges is different: its request takes date-times, and the client sends both
+bounds as full RFC 3339 timestamps converted to Copenhagen time, keeping the time of day. A UTC
+midnight goes out as `2026-01-01T01:00:00+01:00`, so build its bounds at Copenhagen midnight;
+the midday-UTC advice applies only to the date-formatted calls.
 
 ### 6. Resolutions in the response (the OpenAPI description is wrong here)
 
@@ -194,8 +205,11 @@ const (
 Notes that matter when interpreting the data:
 - A Period holding a **single point** takes the interval the API states verbatim. This keeps
   a **partial period** correct: a Year period may legitimately run 27 April - 31 December.
-- Periods holding several points step by **calendar unit**, not by a fixed duration, so a
-  daylight saving day of 23 or 25 hours lands on the right boundary.
+- Periods holding several points step by **elapsed time** for PT15M and PT1H, so a daylight
+  saving day yields 23 or 25 hourly points with correct boundaries, and by **calendar unit**
+  (AddDate) for PT1D/P1D, P1M and PT1Y/P1Y, so each point starts at local midnight even across
+  a 23- or 25-hour day and months of unequal length come out right. PXD spreads the points
+  evenly over the period.
 - An unknown resolution attributes the whole period to the point rather than collapsing it
   to a zero-width interval.
 
@@ -205,7 +219,8 @@ Notes that matter when interpreting the data:
 token endpoint: 2 calls per minute per IP
 all endpoints:  120 calls per minute per IP
 overall:        1200 calls per minute across all users
-batch size:     10 metering points per request (recommended and enforced; error 10002/10004 beyond)
+batch size:     10 metering points per request (a recommendation, not an enforced limit; the
+                library sends whatever it is given)
 on breach:      HTTP 429 (and HTTP 503 when DataHub cannot keep up)
 client policy:  429 and 503 are retried DefaultRetryCount (2) times, honouring Retry-After,
                 capped at DefaultRetryMaxWait (60s). Nothing else is retried - a 401, any
@@ -301,7 +316,7 @@ client := eloverblik.NewCustomer("your-refresh-token-here", eloverblik.WithRespo
 //        one instead of stacking conditions.
 // EXAMPLE:
 client := eloverblik.NewCustomer(token, eloverblik.WithRetry(4, 30*time.Second))
-client := eloverblik.NewCustomer(token, eloverblik.WithoutRetry())
+noRetry := eloverblik.NewCustomer(token, eloverblik.WithoutRetry()) // retrying turned off
 ```
 
 ### Token Claims
@@ -314,7 +329,8 @@ client := eloverblik.NewCustomer(token, eloverblik.WithoutRetry())
 claims, err := eloverblik.ParseToken(os.Getenv("ELO_TOKEN"))
 if err != nil { /* not a JWT, or carries no Eloverblik claims */ }
 api, err := claims.APIType() // eloverblik.CustomerApi or eloverblik.ThirdPartyApi
-fmt.Println(claims.TokenName, claims.Roles, claims.ExpiresAt, claims.IsExpired())
+if err != nil { /* the token type names neither API */ }
+fmt.Println(claims.TokenName, claims.Roles, claims.ExpiresAt, claims.IsExpired(), api == eloverblik.ThirdPartyApi)
 ```
 
 ```go
@@ -358,14 +374,15 @@ for _, point := range points {
 // INPUTS:
 //   - meteringPointIDs ([]string): 1-10 IDs, each exactly 18 digits, numeric only
 // OUTPUTS:
-//   - []MeteringPointDetailsResponse: one response per input ID
+//   - []MeteringPointDetailsResponse: one per metering point and access period (an ID can
+//     repeat, see below)
 //   - error: transport error, or an API-level error that failed the whole request
 // MeteringPointDetailsResponse = { Result MeteringPointDetail } + embedded StatusResponse:
 //   - Success (bool): true if this specific point succeeded
 //   - ErrorCode (int): 10000 = success, other = error
 //   - ErrorText (string), ID (string), StackTrace (string)
 //   - Err() error: nil on success, else an error that unwraps to the code's sentinel
-// MeteringPointDetail FIELDS (54, all string unless noted):
+// MeteringPointDetail FIELDS (59, all string unless noted):
 //   MeteringPointID, ParentMeteringPointID, TypeOfMP, EnergyTimeSeriesMeasureUnit,
 //   EstimatedAnnualVolume, SettlementMethod, MeterNumber,
 //   GridOperatorName, GridOperatorID, GridOperatorIDSchemeAgencyID,
@@ -492,10 +509,12 @@ type FlatTimeSeriesPoint struct {
 //             happened. GetChargeLinksWithCharges is the endpoint meant to close that gap,
 //             but Energinet has not deployed it (404 on both APIs, verified 2026-07-13), so
 //             today this is the closest available data and historic pricing is not possible
-//             through this API. PriceID is the stable key to join a charge to its price
-//             series once the endpoint goes live.
+//             through this API. PriceID is expected, but not verified, to match
+//             ChargeIdentifier.Code of the charge's price series once the endpoint goes
+//             live, together with Owner and the charge type (the list it came from).
 // EXAMPLE:
 charges, err := client.GetCustomerCharges([]string{"571313155411053087"})
+if err != nil { /* handle error */ }
 for _, charge := range charges {
     if !charge.Success { continue }
     for _, tariff := range charge.Result.Tariffs {
@@ -524,8 +543,9 @@ for _, charge := range charges {
 //   ready for the day Energinet deploys it. Until then every call errors with a 404.
 //
 //   USE INSTEAD TODAY: GetCustomerCharges / GetThirdPartyCharges (CLI: the `charges`
-//   commands). They return subscriptions, fees and tariffs, but ONLY those currently valid
-//   or taking effect in the future - they CANNOT price consumption that already happened.
+//   commands). They return subscriptions and tariffs (plus fees on the Customer API), but
+//   ONLY those currently valid or taking effect in the future - they CANNOT price
+//   consumption that already happened.
 //   There is no other endpoint that can, so historic pricing is simply unavailable for now.
 //   Do not generate code whose happy path depends on GetChargeLinksWithCharges succeeding.
 //
@@ -591,7 +611,9 @@ for _, result := range links.Results {
 //   - aggregation (Aggregation): Data granularity
 // OUTPUTS:
 //   - io.ReadCloser: CSV data stream (Danish format, semicolon-delimited). Caller closes.
-//   - error: a non-2xx is reported as "failed to export time series, status: ..."
+//   - error: a transport error or a non-2xx, reported as "failed to export time series: <cause>".
+//     The cause is wrapped, so errors.Is / errors.As still match the API error (e.g.
+//     ErrorPeriodNotAllowed, *APIError)
 // CSV FORMAT:
 //   - Delimiter: semicolon (;)
 //   - Encoding: UTF-8 with BOM
@@ -619,6 +641,9 @@ records, _ := reader.ReadAll()
 //   - error: HTTP/network errors, or a non-2xx status
 // EXAMPLE:
 stream, err := client.ExportMasterdata([]string{"571313155411053087"})
+if err != nil {
+    return err
+}
 defer stream.Close()
 io.Copy(os.Stdout, stream)
 ```
@@ -641,6 +666,7 @@ io.Copy(os.Stdout, stream)
 //   - []StringResponse: one per ID. StringResponse = { Result string } + StatusResponse
 // EXAMPLE:
 responses, err := client.AddRelationByID([]string{"571313155411053087"})
+if err != nil { /* handle error */ }
 for _, resp := range responses {
     if resp.Success {
         fmt.Println("Linked:", resp.Result)
@@ -672,15 +698,16 @@ for _, resp := range responses {
 // OUTPUTS:
 //   - bool: true if the /isalive endpoint answered 2xx
 //   - error: transport errors only
-// NOTE: each client probes its OWN host, so `customer alive` hits the customer API and
-//       `thirdparty alive` hits the third-party API.
+// NOTE: each client probes its OWN API on the shared host api.eloverblik.dk: `customer alive`
+//       hits /customerapi/api/isalive and `thirdparty alive` hits /thirdpartyapi/api/isalive.
 ```
 
 ### Third-Party API Methods
 
 ```go
 // FUNCTION: GetAuthorizations  (ThirdParty only)
-// PURPOSE: List all customer authorizations granted to the third party
+// PURPOSE: List the valid or active authorizations (powers of attorney) customers have granted
+//          the third party; deleted or expired ones are not returned
 // SIGNATURE: GetAuthorizations() ([]Authorization, error)
 // INPUTS: none
 // Authorization FIELDS:
@@ -694,6 +721,7 @@ for _, resp := range responses {
 //   - Timestamp (FlexibleTime)
 // EXAMPLE:
 auths, err := client.GetAuthorizations()
+if err != nil { /* handle error */ }
 for _, auth := range auths {
     meteringPoints, _ := client.GetMeteringPointsForScope(
         eloverblik.AuthScopeCustomerKey,
@@ -831,6 +859,8 @@ Flags:
   -h, --help                     help for go-eloverblik
       --print-response-headers   Print HTTP response headers from the Eloverblik API to stderr
       --token string             Eloverblik refresh token (required)
+
+Use "go-eloverblik [command] --help" for more information about a command.
 ```
 
 `customer add-relation-by-code` and `customer delete-relation` still exist but are hidden:
@@ -936,7 +966,7 @@ Returns: JSON with the nested time series document
 CLI: go-eloverblik customer timeseries 571313155411053087 --from=now-30d --flatten
 Library: |
   from := time.Now().AddDate(0, 0, -30)
-  to := time.Now()
+  to, _ := time.Parse(time.DateOnly, time.Now().Format(time.DateOnly)) // --to default: today's date, exclusive
   tss, _ := client.GetTimeSeries([]string{"571313155411053087"}, from, to, eloverblik.Hour)
   flat := tss[0].Flatten() // after checking tss[0].Err()
 Returns: JSON object, metering point ID -> []FlatTimeSeriesPoint. A metering point that
@@ -1041,12 +1071,12 @@ client := eloverblik.NewThirdParty(token)
 // 2. Get all authorizations
 auths, _ := client.GetAuthorizations()
 
-// 3. For each authorized customer
+// 3. For each authorization
 for _, auth := range auths {
     // 4. Get their metering points
     points, _ := client.GetMeteringPointsForScope(
-        eloverblik.AuthScopeCustomerKey,
-        auth.CustomerKey,
+        eloverblik.AuthScopeID, // per authorization; customerKey is optional and may be empty
+        auth.ID,
     )
 
     // 5. Get data for their points, 10 at a time (see Pattern 7)
@@ -1076,6 +1106,7 @@ reader := csv.NewReader(stream)
 reader.Comma = ';'
 reader.LazyQuotes = true
 reader.TrimLeadingSpace = true
+reader.FieldsPerRecord = -1 // rows may vary in width, as in the CLI
 
 // 3. Read headers
 headers, _ := reader.Read()
@@ -1085,6 +1116,9 @@ for {
     record, err := reader.Read()
     if err == io.EOF {
         break
+    }
+    if err != nil {
+        return err
     }
 
     row := make(map[string]string)
@@ -1150,9 +1184,10 @@ lived token the client would fetch, which does make one request).
 
 ### Pattern 6: Debug a Failing Call with Response Headers
 The API's own diagnostics live in the response headers: `Api-Supported-Versions` tells whether
-the pinned api-version is still served, `Retry-After` tells how long a 429 wants you to wait,
-and the request URL in the block tells exactly which path was hit (this is how the
-`getchargelinkswithcharges` 404 was confirmed on both APIs, on every documented path).
+the pinned api-version is still served, `Retry-After`, when the API sends one, tells how long
+a 429 wants you to wait, and the request URL in the block tells exactly which path was hit
+(this is how the `getchargelinkswithcharges` 404 was confirmed on both APIs, on every
+documented path).
 
 ```go
 // Library: send the header blocks anywhere - stderr, a file, a bytes.Buffer in a test.
@@ -1175,12 +1210,12 @@ made. A retried call prints one block per attempt, so a 429 followed by a 200 is
 ### Pattern 7: Respect the Rate Limits (batch 10, let the client retry)
 The API allows 120 calls per minute per IP (and only 2 to `/token`), and recommends at most 10
 metering points per request. Batch the IDs and leave the default retry policy alone: it already
-retries a 429 or 503 twice, honouring `Retry-After`.
+retries a 429 or 503 twice, honouring `Retry-After` when present (waiting at least 5s and at
+most 60s).
 
 ```go
-// Reuse ONE client: it fetches a single data access token and caches it, so a loop over 500
-// metering points still costs exactly one /token call, staying under the 2/minute limit.
-client := eloverblik.NewCustomer(token) // default retry: 2 attempts on 429/503, Retry-After honoured
+// Package level: the batching helper (Pattern 2 uses chunk too).
+const batchSize = 10 // the API's recommended maximum
 
 func chunk(ids []string, size int) [][]string {
     var batches [][]string
@@ -1191,25 +1226,35 @@ func chunk(ids []string, size int) [][]string {
     return batches
 }
 
-const batchSize = 10 // the API's recommended and enforced maximum
+func fetchDetails(token string, allIDs []string) error {
+    // Reuse ONE client: it fetches a single data access token and caches it, so a loop over
+    // 500 metering points still costs exactly one /token call, staying under the 2/minute limit.
+    client := eloverblik.NewCustomer(token) // default retry: 2 retries (3 attempts) on 429/503, Retry-After honoured
 
-for _, batch := range chunk(allIDs, batchSize) {
-    details, err := client.GetMeteringPointDetails(batch)
-    if err != nil {
-        // The 429/503 retries are already exhausted at this point; back off or stop.
-        if errors.Is(err, eloverblik.ErrorTooManyRequests) {
-            time.Sleep(time.Minute)
-            continue
+    batches := chunk(allIDs, batchSize)
+    for i, waits := 0, 0; i < len(batches); i++ {
+        details, err := client.GetMeteringPointDetails(batches[i])
+        if err != nil {
+            // The 429/503 retries are already exhausted at this point; back off and retry
+            // this batch, or stop.
+            if errors.Is(err, eloverblik.ErrorTooManyRequests) && waits < 3 {
+                waits++
+                time.Sleep(time.Minute)
+                i-- // the same batch again
+                continue
+            }
+            return err
         }
-        return err
-    }
-    for _, detail := range details {
-        if !detail.Success { // per metering point failures do not fail the batch
-            log.Printf("%s: [%d] %s", detail.ID, detail.ErrorCode, detail.ErrorText)
-            continue
+        waits = 0
+        for _, detail := range details {
+            if !detail.Success { // per metering point failures do not fail the batch
+                log.Printf("%s: [%d] %s", detail.ID, detail.ErrorCode, detail.ErrorText)
+                continue
+            }
+            _ = detail.Result
         }
-        _ = detail.Result
     }
+    return nil
 }
 ```
 Do NOT create a client per batch: each new client fetches its own data access token and two of
@@ -1224,16 +1269,20 @@ alike** (verified 2026-07-13 with valid tokens of both kinds, in a session where
 answered 200). The pattern is kept because the client implements the endpoint exactly as both
 OpenAPI documents specify and it will work the day Energinet deploys it. **Until then there is
 no way to price historic consumption through this API.** The closest available data is
-`GetCustomerCharges`/`GetThirdPartyCharges` (CLI: `charges`), which only returns charges that
-are currently valid or take effect in the future — enough to price consumption going forward,
-never enough to price the past. If an agent is asked to price past consumption today, say so
+`GetCustomerCharges`/`GetThirdPartyCharges` (CLI: `charges`), which only returns the charges
+linked to the metering point now or from a future date, at their current prices: past and
+future price changes of an existing charge are not included. That prices consumption going
+forward only until a price changes, and never the past. If an agent is asked to price past consumption today, say so
 rather than emitting code that will 404.
 
-`GetCustomerCharges`/`GetThirdPartyCharges` only return prices valid now or in the future, so
-they cannot price the past. `GetChargeLinksWithCharges` returns the dated price series. The
-join key is the `ChargeIdentifier` (Code + Owner + Type) between a `ChargeLink` and a
-`ChargeInformation`; `PriceID` on a `Charge`/`TariffCharge` is the same stable identifier as
-the `Code`, which is what lets a present-tense charge be matched to its historic series.
+`GetCustomerCharges`/`GetThirdPartyCharges` only return the charges linked now or in the
+future, at their current prices, so they cannot price the past. `GetChargeLinksWithCharges`
+returns the dated price series. The join key is the `ChargeIdentifier` (Code + Owner + Type)
+between a `ChargeLink` and a `ChargeInformation`. A present-tense `Charge`/`TariffCharge` (from
+`GetCustomerCharges`/`GetThirdPartyCharges`) is expected to match its historic series by
+`PriceID` = `ChargeIdentifier.Code`, `Owner` = `ChargeIdentifier.Owner`, and the list it came
+from (subscriptions, fees, tariffs) = `ChargeIdentifier.Type`. Neither OpenAPI document states
+this link, and the endpoint has never answered, so it is unverified.
 
 ```go
 from, to, _ := eloverblik.GetDatesFromPeriod(eloverblik.LastMonth) // to is exclusive
@@ -1335,14 +1384,30 @@ from, to, _ := eloverblik.GetDatesFromPeriod(eloverblik.Yesterday)
 
 ### How errors surface
 ```yaml
-transport failure: returned as-is from the http client
-non-2xx status:    ALWAYS an error. A status with a sentinel of its own maps to it, with or
-                   without a message: 429 -> ErrorTooManyRequests, 401 -> ErrorUnauthorized,
-                   410 -> ErrorEndpointRetired. Any other status without a parseable API
-                   message -> ErrorClientConnection(status)
+transport failure: returned as-is from the http client. The export calls (ExportTimeSeries,
+                   ExportMasterdata, ExportCharges) wrap their export request's failure, transport
+                   or non-2xx, as "failed to export <time series|masterdata|charges>: %w" (a failed
+                   token fetch before it comes back unwrapped), so match with errors.Is / errors.As
+non-2xx status:    ALWAYS an error. Which one depends on the body:
+                   - "[code] message" with a known code -> that code's sentinel, whatever the
+                     status (a 429 carrying [10004] is ErrorMaximumNumberOfMeteringPointsExceeded,
+                     not ErrorTooManyRequests)
+                   - an RFC 7807 problem document (what both specs declare for 400/401/403/404,
+                     and what the undeployed charge-links endpoint answers with) ->
+                     *eloverblik.APIError (StatusCode, Code, Title, Detail, TraceID, Errors; use
+                     errors.As). It unwraps to the sentinel of a code found in Detail, else to
+                     ErrorUnauthorized / ErrorEndpointRetired / ErrorTooManyRequests on a
+                     401 / 410 / 429, and to nothing on any other status
+                   - no usable body (empty, not JSON, or the no-error code 10000) ->
+                     429 -> ErrorTooManyRequests, 401 -> ErrorUnauthorized,
+                     410 -> ErrorEndpointRetired; any other status -> ErrorClientConnection(status),
+                     a fresh error on every call that errors.Is cannot match
+                   - a message without a code -> the 401/410/429 sentinel wrapped with the
+                     message, or "failed to parse error in api error message <msg>" on any
+                     other status
 API error message: the code is read from the first characters, e.g. "[20010] Relation not
                    found", and mapped to an exported sentinel error (compare with errors.Is)
-unknown code:      fmt.Errorf("unhandled error: '%s'", msg)
+unknown code:      fmt.Errorf("unhandled error: '%s'", msg), matching no sentinel, even on a 429
 per-item failure:  a batch call still returns 200; the failing metering point carries
                    Success=false, ErrorCode and ErrorText in its own StatusResponse, and its
                    Err() returns an error that unwraps to the code's sentinel
@@ -1351,8 +1416,10 @@ retried:           429 and 503 only (twice by default). Never a 401, another 4xx
 
 ### Error codes worth special-casing
 ```yaml
-10002 ErrorToManyRequestItems:                    more than 10 metering points in one request
-10004 ErrorMaximumNumberOfMeteringPointsExceeded: batch size exceeded (also arrives as 429)
+10002 ErrorToManyRequestItems:                    "too many request items"; the API names this
+                                                  code but does not document when it is sent
+10004 ErrorMaximumNumberOfMeteringPointsExceeded: a per-request metering-point maximum; the API
+                                                  documents no such limit as enforced
 10007 ErrorNoCprConsent:                          GetMeteringPoints(true) without CPR consent
 20010 ErrorRelationNotFound:                      per metering point: no relation to it
 30002 ErrorToDateCanNotBeEqualToFromDate:         from == to; the range is half-open, see above
@@ -1368,7 +1435,8 @@ retried:           429 and 503 only (twice by default). Never a 401, another 4xx
                                                   data, e.g. from is before it was registered
 40014 ErrorNoAuthorizationsFound:                 per metering point: no authorization covers it
 50001 ErrorTokenNotValid / 20012 ErrorUnauthorized: expired or wrong token
-      ErrorTooManyRequests:                       a 429 the retries could not absorb
+      ErrorTooManyRequests:                       a 429 the retries could not absorb, when its
+                                                  body carries no API error code
       ErrorEndpointRetired:                       a 410: AddRelationByWebAccessCode, DeleteRelation
 ```
 
@@ -1541,11 +1609,19 @@ Metering Point IDs:
   format: Numeric string
   length: Exactly 18 digits
   example: "571313155411053087"
-  batch_size: 1-10 IDs per request (the API's recommended and enforced maximum)
+  batch_size: 1-10 IDs per request is the API's usage recommendation ("Bundle requests for 10
+              metering points at a time"), not a documented limit. The technical description
+              (v2.0 history) dropped the per-request metering-point limit as "not implemented".
+              The library does not check the count; the CLI accepts at most 10 IDs per command.
 
 Date Ranges:
-  semantics: half-open [from, to) at date granularity; from == to is rejected (error 30002)
-  timezone: both bounds are converted to Europe/Copenhagen before being formatted YYYY-MM-DD
+  semantics: half-open [from, to). For GetTimeSeries/ExportTimeSeries this is at date granularity,
+             and from == to (the same Copenhagen date) is rejected (error 30002)
+  timezone: GetTimeSeries and ExportTimeSeries convert both bounds to Europe/Copenhagen and send them
+            as YYYY-MM-DD, dropping the time of day. GetChargeLinksWithCharges sends them in the JSON
+            body as RFC 3339 timestamps in Copenhagen time (spec format date-time). The time of day is
+            kept and sub-seconds are dropped, so pass Europe/Copenhagen midnights there for whole
+            days. A UTC or local midnight is sent as e.g. 02:00+02:00
   maximum span: 730 days (error 30014, ErrorPeriodNotAllowed). eloverblik.MaximumDayRequestLeap
                 = 730 and eloverblik.MaximumRequestDuration = 730 * 24h are exported for this.
   latest to:    tomorrow (error 30003 beyond it); a to of tomorrow is moved back to today
@@ -1560,8 +1636,9 @@ API Rate Limits:
 Token Validity:
   refresh_token:     long lived (typically a year); read the exact expiry with ParseToken
   data_access_token: about 24 hours. Fetched once on first use and cached for the life of the
-                     client. NOT auto-refreshed - build a new client, or check
-                     DataAccessTokenClaims().IsExpired() yourself.
+                     client, which never fetches another, not even after a 401. To renew it, build a
+                     new client; claims, err := client.DataAccessTokenClaims() and claims.IsExpired()
+                     tell you when.
 ```
 
 ## CLI Output Formats
@@ -1579,11 +1656,12 @@ Export Commands:
 
 ```yaml
 Coverage:
-  v1 package:  86.7% of statements
-  cmd package: 50.4% of statements
+  v1 package:  93.1% of statements
+  cmd package: 56.0% of statements
 
 Test Files:
-  - *_test.go in v1/ and cmd/ use httpmock to intercept the resty transport
+  - v1/*_test.go intercept the resty transport with httpmock (options_test.go also runs httptest servers);
+    cmd/*_test.go swap in mock Client/Customer implementations through clientInstance
   - Both success and error paths are covered, including non-2xx statuses with empty bodies,
     the retry policy, the header printer, token claim decoding and the half-open periods
 
@@ -1736,8 +1814,9 @@ func main() {
     }
 
     // Flatten the nested API response into half-open [From, To) intervals with a measurement.
-    // Hour comes back as one Period per day holding 24 points; Flatten resolves each point to
-    // its own hour, stepping by calendar unit so DST days of 23 or 25 hours stay correct.
+    // Hour comes back as one Period per day holding 24 points (23 or 25 on a DST day); Flatten
+    // resolves each point to its own hour by counting real hours from the period start, so DST
+    // days stay correct.
     for _, series := range ts {
         for _, point := range series.Flatten() {
             fmt.Printf("%s -> %s  %.3f %s (quality: %s, resolution: %s)\n",
@@ -1770,8 +1849,9 @@ When implementing an Eloverblik client:
 - [ ] Stay within 730 days per request (error 30014, ErrorPeriodNotAllowed)
 - [ ] Batch metering point IDs 10 at a time
 - [ ] Leave the default retry policy on (429/503, Retry-After honoured), or implement backoff
-- [ ] Handle both the `error` return and every result's `Err()`; a metering point can fail
-      on its own inside a 200 (30015, 30016, 30018, 40014 ...)
+- [ ] Handle both the `error` return and every result's `Err()` (charge links: the `Error`
+      string of each `Results[]` entry); a metering point can fail on its own inside a 200
+      (30015, 30016, 30018, 40014 ...)
 - [ ] Do not key results by metering point ID alone: an ID repeats once per access period
 - [ ] Do NOT call `AddRelationByWebAccessCode` or `DeleteRelation`: Energinet retired both
       with DataHub 3.0 and they fail with `ErrorEndpointRetired` (410)
@@ -1786,7 +1866,8 @@ When implementing an Eloverblik client:
       cannot be priced
 - [ ] Set `Comma = ';'` on the CSV reader for exports, and close the `io.ReadCloser`
 - [ ] Turn on `WithResponseHeaderOutput` / `--print-response-headers` when a call misbehaves
-- [ ] Parse CLI stdout as JSON; header debug output goes to stderr
+- [ ] Parse CLI stdout as JSON, except `alive` (a text line) and the export commands (CSV unless
+      `--format json`); header debug output and warnings go to stderr
 
 ## Quick Reference: Most Common Operations
 
@@ -1821,10 +1902,14 @@ for _, tariff := range charges[0].Result.Tariffs {
 // Get the dated price series, needed to price historic consumption.
 // !! 404 ON BOTH APIS TODAY - Energinet has not deployed getchargelinkswithcharges
 //    (verified 2026-07-13). Implemented per spec, ready for the day it goes live.
-links, _ := client.GetChargeLinksWithCharges([]string{id}, from, to)
-for _, info := range links.ChargeInformations {
-    for _, point := range info.ChargeSeriesPoints {
-        // point.From, point.To, point.Price, info.TaxIndicator, info.Resolution
+links, err := client.GetChargeLinksWithCharges([]string{id}, from, to)
+if err != nil {
+    // expected today: a 404 *eloverblik.APIError ("eloverblik: 404 Not Found (traceId ...)")
+} else {
+    for _, info := range links.ChargeInformations {
+        for _, point := range info.ChargeSeriesPoints {
+            _ = point // point.From, point.To, point.Price, info.TaxIndicator, info.Resolution
+        }
     }
 }
 

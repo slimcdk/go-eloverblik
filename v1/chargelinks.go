@@ -52,8 +52,8 @@ type ChargeIdentifier struct {
 }
 
 // ChargeLinkPeriod is the interval a charge is linked to a metering point in. Factor is
-// the quantity the charge applies with, e.g. the number of subscriptions. To is nil for
-// an open ended link.
+// the quantity the charge applies with, e.g. the number of subscriptions. To is the zero
+// time (To.IsZero()) for an open ended link; the API sends null.
 type ChargeLinkPeriod struct {
 	Factor int          `json:"factor"`
 	From   FlexibleTime `json:"from"`
@@ -73,7 +73,7 @@ type ChargeInformation struct {
 }
 
 // ChargeInformationPeriod is the descriptive part of a charge in a given interval. To is
-// nil for an open ended period.
+// the zero time (To.IsZero()) for an open ended period.
 type ChargeInformationPeriod struct {
 	Name                 string       `json:"name"`
 	Description          string       `json:"description"`

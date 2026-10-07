@@ -27,9 +27,9 @@ func newChargeLinksCmd() *cobra.Command {
 			"What it will return: the dated price series of every charge a metering point is linked\n" +
 			"to, the charge link periods and their factors, the VAT classification and the tax\n" +
 			"indicator, so historic consumption can be priced.\n\n" +
-			"What to use today: 'charges'. It returns the subscriptions, fees and tariffs of a\n" +
-			"metering point, but only those that are currently valid or take effect in the future,\n" +
-			"so it cannot price consumption that already happened.",
+			"What to use today: 'charges'. It returns the subscriptions and tariffs of a metering\n" +
+			"point (on the Customer API also the fees), but only those that are currently valid or\n" +
+			"take effect in the future, so it cannot price consumption that already happened.",
 		Args: meteringPointArgs,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			period, _ := cmd.Flags().GetString("period")

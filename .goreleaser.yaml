@@ -24,8 +24,9 @@ builds:
     main: .
     binary: go-eloverblik
     env:
-      # Static binaries: no libc dependency, so the artifacts run on any distro
-      # and cross-compilation needs no C toolchain.
+      # Static Linux binaries: no libc dependency, so the Linux artifacts run on any
+      # distro (the macOS binaries still link the system's libSystem, as every macOS
+      # program does), and cross-compilation needs no C toolchain.
       - CGO_ENABLED=0
     goos:
       - linux
@@ -35,9 +36,9 @@ builds:
       - amd64
       - arm64
       # 32-bit ARM, for the Raspberry Pis that cannot run the arm64 binary: the Pi 1,
-      # Zero, Zero W and 2, and any Pi booted with a 32-bit kernel (`uname -m` prints
-      # armv6l or armv7l). Linux only: Go has no darwin/arm or windows/arm port, and
-      # GoReleaser skips those pairs by itself.
+      # Zero, Zero W and the Pi 2 before v1.2, and any Pi booted with a 32-bit kernel
+      # (`uname -m` prints armv6l or armv7l). Linux only: Go has no darwin/arm or
+      # windows/arm port, and GoReleaser skips those pairs by itself.
       - arm
     goarm:
       # ARMv6 only. A GOARM=6 binary runs on every 32-bit Pi, ARMv7 cores included,
@@ -55,9 +56,10 @@ builds:
       # No -X version injection here on purpose: the source has no version
       # variable to inject into (main.go only calls cmd.Execute(), and the cobra
       # root command sets no Version field). GoReleaser's default ldflags would
-      # try to set main.version/main.commit/main.date, which the linker silently
-      # ignores for symbols that do not exist. Rather than carry four dead flags,
-      # we strip only. If a version variable is added later, add for example
+      # try to set main.version/main.commit/main.date/main.builtBy, which the
+      # linker silently ignores for symbols that do not exist. Rather than carry
+      # four dead flags, we strip only. If a version variable is added later,
+      # add for example
       #   -X github.com/slimcdk/go-eloverblik/cmd.version={{ .Version }}
       # and wire it into the cobra root command.
       - -s -w

@@ -11,7 +11,7 @@ license.
 | `swagger-eloverblik-thirdpartyapi.json` | OpenAPI 3.0.4 document of the Third-Party API, `api-version` 1.0, byte for byte as served | <https://api.eloverblik.dk/thirdpartyapi/swagger/thirdpartyapi-v1.0/swagger.json> | 2026-10-07, unchanged since 2026-10-05 |
 | `customer-and-third-party-api-for-datahub-eloverblik-technical-description.pdf` | Technical description of both APIs, document 19/11830-1, last revised 27 March 2025 | <https://energinet.dk/media/2l1lmb2z/customer-and-third-party-api-for-datahub-eloverblik-technical-description.pdf> | 2026-10-07 |
 | `eloverblik-guides/*.md` | The guides on docs.eloverblik.dk, in Danish, converted from the rendered pages to Markdown; each file names its page | <https://docs.eloverblik.dk/docs/guides/introduction> | 2026-10-07 |
-| `MyEnergyDataMarketDocumentResponse.json`, `metering-point-details-response.json`, `metering-point-price-data.json`, `meter-point-readings-response.json` | Example response skeletons from the 2022 documentation, with `"string"` placeholders. Superseded by the OpenAPI documents; the meter readings endpoint no longer exists | Energinet's API documentation of 2022 | 2022-02 |
+| `MyEnergyDataMarketDocumentResponse.json`, `metering-point-details-response.json`, `metering-point-price-data.json`, `meter-point-readings-response.json` | Example response skeletons with `"string"` placeholders, copied from Appendix B ("Examples") of the technical description's November 2020 edition (version 6.0); Energinet deleted that appendix in March 2022. Superseded by the OpenAPI documents; the meter readings endpoint no longer exists | Appendix B of the technical description, edition of 10 November 2020 (in git history: `git show d26e701:'docs/Customer and Third party API for Datahub Eloverblik  Technical description gl.pdf' > technical-description-2020.pdf`) | 2022-02 |
 
 ## Which one to trust
 
@@ -42,6 +42,11 @@ The project deliberately runs no scheduled check against Energinet's servers.
 
 docs.eloverblik.dk renders its pages in the browser, so a plain download returns only an
 empty page shell. The guides were rendered with a headless browser that waits for the page
-to render (`google-chrome --headless=new --virtual-time-budget=15000 --dump-dom <url>`), and
-only the article body, the `div.theme-doc-markdown` element, was converted with pandoc
-(`-f html -t gfm`).
+to render (`google-chrome --headless=new --virtual-time-budget=15000 --dump-dom <url>`).
+Only the article body, the `div.theme-doc-markdown` element, was kept. Before conversion,
+heading anchor links, images and icons were removed, site-relative links were made absolute
+(`https://docs.eloverblik.dk/...`), admonitions became block quotes headed by their bold
+title, card grids became link lists, and each table cell was flattened to one line of plain
+text, keeping only bold. The result was converted with pandoc
+(`-f html -t gfm-raw_html --wrap=none`), runs of blank lines were collapsed, and a comment
+naming the source page was put at the top of each file.

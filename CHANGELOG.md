@@ -12,7 +12,7 @@ changed with it: two endpoints were retired, five time series error codes were d
 and a metering point failing on its own inside a successful response became routine. This
 release follows the API. Nothing was removed, and the only code that stops compiling is an
 unkeyed `MeteringPoints{...}` literal, which must now list `IsMovedOut`. Some results do
-change for code that compiles unchanged; those come first.
+change for code that compiles unchanged; those come right after the Go requirement.
 
 ### Requires Go 1.27
 
@@ -25,9 +25,13 @@ The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later;
 
 ### Behaves differently
 
-- A `410 Gone` returns `ErrorEndpointRetired`, whatever its body. It used to be
-  `could't connect to eloverblik: 410` or `failed to parse error in api error message …`.
-  `AddRelationByWebAccessCode` and `DeleteRelation` answer nothing else since DataHub 3.0.
+- A `410 Gone` returns `ErrorEndpointRetired`, or an `APIError` that unwraps to it when
+  the body is a problem document, unless the body carries an API error code the client
+  knows, which still maps to that code's sentinel (a bare `[code] message` with an unknown
+  code still reads `unhandled error: …`). It used to be `could't connect to eloverblik: 410`,
+  `failed to parse error in api error message …`, or an `APIError` (`eloverblik: 410 Gone …`)
+  that matched no sentinel. `AddRelationByWebAccessCode` and `DeleteRelation` answer nothing
+  else since DataHub 3.0.
 - An error message without a `[code]` on a 401, 410 or 429 wraps `ErrorUnauthorized`,
   `ErrorEndpointRetired` or `ErrorTooManyRequests` and keeps what the API said. It used to
   read `failed to parse error in api error message …` and matched no sentinel.
@@ -58,12 +62,13 @@ The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later;
 ### Added
 
 - Release binaries for `linux_arm` (ARMv6, for Raspberry Pis on a 32-bit system, from the
-  Pi Zero and Pi 1 up) and `windows_arm64` (Windows on Arm), next to the existing amd64 and
-  arm64 builds for Linux, macOS and Windows.
+  Pi Zero and Pi 1 up) and `windows_arm64` (Windows on Arm), next to the existing amd64
+  builds for Linux, macOS and Windows and arm64 builds for Linux and macOS.
 - `StatusResponse.Err()`, which reports whether a metering point in a batch response failed,
-  as an error that unwraps to the sentinel of its code. Every batch result embeds
-  `StatusResponse`, so it works on time series, metering point details, charges and
-  relation results alike.
+  as an error that unwraps to the sentinel of its code. Every batch result except those of
+  charge links embeds `StatusResponse`, so it works on time series, metering point details,
+  charges and relation results alike. A charge links result reports its failure in its
+  `Error` string instead.
 - `ErrorEndpointRetired` (HTTP 410), `ErrorPeriodNotAllowed` (30014), `ErrorNoDataAvailable`
   (30015), `ErrorRelationHasExpired` (30016), `ErrorToDateCutOff` (30017) and
   `ErrorMeteringPointDataNotAvailableForTheRequestedPeriod` (30018).
@@ -72,7 +77,8 @@ The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later;
 ### Fixed
 
 - On 32-bit platforms, such as a Raspberry Pi running 32-bit Raspberry Pi OS (linux/arm)
-  or linux/386, every command that takes metering point IDs rejected every valid ID with
+  or linux/386, every command that checks metering point IDs (all except
+  `add-relation-by-code` and `delete-relation`) rejected every valid ID with
   `looks like an invalid id`. The check parsed the 18-digit ID into an int, which is 32
   bits there. It now checks for 18 ASCII digits, which also stops a leading `+` or `-`
   from passing for an ID.
@@ -109,7 +115,8 @@ The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later;
   v1.8.0, pinned. The govulncheck job had failed every week since 14 September: its
   `@latest` had started to require a newer Go than the job ran.
 - The code takes what `go fix` proposes for Go 1.27, and the linters now include errorlint,
-  testifylint, modernize and gocritic. errorlint found the export bug listed above.
+  testifylint, modernize and gocritic. errorlint found the export errors that formatted a
+  transport error instead of wrapping it, listed above.
 - The devcontainer runs Go 1.27.
 - CI runs the tests on Linux, Windows and macOS, as 32-bit code (linux/386 natively,
   linux/arm on an emulated Raspberry Pi Zero CPU), and with `-trimpath` and GOROOT unset,
@@ -140,18 +147,20 @@ too, because they are the ones most likely to surprise.
 
 ### Breaking: code that compiles but behaves differently
 
-- `GetDatesFromPeriod` now returns a half-open range: `to` is the start of the
-  period that follows. The API reads `dateTo` as exclusive, so the old inclusive
-  bound made `yesterday` fail outright (`dateFrom == dateTo` is rejected with
-  error 30002) and made `last_week`, `last_month` and `last_year` silently drop
-  their final day.
+- `GetDatesFromPeriod` now returns a half-open range for `yesterday` and the
+  `last_*` periods: `to` is the start of the period that follows. The `this_*`
+  periods still end at the current time. The API reads `dateTo` as exclusive, so
+  the old inclusive bound made `yesterday` fail outright (`dateFrom == dateTo` is
+  rejected with error 30002) and made `last_week`, `last_month` and `last_year`
+  silently drop their final day.
 - Requests that fail with 401, 429 or 503 now return an error. They previously
   returned an empty result and a nil error, so an expired token or a rate limit
   looked like "no data".
 - `TimeSeries.Flatten()` derives each point's interval from the period's
-  resolution and steps by calendar unit. Day, Month and Year points, and any day
-  containing a daylight saving transition, previously got wrong intervals — for
-  some resolutions a zero-width one.
+  resolution: quarter hours and hours step by a fixed duration; days, months and
+  years by calendar unit. Day, Month and Year points, and any day containing a
+  daylight saving transition, previously got wrong intervals — for some
+  resolutions a zero-width one.
 - `GetMeteringPoints(includeAll)` now actually sends `includeAll`. It was sent as
   a path parameter to a path with no placeholder, so resty dropped it and the
   argument had no effect.
@@ -193,8 +202,9 @@ too, because they are the ones most likely to surprise.
 
 - Releases are built by GoReleaser on a `v*` tag: five platforms, archives and
   checksums.
-- `govulncheck` and CodeQL run on every push and weekly; Dependabot now covers Go
-  modules and GitHub Actions, not just the devcontainer.
+- `govulncheck` and CodeQL run on every push and pull request to master, and
+  weekly; Dependabot now covers Go modules and GitHub Actions, not just the
+  devcontainer.
 - The lint job could never have passed: `version: latest` installs golangci-lint
   v2, which rejects a v1 configuration. The configuration is migrated and the
   action and linter are pinned.

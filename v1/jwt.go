@@ -118,7 +118,7 @@ func ParseToken(token string) (TokenClaims, error) {
 	return claims, nil
 }
 
-// rawString returns the first of the given claims that holds a string.
+// rawString returns the first of the given claims that holds a non-empty string.
 func rawString(raw map[string]json.RawMessage, keys ...string) string {
 	for _, key := range keys {
 		value, ok := raw[key]
@@ -138,7 +138,8 @@ func (tc TokenClaims) IsExpired() bool {
 	return !tc.ExpiresAt.IsZero() && !time.Now().Before(tc.ExpiresAt)
 }
 
-// ExpiresIn reports how long the token remains valid. It is zero once expired.
+// ExpiresIn reports how long the token remains valid. It is zero once expired, and also when
+// the token carries no expiry, in which case IsExpired reports false.
 func (tc TokenClaims) ExpiresIn() time.Duration {
 	if tc.ExpiresAt.IsZero() || tc.IsExpired() {
 		return 0
@@ -153,7 +154,7 @@ func (tc TokenClaims) IsRefreshToken() bool {
 }
 
 // IsDataAccessToken reports whether the token is a short lived data access token, i.e.
-// the one the client fetches from /token and sends on every other request.
+// the one the client fetches from /token and sends on every other authenticated request.
 func (tc TokenClaims) IsDataAccessToken() bool {
 	return strings.Contains(strings.ToLower(tc.TokenType), "dataaccess")
 }

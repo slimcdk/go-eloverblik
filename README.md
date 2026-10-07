@@ -9,7 +9,7 @@ A comprehensive Go client library and CLI tool for the Danish energy data platfo
 
 ## Features
 
-- **Complete API Coverage**: Every endpoint both OpenAPI documents declare, for the Customer and the Third-Party API alike (including `getchargelinkswithcharges`, which Energinet has not deployed yet — see [the note](#note-on-charge-links))
+- **Complete API Coverage**: Every endpoint both OpenAPI documents declare, for the Customer and the Third-Party API alike (including `getchargelinkswithcharges`, which Energinet has not switched on yet — see [the note](#note-on-charge-links))
 - **Data Export**: Export timeseries, masterdata, and charges in CSV or JSON format
 - **Rate Limit Aware**: Retries the documented 429 and 503 responses, honouring `Retry-After`
 - **Token Introspection**: Read a token's API, roles and expiry without spending a call
@@ -129,9 +129,11 @@ go build .
 ### Getting Your API Token
 
 1. Visit [Eloverblik.dk](https://eloverblik.dk/)
-2. Log in with MitID
-3. Go to "Data" → "Datadeling" → "Tredjepartsadgang"
-4. Create a new access token (refresh token)
+2. Log in with MitID (MitID Erhverv for a Third-Party API token)
+3. Choose "API-adgang" in the menu
+4. Click "Opret token" for the Customer API (allow use of your CPR number the first time,
+   and name the token), or "Opret refresh token" for the Third-Party API (valid for 1 year)
+5. Copy the token: this is your refresh token
 
 ### CLI Usage
 
@@ -224,16 +226,16 @@ func main() {
 
 | Endpoint | CLI Command | Library Method | Description |
 |----------|-------------|----------------|-------------|
-| `/api/token` | - | `GetDataAccessToken()` | Get access token |
+| `/api/token` | `token --data-access` | `GetDataAccessToken()` | Get access token (the CLI decodes its claims, it does not print the token) |
 | `/meteringpoints/meteringpoints` | `customer installations` | `GetMeteringPoints()` | List metering points |
 | `/meteringpoints/meteringpoint/getdetails` | `customer details` | `GetMeteringPointDetails()` | Get detailed info |
 | `/meterdata/gettimeseries/{from}/{to}/{aggregation}` | `customer timeseries` | `GetTimeSeries()` | Get consumption data |
 | `/meteringpoints/meteringpoint/getcharges` | `customer charges` | `GetCustomerCharges()` | Get charges/tariffs |
-| `/meteringpoints/meteringpoint/getchargelinkswithcharges` | `customer charge-links` | `GetChargeLinksWithCharges()` | Get charge links with dated prices — **not deployed by Energinet, answers 404** ([note](#note-on-charge-links)) |
+| `/meteringpoints/meteringpoint/getchargelinkswithcharges` | `customer charge-links` | `GetChargeLinksWithCharges()` | Get charge links with dated prices — **not enabled by Energinet, answers 404** ([note](#note-on-charge-links)) |
 | `/meteringpoints/meteringpoint/relation/add` | `customer add-relation` | `AddRelationByID()` | Link metering point |
 | `/meteringpoints/meteringpoint/relation/add/{id}/{code}` | `customer add-relation-by-code` | `AddRelationByWebAccessCode()` | Link via code — **retired by Energinet with DataHub 3.0, answers 410** ([note](#datahub-3)) |
 | `/meteringpoints/meteringpoint/relation/{id}` | `customer delete-relation` | `DeleteRelation()` | Unlink metering point — **retired by Energinet with DataHub 3.0, answers 410** ([note](#datahub-3)) |
-| `/meterdata/export` | `customer export-timeseries` | `ExportTimeSeries()` | Export timeseries |
+| `/meterdata/timeseries/export/{from}/{to}/{aggregation}` | `customer export-timeseries` | `ExportTimeSeries()` | Export timeseries |
 | `/meteringpoints/masterdata/export` | `customer export-masterdata` | `ExportMasterdata()` | Export masterdata |
 | `/meteringpoints/charges/export` | `customer export-charges` | `ExportCharges()` | Export charges |
 | `/api/isalive` | `customer alive` | `IsAlive()` | Health check |
@@ -242,22 +244,23 @@ func main() {
 
 | Endpoint | CLI Command | Library Method | Description |
 |----------|-------------|----------------|-------------|
-| `/api/token` | - | `GetDataAccessToken()` | Get access token |
-| `/api/authorization/authorization` | `thirdparty authorizations` | `GetAuthorizations()` | List authorizations |
-| `/api/meteringpoints/{scope}/{identifier}` | `thirdparty metering-points` | `GetMeteringPointsForScope()` | Get metering points |
-| `/api/meteringpoints/meteringpointid/{scope}/{identifier}` | `thirdparty metering-point-ids` | `GetMeteringPointIDsForScope()` | Get IDs only |
-| `/meteringpoints/meteringpoint/getdetails` | `thirdparty details` | `GetMeteringPointDetails()` | Get detailed info |
+| `/api/token` | `token --data-access` | `GetDataAccessToken()` | Get access token (the CLI decodes its claims, it does not print the token) |
+| `/authorization/authorizations` | `thirdparty authorizations` | `GetAuthorizations()` | List authorizations |
+| `/authorization/authorization/meteringpoints/{scope}/{identifier}` | `thirdparty metering-points` | `GetMeteringPointsForScope()` | Get metering points |
+| `/authorization/authorization/meteringpointids/{scope}/{identifier}` | `thirdparty metering-point-ids` | `GetMeteringPointIDsForScope()` | Get IDs only |
+| `/meteringpoint/getdetails` | `thirdparty details` | `GetMeteringPointDetails()` | Get detailed info |
 | `/meterdata/gettimeseries/{from}/{to}/{aggregation}` | `thirdparty timeseries` | `GetTimeSeries()` | Get consumption data |
-| `/meteringpoints/meteringpoint/getcharges` | `thirdparty charges` | `GetThirdPartyCharges()` | Get charges |
-| `/meteringpoint/getchargelinkswithcharges` | `thirdparty charge-links` | `GetChargeLinksWithCharges()` | Get charge links with dated prices — **not deployed by Energinet, answers 404** ([note](#note-on-charge-links)) |
+| `/meteringpoint/getcharges` | `thirdparty charges` | `GetThirdPartyCharges()` | Get charges |
+| `/meteringpoint/getchargelinkswithcharges` | `thirdparty charge-links` | `GetChargeLinksWithCharges()` | Get charge links with dated prices — **not enabled by Energinet, answers 404** ([note](#note-on-charge-links)) |
 | `/api/isalive` | `thirdparty alive` | `IsAlive()` | Health check |
 
 <a id="note-on-charge-links"></a>
 
-> **Note on `charge-links` / `getchargelinkswithcharges`: Energinet has not deployed this
-> endpoint.** Both OpenAPI documents declare it, but the live API answers `404 Not Found`
-> for it on **both the Customer API and the Third-Party API**. Checked on **2026-07-13**
-> with a valid Customer token and a valid Third-Party token, on every documented path:
+> **Note on `charge-links` / `getchargelinkswithcharges`: Energinet has not switched this
+> endpoint on.** Both OpenAPI documents declare it and document a `404` for it: "When the
+> Charges integration feature is disabled". That is what the live API answers on **both the
+> Customer API and the Third-Party API**. Checked on **2026-07-13** with a valid Customer
+> token and a valid Third-Party token, on every documented path:
 >
 > ```
 > POST /customerapi/api/meteringpoints/meteringpoint/getchargelinkswithcharges  -> 404
@@ -265,15 +268,17 @@ func main() {
 > ```
 >
 > The same tokens got `200 OK` from `getcharges` and `getdetails` in the same session, so
-> this is not an authentication or authorization problem — the endpoint simply is not
-> served. This client implements it exactly as both specifications describe it and is ready
-> for the day Energinet deploys it; until then every call returns a 404 error.
+> this is not an authentication or authorization problem — the feature is switched off.
+> This client implements the request and response as both specifications describe them,
+> except that one call applies the same interval to every metering point, and is ready for
+> the day Energinet enables it; until then every call returns a 404 error.
 >
 > **What to use instead today:** `customer charges` / `thirdparty charges`
-> (`GetCustomerCharges` / `GetThirdPartyCharges`). They return the subscriptions, fees and
-> tariffs of a metering point — but **only those that are currently valid or take effect in
-> the future**, so they cannot price consumption that already happened. That gap is exactly
-> what `charge-links` is meant to close, and there is no other endpoint that closes it.
+> (`GetCustomerCharges` / `GetThirdPartyCharges`). They return the subscriptions and
+> tariffs of a metering point (the Customer API adds its fees) — but **only those that are
+> currently valid or take effect in the future**, so they cannot price consumption that
+> already happened. That gap is exactly what `charge-links` is meant to close, and there is
+> no other endpoint that closes it.
 
 <a id="datahub-3"></a>
 
@@ -317,6 +322,12 @@ Usage:
 
 Available Commands:
 
+  completion
+    bash                     Generate the autocompletion script for bash
+    fish                     Generate the autocompletion script for fish
+    powershell               Generate the autocompletion script for powershell
+    zsh                      Generate the autocompletion script for zsh
+
   customer
     add-relation             Link one or more metering points to the authenticated user by ID
     alive                    Check if the API is operational
@@ -338,7 +349,6 @@ Available Commands:
     metering-point-ids       Get metering point IDs accessible under a specific authorization scope
     metering-points          Get metering points accessible under a specific authorization scope
     timeseries               Get time series for one or more metering points
-
   token                      Show what the Eloverblik token says about itself
 
 Flags:
@@ -350,13 +360,13 @@ Use "go-eloverblik [command] --help" for more information about a command.
 ```
 
 `charge-links` is registered on both `customer` and `thirdparty`, and both currently fail:
-Energinet has not deployed `getchargelinkswithcharges` on either API. See
+Energinet has not enabled `getchargelinkswithcharges` on either API. See
 [the note above](#note-on-charge-links).
 
 ### Global Flags
 
 ```
---token string               Eloverblik API refresh token (required)
+--token string               Eloverblik refresh token (required)
 --print-response-headers     Print HTTP response headers from the Eloverblik API to stderr
 ```
 
@@ -395,6 +405,11 @@ go-eloverblik token --token=$TOKEN
 }
 ```
 
+Shown indented and shortened here. The command prints the claims as a single line of JSON
+with no trailing newline, and a real token usually also carries `tokenId`, `subject`,
+`userId`, `thirdPartyId`, `loginType`, `webApp`, `issuer` and `audience`. Pipe it through
+`jq .` to read it.
+
 Add `--data-access` to exchange the refresh token for a short lived data access token and
 decode that one instead. That does make a request, and the client to use is taken from the
 token itself:
@@ -407,7 +422,8 @@ go-eloverblik token --data-access --token=$TOKEN
 
 ```bash
 # Installation Management
-go-eloverblik customer installations                    # List all metering points
+go-eloverblik customer installations                    # List metering points linked to you
+go-eloverblik customer installations --include-all      # Also unlinked ones registered to your CPR/CVR
 go-eloverblik customer details <metering-id>...         # Get detailed information
 
 # Relations
@@ -431,18 +447,21 @@ go-eloverblik customer timeseries <metering-id>... --from=now-30d --to=now
 go-eloverblik customer timeseries <metering-id>... \
   --from=YYYY-MM-DD \
   --to=YYYY-MM-DD \
-  --aggregation=Hour \                         # Actual, Quarter, Hour, Day, Month, Year
-  --flatten                                    # Simplify output
+  --aggregation=Hour \
+  --flatten
+# --aggregation: Actual, Quarter, Hour, Day, Month, Year
+# --flatten: simplify output
 
 go-eloverblik customer charges <metering-id>...         # Get charges and tariffs
 # NOTE: 'charges' only returns charges that are currently valid or take effect in the
 # future. It cannot price consumption that already happened.
 
 # Charge links with the dated price series of every linked charge.
-# NOT AVAILABLE: Energinet has not deployed getchargelinkswithcharges. Checked 2026-07-13
+# NOT AVAILABLE: Energinet has not enabled getchargelinkswithcharges. Checked 2026-07-13
 # with a valid customer token, the Customer API answered 404 while 'charges' answered 200.
-# The command implements the endpoint as specified and is ready for the day it is deployed;
-# today it returns a 404 error. Until then, 'charges' above is the closest data available.
+# The command implements the endpoint as specified, with one interval for all metering
+# points, and is ready for the day it is enabled; today it returns a 404 error. Until then,
+# 'charges' above is the closest data available.
 go-eloverblik customer charge-links <metering-id>... --period=last_month
 go-eloverblik customer charge-links <metering-id>... --from=YYYY-MM-DD --to=YYYY-MM-DD
 
@@ -468,11 +487,11 @@ go-eloverblik customer alive                            # Check API status
 
 ```bash
 # Authorization Management
-go-eloverblik thirdparty authorizations                 # List all authorizations
+go-eloverblik thirdparty authorizations                 # List valid and active authorizations
 
 # Metering Points
 go-eloverblik thirdparty metering-points <scope> <identifier>
-  # Scope: authorizationid, customercvr, customerkey
+  # Scope: authorizationId, customerCVR, customerKey
 
 go-eloverblik thirdparty metering-point-ids <scope> <identifier>
   # Get IDs only (faster)
@@ -490,10 +509,11 @@ go-eloverblik thirdparty charges <metering-id>...
 # future. It cannot price consumption that already happened.
 
 # Charge links with the dated price series of every linked charge.
-# NOT AVAILABLE: Energinet has not deployed getchargelinkswithcharges. Checked 2026-07-13
+# NOT AVAILABLE: Energinet has not enabled getchargelinkswithcharges. Checked 2026-07-13
 # with a valid third-party token, the Third-Party API answered 404 while 'charges' answered
-# 200 — exactly as the Customer API did. The command implements the endpoint as specified
-# and is ready for the day it is deployed; today it returns a 404 error.
+# 200 — exactly as the Customer API did. The command implements the endpoint as specified,
+# with one interval for all metering points, and is ready for the day it is enabled; today
+# it returns a 404 error.
 go-eloverblik thirdparty charge-links <metering-id>... --period=last_month
 go-eloverblik thirdparty charge-links <metering-id>... --from=YYYY-MM-DD --to=YYYY-MM-DD
 
@@ -545,11 +565,11 @@ claims.Roles        // []string{"ReadPrivate", "ReadBusiness"}
 claims.Company      // "Styr paa ApS"
 claims.ExpiresAt    // time.Time, in Copenhagen time
 claims.IsExpired()  // no request needed to find out
-claims.APIType()    // eloverblik.ThirdPartyApi, taken from the token itself
+claims.APIType()    // (eloverblik.ThirdPartyApi, nil), read from the token type; an error when it names neither API
 
-customer := eloverblik.NewCustomer(refreshToken)
-claims, err = customer.RefreshTokenClaims()     // no request
-claims, err = customer.DataAccessTokenClaims()  // fetches a data access token first
+client := eloverblik.NewThirdParty(refreshToken) // a third-party token, as APIType() said
+claims, err = client.RefreshTokenClaims()     // no request
+claims, err = client.DataAccessTokenClaims()  // fetches a data access token first
 ```
 
 The claims are decoded, not verified: only Energinet holds the signing key, so a token can
@@ -565,19 +585,21 @@ happened. `GetChargeLinksWithCharges` is the endpoint that returns the missing h
 dated price series of every charge a metering point is linked to, along with the charge
 link periods and their factors, the VAT classification and the tax indicator.
 
-> **Energinet has not deployed it — on either API.** Both OpenAPI documents declare
-> `getchargelinkswithcharges`, but the live API answers `404 Not Found` for it on the
-> **Customer API and the Third-Party API alike**. Checked on **2026-07-13** with a valid
-> Customer token and a valid Third-Party token, on every documented path, in a session
-> where `getcharges` returned `200 OK` for the same tokens — so it is not an auth problem,
-> the route is simply not served. This client implements the endpoint exactly as both
-> specifications describe it and is ready for the day Energinet deploys it. Until then,
+> **Energinet has not switched it on — on either API.** Both OpenAPI documents declare
+> `getchargelinkswithcharges` and document a `404` for it: "When the Charges integration
+> feature is disabled". That is what the live API answers on the **Customer API and the
+> Third-Party API alike**. Checked on **2026-07-13** with a valid Customer token and a
+> valid Third-Party token, on every documented path, in a session where `getcharges`
+> returned `200 OK` for the same tokens — so it is not an auth problem: the feature is
+> switched off. This client implements the endpoint's request and response as both
+> specifications describe them, except that one call applies the same interval to every
+> metering point, and is ready for the day Energinet enables it. Until then,
 > `GetChargeLinksWithCharges` returns a 404 error on both clients, and **there is no way to
 > price historic consumption through this API**: `GetCustomerCharges` /
 > `GetThirdPartyCharges` (the `charges` commands) are the closest available data, and they
 > only carry present and future prices.
 
-The code below is what the endpoint will return once it is deployed — it is included so
+The code below is what the endpoint will return once it is enabled — it is included so
 you can see the shape of the data, not because it works today.
 
 ```go
@@ -634,8 +656,8 @@ before you parse a response yourself:
 
 | Aggregation | `resolution` on the wire | Shape of the response |
 |---|---|---|
-| `Quarter` | `PT15M` | one period per day, 96 points |
-| `Hour` | `PT1H` | one period per day, 24 points |
+| `Quarter` | `PT15M` | one period per day, 96 points (92 or 100 on daylight saving days) |
+| `Hour` | `PT1H` | one period per day, 24 points (23 or 25 on daylight saving days) |
 | `Day` | `PT1D` | one period per day, a single point |
 | `Month` | `P1M` | one period per month, a single point |
 | `Year` | `PT1Y` | one period per year, a single point, and it may be **partial** |
@@ -661,11 +683,20 @@ The API reads a requested range as `[dateFrom, dateTo)`, at the granularity of a
 outright with error 30002.
 
 ```go
+cph, err := time.LoadLocation("Europe/Copenhagen") // never fails: the package embeds time/tzdata
+if err != nil {
+    // handle error
+}
+
 // Asking for 1 July through 4 July returns 1, 2 and 3 July — three days, not four.
-from := time.Date(2026, 7, 1, 0, 0, 0, 0, time.Local)
-to := time.Date(2026, 7, 4, 0, 0, 0, 0, time.Local)
+from := time.Date(2026, 7, 1, 0, 0, 0, 0, cph)
+to := time.Date(2026, 7, 4, 0, 0, 0, 0, cph)
 timeseries, err := client.GetTimeSeries(ids, from, to, eloverblik.Day)
 ```
+
+`GetTimeSeries` (and `ExportTimeSeries`) convert `from` and `to` to Copenhagen time and
+send only the date, so build them in `Europe/Copenhagen` or UTC. On a host east of
+Copenhagen, local midnight is still the previous day in Copenhagen.
 
 So to get a single day, ask for that day and the next one. This is the off-by-one that
 makes `--period yesterday` sound like it should send the same date twice; it must not.
@@ -707,9 +738,13 @@ is retried: a `401` or a `404` is a real answer and is returned to you immediate
 client := eloverblik.NewCustomer(refreshToken,
     eloverblik.WithRetry(eloverblik.DefaultRetryCount, eloverblik.DefaultRetryMaxWait))
 
-// Fail fast instead — useful in a request handler that cannot afford to block
+// No retries: a 429 or 503 is returned to you at once
 client = eloverblik.NewCustomer(refreshToken, eloverblik.WithoutRetry())
 ```
+
+`WithoutRetry` removes only the retries and the waits between them. The client sets no
+request timeout and no method takes a context, so a call still blocks until the API answers
+or the connection fails.
 
 The API's own advice is to ask for **at most 10 metering points per request**, which is
 also what the CLI enforces.
@@ -771,7 +806,7 @@ ts, err := client.GetTimeSeries(ids, from, to, eloverblik.Hour)
 
 ```bash
 go-eloverblik --token=$ELO_TOKEN customer export-timeseries 571313155411053087 \
-  --from=2024-01-01 --to=2024-12-31 > consumption_2024.csv
+  --from=2024-01-01 --to=2025-01-01 > consumption_2024.csv
 ```
 
 ### Export Data to JSON File
@@ -811,6 +846,9 @@ timeseries, err := client.GetTimeSeries(
     from, to,
     eloverblik.Hour,
 )
+if err != nil {
+    log.Fatal(err)
+}
 
 for _, ts := range timeseries {
     // A metering point that failed on its own has nothing to flatten
@@ -930,7 +968,7 @@ for _, auth := range authorizations {
     }
 
     // The API asks for at most 10 metering points per request
-    for _, batch := range chunk(ids, 10) {
+    for batch := range slices.Chunk(ids, 10) {
         from, to, err := eloverblik.GetDatesFromPeriod(eloverblik.Yesterday)
         if err != nil {
             log.Fatal(err)
@@ -990,13 +1028,20 @@ client := eloverblik.NewCustomer(refreshToken,
 
 Failures arrive at two levels, and both matter.
 
-**The call itself** fails with a sentinel error you can match on:
+**The call itself** fails with an error. When the API names an error code the client knows,
+or answers 401, 410 or 429, that error matches a sentinel with `errors.Is`. Anything else
+matches none and lands in the `err != nil` branch. That includes a 503 that still fails
+after the retries, and a problem document such as the 404 that `getchargelinkswithcharges`
+answers today, which arrives as an `*APIError` carrying the status, title and trace ID:
 
 ```go
 timeseries, err := client.GetTimeSeries(ids, from, to, eloverblik.Day)
 switch {
 case errors.Is(err, eloverblik.ErrorUnauthorized):
-    // the refresh token is wrong or has expired — a new one must be generated
+    // a 401 without an API code of its own, or API code 20012: the refresh token is wrong
+    // or has expired (generate a new one), this client's cached data access token has
+    // outlived its 24 hours (build a new client), or there is no active relation or
+    // authorization for the metering point
 case errors.Is(err, eloverblik.ErrorTooManyRequests):
     // still rate limited after the retries; back off for a minute
 case errors.Is(err, eloverblik.ErrorNoCprConsent):
@@ -1093,16 +1138,16 @@ GOOS=windows GOARCH=amd64 go build -o go-eloverblik-windows-amd64.exe .
 │   ├── authorizations.go   # Authorization commands
 │   ├── chargelinks.go      # Charge links commands
 │   ├── charges.go          # Charges commands
-│   ├── customer.go         # Customer-specific commands
+│   ├── customer.go         # Customer command group; builds the Customer client
 │   ├── helpers.go          # Flag handling shared by the commands
-│   ├── installations.go    # Metering point commands
-│   ├── measurements.go     # Timeseries and export commands
+│   ├── installations.go    # Customer installations command
+│   ├── measurements.go     # details, timeseries, export-timeseries and export-masterdata commands, plus shared argument, date and output helpers
 │   ├── relations.go        # Relation commands
 │   ├── root.go             # Root command and initialization
 │   ├── thirdparty.go       # Third-party specific commands
 │   └── token.go            # Token inspection command
 ├── v1/                     # Library implementation
-│   ├── auth.go             # Authentication
+│   ├── auth.go             # Token exchange, IsAlive and the third-party authorization endpoints
 │   ├── chargelinks.go      # Charge links endpoints
 │   ├── charges.go          # Charges endpoints
 │   ├── constvars.go        # Aggregations, resolutions and other constants
@@ -1112,7 +1157,7 @@ GOOS=windows GOARCH=amd64 go build -o go-eloverblik-windows-amd64.exe .
 │   ├── interfaces.go       # API interfaces
 │   ├── jwt.go              # Token claim decoding
 │   ├── meters.go           # Metering point endpoints
-│   ├── models.go           # Data models
+│   ├── models.go           # Shared types (FlexibleTime, StatusResponse, StringResponse)
 │   ├── options.go          # Client options
 │   ├── periods.go          # Relative period helpers
 │   ├── relations.go        # Relations endpoints

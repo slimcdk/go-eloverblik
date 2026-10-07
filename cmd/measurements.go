@@ -16,7 +16,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// output is the destination for export commands (configurable for testing)
+// output is where every command writes its result (configurable for testing). alive is the
+// exception: it prints to os.Stdout directly.
 var output io.Writer = os.Stdout
 
 // warningOutput receives what a command reports about a call that still succeeded, such
@@ -227,7 +228,7 @@ func newTimeseriesCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().String("from", "", "start date (YYYY-MM-DD, now, now-30d/w/m/y)")
-	cmd.Flags().String("to", time.Now().Format(time.DateOnly), "end date (YYYY-MM-DD, now, now-30d/w/m/y, defaults to today)")
+	cmd.Flags().String("to", time.Now().Format(time.DateOnly), "end date, exclusive (YYYY-MM-DD, now, now-30d/w/m/y, defaults to today)")
 	cmd.Flags().String("period", "", "predefined period (yesterday, last_week, etc.)")
 	cmd.Flags().String("aggregation", string(eloverblik.Hour), "aggregation level (Actual, Quarter, Hour, Day, Month, Year)")
 	cmd.Flags().Bool("flatten", false, "simplify the data series")
@@ -237,7 +238,7 @@ func newTimeseriesCmd() *cobra.Command {
 func newExportTimeseriesCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "export-timeseries <metering-id> [metering-id ...]",
-		Short: "Export time series as a raw stream (customer API only)",
+		Short: "Export time series as CSV or JSON (customer API only)",
 		Args:  meteringPointArgs,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			period, _ := cmd.Flags().GetString("period")
@@ -287,7 +288,7 @@ func newExportTimeseriesCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().String("from", "", "start date (YYYY-MM-DD, now, now-30d/w/m/y)")
-	cmd.Flags().String("to", time.Now().Format(time.DateOnly), "end date (YYYY-MM-DD, now, now-30d/w/m/y, defaults to today)")
+	cmd.Flags().String("to", time.Now().Format(time.DateOnly), "end date, exclusive (YYYY-MM-DD, now, now-30d/w/m/y, defaults to today)")
 	cmd.Flags().String("period", "", "predefined period (yesterday, last_week, etc.)")
 	cmd.Flags().String("aggregation", string(eloverblik.Hour), "aggregation level (Actual, Quarter, Hour, Day, Month, Year)")
 	cmd.Flags().String("format", "csv", "output format (csv, json)")

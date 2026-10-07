@@ -5,7 +5,10 @@ import (
 	"time"
 )
 
-// FlexibleTime handles JSON date fields that may be empty strings, null, or valid timestamps
+// FlexibleTime handles JSON date fields that may be empty strings, null, or RFC 3339
+// timestamps with a UTC offset (Z or ±hh:mm). Any other format, e.g. a date without a
+// time or a timestamp without an offset, fails the decode of the whole response. The
+// zero FlexibleTime marshals as null.
 type FlexibleTime struct {
 	time.Time
 }
