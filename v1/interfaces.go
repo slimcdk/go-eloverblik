@@ -26,6 +26,9 @@ type Client interface {
 	// revoked, or ErrorTooManyRequests when the /token rate limit is spent. A renewal that
 	// fails before the cached token has expired is not an error: the call returns the
 	// cached token, which still works for a few minutes, and the next call tries again.
+	// The /token request goes through the client's retry policy like any other, so with
+	// the default policy a 429 or 503 can hold a renewal, and the calls that wait for it,
+	// for about two minutes before it fails.
 	GetDataAccessToken() (string, error)
 	RefreshTokenClaims() (TokenClaims, error)
 	// DataAccessTokenClaims decodes the claims of the data access token GetDataAccessToken

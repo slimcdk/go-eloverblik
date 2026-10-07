@@ -65,8 +65,9 @@ later; those of 1.3.0 ran on macOS 12 Monterey.
   ID the API answers with, and a metering point that comes back once per access period keeps
   the points of every period instead of only the last.
 - `customer add-relation-by-code` and `customer delete-relation` are left out of the command
-  listings, and the help now names them only to say they are retired. They fail with
-  `ErrorEndpointRetired` without calling the API.
+  listings, and the help now names them only to say they are retired. Given `--token`, as
+  every `customer` command needs, they fail with `ErrorEndpointRetired` without calling
+  the API.
 - A failed `ExportTimeSeries`, `ExportMasterdata` or `ExportCharges` reports the API's error
   like every other call, e.g. `failed to export masterdata: unauthorized access`, which
   unwraps to `ErrorUnauthorized`. It used to read `failed to export masterdata, status: 401
@@ -102,8 +103,10 @@ later; those of 1.3.0 ran on macOS 12 Monterey.
   cached token expired, or expiring within five minutes by its `exp` claim, fetches a new
   one first. When that renewal fails, the call gets the cached token as long as it has not
   expired, and the next call tries again; once it has expired, the call gets the error the
-  `/token` request failed with. A token whose expiry cannot be read, because it is not a
-  JWT or has no positive `exp`, is kept as before.
+  `/token` request failed with. The `/token` request is retried on a 429 or 503 like any
+  other, so with the default policy a renewal can take about two minutes to fail, and the
+  calls that wait for it wait as long. A token whose expiry cannot be read, because it is
+  not a JWT or has no positive `exp`, is kept as before.
 - `ParseToken` reads an `exp` that is null, zero or negative as no expiry, as it reads a
   token without one: `ExpiresAt` is zero, `IsExpired` reports false and `ExpiresIn` zero.
   It used to set `ExpiresAt` to 1 January 1970 or earlier, so the token counted as expired.

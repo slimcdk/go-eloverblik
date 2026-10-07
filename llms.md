@@ -48,9 +48,10 @@ need a token while one is being fetched wait for that /token request and share i
 the token or the error, instead of each sending their own (the API allows 2 /token calls a
 minute). A call made after a failed request sends a new one. When a renewal fails while the
 cached token has not expired yet, the call gets the cached token, not the error, and the
-next call tries again. A call fails on the token only when no working token is left: /token
-failed and nothing unexpired is cached, e.g. with ErrorTokenNotValid for an expired or
-revoked refresh token.
+next call tries again. /token goes through the retry policy like any request, so a renewal
+that meets a 429 or 503 can take about two minutes to fail with the defaults. A call fails
+on the token only when no working token is left: /token failed and nothing unexpired is
+cached, e.g. with ErrorTokenNotValid for an expired or revoked refresh token.
 
 ### 2. Client Types
 ```yaml
@@ -1074,8 +1075,8 @@ Use "go-eloverblik [command] --help" for more information about a command.
 ```
 
 `customer add-relation-by-code` and `customer delete-relation` still exist but are hidden:
-Energinet retired their endpoints with DataHub 3.0, and both fail with ErrorEndpointRetired
-without calling the API.
+Energinet retired their endpoints with DataHub 3.0, and, given --token as every customer
+command needs, both fail with ErrorEndpointRetired without calling the API.
 
 ### Command Flags
 
