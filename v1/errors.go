@@ -344,7 +344,10 @@ func apiError(msg string, statusCode int) error {
 }
 
 var (
-	ErrorNoError                                        error = errors.New("no errors")                                                                     // api code 10000 - never returned: 10000 maps to a nil error
+	// ErrorNoError is named after api code 10000, the code the API reports success with.
+	//
+	// Deprecated: never returned; code 10000 maps to no error.
+	ErrorNoError                                        error = errors.New("no errors")                                                                     // api code 10000
 	ErrorWrongNumberOfArguments                         error = errors.New("wrong number of arguments")                                                     // api code 10001
 	ErrorToManyRequestItems                             error = errors.New("to many request items")                                                         // api code 10002
 	ErrorInternalServerError                            error = errors.New("internal server error")                                                         // api code 10003
