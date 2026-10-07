@@ -11,8 +11,9 @@ import (
 // period's name, for this_week, this_month and this_year on their first day in
 // Copenhagen: a Monday, the 1st of the month and 1 January respectively. The period
 // then runs from 00:00 today to now, so from and to fall on the same date, which the
-// API rejects with error 30002 (ErrorToDateCanNotBeEqualToFromDate). Match it with
-// errors.Is.
+// API rejects with error 30002 (ErrorToDateCanNotBeEqualToFromDate) from the date-based
+// calls, GetTimeSeries and ExportTimeSeries. It is returned whichever call the bounds are
+// for. Match it with errors.Is.
 var ErrorPeriodHasNoCompleteDay = errors.New("period started today and has no complete day yet")
 
 // Period names a predefined date range relative to today, which GetDatesFromPeriod
@@ -26,8 +27,11 @@ var ErrorPeriodHasNoCompleteDay = errors.New("period started today and has no co
 type Period string
 
 // The supported periods, each with the [from, to) range GetDatesFromPeriod returns.
-// The API reads both bounds as dates, so a this_* period covers its first day up to and
+// The date-based calls, GetTimeSeries and ExportTimeSeries, send only the Copenhagen
+// date of each bound, so for them a this_* period covers its first day up to and
 // including yesterday, and leaves out today, which is not complete.
+// GetChargeLinksWithCharges sends both bounds as timestamps, so for it a this_* period
+// runs up to now, today included.
 const (
 	// Yesterday is [00:00 yesterday, 00:00 today).
 	Yesterday Period = "yesterday"
@@ -61,9 +65,11 @@ const (
 // but not including dateTo, and it rejects a request where the two dates are equal with
 // error 30002. For yesterday, last_week, last_month and last_year the returned to is
 // therefore 00:00 on the first day after the period, not the last instant of the period
-// itself. For this_week, this_month and this_year it is now, so the range ends before
-// today. On the first day of a this_* period from and to would fall on the same date,
-// so it returns an error wrapping ErrorPeriodHasNoCompleteDay instead, such as
+// itself. For this_week, this_month and this_year it is now, so a date-based call such as
+// GetTimeSeries stops before today, while GetChargeLinksWithCharges, which sends
+// timestamps, runs up to now. On the first day of a this_* period from and to would fall
+// on the same date, so it returns an error wrapping ErrorPeriodHasNoCompleteDay instead,
+// whichever call the bounds are for, such as
 // "this_week: period started today and has no complete day yet".
 //
 // An unknown period name is an error too. On an error, from and to are zero.
@@ -110,8 +116,11 @@ func getDatesFromPeriod(period Period, now time.Time) (from time.Time, to time.T
 		return time.Time{}, time.Time{}, fmt.Errorf("invalid period: '%s'", period)
 	}
 
-	// The API reads from and to as Copenhagen dates and rejects an equal pair with error
-	// 30002. Only a this_* period on its first day, from 00:00 today to now, gets one.
+	// The date-based calls, GetTimeSeries and ExportTimeSeries, send from and to as
+	// Copenhagen dates, and the API rejects an equal pair with error 30002. Only a this_*
+	// period on its first day, from 00:00 today to now, gets one. The bounds do not say
+	// which call they are for, so the error applies to every caller, although
+	// GetChargeLinksWithCharges sends timestamps.
 	if from.Format(time.DateOnly) == to.Format(time.DateOnly) {
 		return time.Time{}, time.Time{}, fmt.Errorf("%s: %w", name, ErrorPeriodHasNoCompleteDay)
 	}
