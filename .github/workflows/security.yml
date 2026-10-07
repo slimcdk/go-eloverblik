@@ -43,8 +43,12 @@ jobs:
           go-version: '1.25'
           check-latest: true
 
+      # Pinned: @latest follows golang.org/x/vuln's own go directive, and v1.8.0
+      # requires Go 1.26, which the 1.25 toolchain above cannot build. Move the pin
+      # together with the Go line in go.mod; Dependabot does not see versions in a
+      # run step, so nothing will do it for you.
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
 
       # Highest-signal check for a Go module: govulncheck does reachability
       # analysis, so it only fails on vulnerabilities this code can actually
