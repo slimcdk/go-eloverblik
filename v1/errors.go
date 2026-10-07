@@ -325,9 +325,13 @@ func apiError(msg string, statusCode int) error {
 		return fmt.Errorf("failed to parse error in api error message %s", msg)
 	}
 
-	// API Error lookup
+	// A code the client does not know maps to no sentinel of its own, but on a status with a
+	// sentinel of its own it still is that sentinel, so errors.Is keeps matching it.
 	errLookup, known := apiErrorMap[code]
 	if !known {
+		if sentinel := statusSentinel(statusCode); sentinel != nil {
+			return fmt.Errorf("%w: unhandled error: '%s'", sentinel, msg)
+		}
 		return fmt.Errorf("unhandled error: '%s'", msg)
 	}
 

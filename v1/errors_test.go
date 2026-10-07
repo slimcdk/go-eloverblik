@@ -316,3 +316,61 @@ func TestStatusSentinelForMessageWithoutCode(t *testing.T) {
 		})
 	}
 }
+
+// TestStatusSentinelForUnknownCode covers an error message with a "[code]" the client does
+// not know, on a status that has a sentinel of its own. The call must match that sentinel
+// and keep the message, rather than match no sentinel at all; on any other status it still
+// matches none.
+func TestStatusSentinelForUnknownCode(t *testing.T) {
+	mockResty := resty.New()
+	httpmock.ActivateNonDefault(mockResty.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	c := &client{
+		accessToken: "test-access-token",
+		resty:       mockResty,
+		apiType:     CustomerApi,
+	}
+
+	const message = "[99999] A completely new and unknown error"
+
+	respondWith := func(status int) {
+		httpmock.Reset()
+		httpmock.RegisterNoResponder(func(*http.Request) (*http.Response, error) {
+			resp := httpmock.NewStringResponse(status, `"`+message+`"`)
+			resp.Header.Set("Content-Type", "application/json")
+			return resp, nil
+		})
+	}
+
+	statusSentinels := []struct {
+		status int
+		want   error
+	}{
+		{http.StatusUnauthorized, ErrorUnauthorized},
+		{http.StatusGone, ErrorEndpointRetired},
+		{http.StatusTooManyRequests, ErrorTooManyRequests},
+	}
+
+	for _, test := range statusSentinels {
+		t.Run(http.StatusText(test.status), func(t *testing.T) {
+			respondWith(test.status)
+
+			_, err := c.GetMeteringPointDetails([]string{"571313180100000001"})
+
+			require.ErrorIs(t, err, test.want)
+			assert.EqualError(t, err, test.want.Error()+": unhandled error: '"+message+"'")
+		})
+	}
+
+	t.Run("matches no sentinel on a status without one", func(t *testing.T) {
+		respondWith(http.StatusBadRequest)
+
+		_, err := c.GetMeteringPointDetails([]string{"571313180100000001"})
+
+		require.EqualError(t, err, "unhandled error: '"+message+"'")
+		for _, sentinel := range statusSentinels {
+			assert.NotErrorIs(t, err, sentinel.want)
+		}
+	})
+}
