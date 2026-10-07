@@ -23,12 +23,17 @@ func ErrorClientConnection(status int) error {
 //     "traceId":"00-9c48...-01"}. Both OpenAPI specs declare it for 400, 401, 403 and 404,
 //     and it is what a request to an endpoint that is not deployed actually comes back with.
 //
-// Only one of the two is ever set. UnmarshalJSON itself never fails: a well-formed body it
-// has no use for is left empty and judged by its HTTP status. A body that is not well-formed
-// JSON (empty, truncated, HTML) under a JSON Content-Type fails in encoding/json before
-// UnmarshalJSON runs; resty then logs a "Cannot unmarshal response body" warning, and the
-// error is still judged by its HTTP status. A body with a non-JSON Content-Type never
-// reaches UnmarshalJSON.
+// Only one of the two is ever set. UnmarshalJSON itself never fails: a body it has no use
+// for is left empty and judged by its HTTP status.
+//
+// What reaches UnmarshalJSON depends on the call. In a parsed call resty decodes the body:
+// one with a non-JSON Content-Type never reaches UnmarshalJSON, and one that is not
+// well-formed JSON (empty, truncated, HTML) under a JSON Content-Type fails in
+// encoding/json before UnmarshalJSON runs; resty then logs a "Cannot unmarshal response
+// body" warning. Either way the error is judged by its HTTP status. exportBody instead
+// hands the body of every failed export to UnmarshalJSON itself, whatever its
+// Content-Type, so there a body that is not well-formed JSON does reach UnmarshalJSON,
+// and is left empty.
 type apiErrorBody struct {
 	// Message is the API error message when the body is a bare JSON string.
 	Message string

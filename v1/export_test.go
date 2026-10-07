@@ -46,7 +46,8 @@ func exportCalls(c *client) []exportCall {
 
 // TestFailedExport covers an export the API refuses. The body of an export is streamed to
 // the caller, so the client never reads it; when the export fails nobody else will either,
-// so the client must close it, and report the failure the way every other call does.
+// so the client must close it, and report the failure through apiErrorFromBody, wrapped as
+// "failed to export <what>: ...", so errors.Is still finds its sentinel.
 func TestFailedExport(t *testing.T) {
 	mockResty := resty.New()
 	httpmock.ActivateNonDefault(mockResty.GetClient())
