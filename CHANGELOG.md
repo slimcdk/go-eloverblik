@@ -10,9 +10,12 @@ GitHub release notes.
 Energinet put DataHub 3.0 into operation on 18 September 2026, and the Eloverblik API
 changed with it: two endpoints were retired, five time series error codes were documented,
 and a metering point failing on its own inside a successful response became routine. This
-release follows the API. Nothing was removed, and the only code that stops compiling is an
-unkeyed `MeteringPoints{...}` literal, which must now list `IsMovedOut`. Some results do
-change for code that compiles unchanged; those come right after the Go requirement.
+release follows the API. It also computes periods and reads the CLI's dates in Copenhagen
+time whatever the host's time zone, renews the data access token before it expires, and
+makes a client safe to share between goroutines. Nothing was removed, and the only code
+that stops compiling is an unkeyed `MeteringPoints{...}` literal, which must now list
+`IsMovedOut`. Some results do change for code that compiles unchanged; those come right
+after the Go requirement.
 
 ### Requires Go 1.27
 
@@ -25,16 +28,30 @@ The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later;
 
 ### Behaves differently
 
-- A `410 Gone` returns `ErrorEndpointRetired`, or an `APIError` that unwraps to it when
-  the body is a problem document, unless the body carries an API error code the client
-  knows, which still maps to that code's sentinel (a bare `[code] message` with an unknown
-  code still reads `unhandled error: …`). It used to be `could't connect to eloverblik: 410`,
-  `failed to parse error in api error message …`, or an `APIError` (`eloverblik: 410 Gone …`)
-  that matched no sentinel. `AddRelationByWebAccessCode` and `DeleteRelation` answer nothing
-  else since DataHub 3.0.
-- An error message without a `[code]` on a 401, 410 or 429 wraps `ErrorUnauthorized`,
-  `ErrorEndpointRetired` or `ErrorTooManyRequests` and keeps what the API said. It used to
-  read `failed to parse error in api error message …` and matched no sentinel.
+- A `410 Gone` returns an error that matches `ErrorEndpointRetired` with `errors.Is`,
+  whatever its body: the sentinel itself, the sentinel wrapping what the API said, or an
+  `APIError` that unwraps to it when the body is a problem document. Only an API error code
+  that has a sentinel of its own, which is every code the client knows except 10000, still
+  maps to that code's sentinel instead. It used to be `could't connect to eloverblik: 410`,
+  `failed to parse error in api error message …`, `unhandled error: '…'`, or an `APIError`
+  (`eloverblik: 410 Gone …`) that matched no sentinel. `AddRelationByWebAccessCode` and
+  `DeleteRelation` answer nothing else since DataHub 3.0.
+- On a 401, 410 or 429, an error message without an API error code, or with a code the
+  client does not know, wraps `ErrorUnauthorized`, `ErrorEndpointRetired` or
+  `ErrorTooManyRequests` and keeps what the API said, e.g.
+  `unauthorized access: unhandled error: '[99999] …'`. It used to read
+  `failed to parse error in api error message …` or `unhandled error: '…'` and matched no
+  sentinel. On any other status such a message still matches none.
+- `APIError.Code` holds the API error code a problem document's detail opens with, also when
+  the client has no sentinel for it, such as a code Energinet added later, or 10000. It used
+  to stay zero then, as for a document without a code. What the error unwraps to is
+  unchanged.
+- An API error code is read only from five digits in brackets, `[NNNNN]`, at the start of
+  the message. A message that opened with a bracketed number of more than five digits, or
+  with `[` and five digits but no `]`, used to be read as a code made of its first five
+  digits: `[200101] …` matched `ErrorRelationNotFound`, the sentinel of 20010. Such a
+  message now carries no code and is judged by its HTTP status, with the message kept, as
+  any other message without a code.
 - 30014 maps to `ErrorPeriodNotAllowed`, with a message that names both reasons the API
   gives it. `ErrorNumberOfDaysExcceded` is the same error, so `errors.Is` matches either
   name, but code comparing error strings sees the new text. So does code comparing 30003's,
@@ -45,12 +62,66 @@ The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later;
   and warns about it on stderr; it used to crash. Its output is keyed by the metering point
   ID the API answers with, and a metering point that comes back once per access period keeps
   the points of every period instead of only the last.
-- `customer add-relation-by-code` and `customer delete-relation` are hidden from the help and
-  fail with `ErrorEndpointRetired` without calling the API.
+- `customer add-relation-by-code` and `customer delete-relation` are left out of the command
+  listings, and the help now names them only to say they are retired. They fail with
+  `ErrorEndpointRetired` without calling the API.
 - A failed `ExportTimeSeries`, `ExportMasterdata` or `ExportCharges` reports the API's error
   like every other call, e.g. `failed to export masterdata: unauthorized access`, which
   unwraps to `ErrorUnauthorized`. It used to read `failed to export masterdata, status: 401
   Unauthorized, err: <nil>`, and a transport error was formatted rather than wrapped.
+- `GetDatesFromPeriod` computes every period in Copenhagen time, whatever the host's time
+  zone, and returns `from` and `to` in Europe/Copenhagen. It used to build every bound at
+  midnight in the host's zone, from the host's date. On a host east of Copenhagen every
+  midnight reached the API as the date before: in Tokyo on 15 November, `last_month` asked
+  for 30 September to 31 October instead of 1 October to 1 November. Between midnight on
+  the host and midnight in Copenhagen it was also the wrong period: at 02:00 on 1 November
+  in Tokyo, still 31 October in Copenhagen, `last_month` asked for the same 30 September to
+  31 October instead of 1 September to 1 October. On a host west of Copenhagen, between
+  midnight in Copenhagen and midnight on the host, every period was the one of the day
+  before: in Los Angeles at 01:30 on 1 January Copenhagen time, `last_year` was the year
+  before last.
+- Weeks start on Monday. `this_week` used to start on Sunday, and `last_week` to run from
+  Sunday to Saturday, taking in the Sunday before the week and leaving out the Sunday that
+  ends it. On a Sunday, `this_week` was that day alone, which the API rejects with error
+  30002.
+- On their first day in Copenhagen (a Monday, the 1st of the month, 1 January), `this_week`,
+  `this_month` and `this_year` return an error wrapping the new
+  `ErrorPeriodHasNoCompleteDay`, e.g. `this_week: period started today and has no complete
+  day yet`, with `from` and `to` zero, before any request is made. `this_month` on the 1st
+  and `this_year` on 1 January used to return 00:00 today to now, which `GetTimeSeries` and
+  `ExportTimeSeries` send as two equal dates, and the API rejected the request with error
+  30002 (`ErrorToDateCanNotBeEqualToFromDate`), which does not say why. On a Monday,
+  `this_week` used to start on the Sunday before, so it returned that Sunday's data where it
+  now fails. The error is returned whichever call the bounds
+  are for, `GetChargeLinksWithCharges` included, and the CLI's `--period` gives it too.
+- The client renews its data access token. It used to fetch one on the first call that
+  needed it and keep it for as long as the client lived, so about 24 hours later every call
+  failed with a 401 and the program had to build a new client. Now a call that finds the
+  cached token expired, or expiring within five minutes by its `exp` claim, fetches a new
+  one first. When that renewal fails, the call gets the cached token as long as it has not
+  expired, and the next call tries again; once it has expired, the call gets the error the
+  `/token` request failed with. A token whose expiry cannot be read, because it is not a
+  JWT or has no positive `exp`, is kept as before.
+- `ParseToken` reads an `exp` that is null, zero or negative as no expiry, as it reads a
+  token without one: `ExpiresAt` is zero, `IsExpired` reports false and `ExpiresIn` zero.
+  It used to set `ExpiresAt` to 1 January 1970 or earlier, so the token counted as expired.
+  A token with such an `exp` and no `tokenType` is now rejected with
+  `token carries no Eloverblik claims`, as one with neither already was.
+- The CLI reads a `YYYY-MM-DD` date as midnight in Copenhagen, and `now` and
+  `now-30d/w/m/y` as the current time in Copenhagen, counted back on the Copenhagen
+  calendar. A date used to be midnight UTC, so `charge-links --from 2026-07-01` asked from
+  02:00 Copenhagen time (01:00 in winter), and a relative date was counted on the host's
+  calendar, which on a host outside Danish time could land a day off the Copenhagen date
+  near midnight. `timeseries` and `export-timeseries` get the same `YYYY-MM-DD` dates as
+  before, as they send only the Copenhagen date.
+- `--to` on `timeseries`, `export-timeseries` and `charge-links` defaults to today's date in
+  Copenhagen. It was the host's date, which around midnight is a day off on a host in
+  another zone: on a UTC host at 00:30 Copenhagen time the range stopped a day early.
+- `--format json` on `export-timeseries`, `export-masterdata` and `export-charges` drops the
+  UTF-8 byte order mark Eloverblik's CSV starts with. The key of the first column used to
+  start with the invisible mark (U+FEFF), so a lookup of `MålepunktsID` found nothing, and
+  a quoted first header kept its quotes. A CSV without rows prints `[]` instead of `null`.
+  `--format csv` still passes the API's bytes through unchanged, mark included.
 
 ### Deprecated
 
@@ -58,6 +129,15 @@ The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later;
   DataHub 3.0. Web access codes are replaced by data sharing in ElOverblik, which has no
   API; a relation can no longer be deleted at all. Both will be removed in v2.
 - `ErrorNumberOfDaysExcceded`: use `ErrorPeriodNotAllowed`, which is the same error.
+- `Mode`, `ReleaseMode`, `TestMode`, `ApiType` and `APIType`, the type of `ApiType`: nothing
+  reads them. `Mode` stopped choosing the host in v1.0.0, and `ApiType` was never read.
+  Both constructors always call the production API at api.eloverblik.dk, and the
+  constructor alone picks the Customer or the Third-Party API. `Mode` still defaults to
+  `TestMode` ("preprod"), so code that sets it can believe it talks to the pre-production
+  API. All five will be removed in v2. `TokenClaims.APIType` is unrelated and not
+  deprecated.
+- `ErrorNoError`: no call returns it, as code 10000 maps to no error, so
+  `errors.Is(err, ErrorNoError)` is always false.
 
 ### Added
 
@@ -73,6 +153,8 @@ The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later;
   (30015), `ErrorRelationHasExpired` (30016), `ErrorToDateCutOff` (30017) and
   `ErrorMeteringPointDataNotAvailableForTheRequestedPeriod` (30018).
 - `MeteringPoints.IsMovedOut`, which the API added alongside DataHub 3.0.
+- `ErrorPeriodHasNoCompleteDay`, which `GetDatesFromPeriod` returns, wrapped, for a
+  `this_*` period on its first day.
 
 ### Fixed
 
@@ -92,7 +174,26 @@ The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later;
 - `timeseries --flatten` crashed with `index out of range [0]` as soon as one metering point
   failed on its own, e.g. with 30018 for a period that starts before it was registered.
 - A failed export left its response body open, and with it the connection. The body is
-  streamed to the caller on success, so resty never closes it; on a failure nobody did.
+  streamed to the caller on success, so resty never closes it; on a failure nobody did. Nor
+  did anybody close the body of an export attempt that was retried after a 429 or 503: an
+  export answered 429, 429, 200 opened three bodies and closed one. Those are now drained
+  and closed too.
+- A client shared between goroutines raced on its data access token: on a fresh client
+  every goroutine sent its own `/token` request, against an API that allows 2 a minute, so
+  all but the first two were rate limited. The client is now safe for concurrent use: the
+  goroutines that need a token while one is being fetched wait for that request and share
+  its outcome, the token or the error it failed with.
+- `--help` on a command below the root, e.g. `customer timeseries --help`, went through the
+  root's help: a `[command]` usage line in place of the command's arguments, an empty
+  `Available Commands:` section, the Short line in place of the Long text, and no global
+  flags, so `--token` went unmentioned. The `customer` and `thirdparty` groups lost their
+  global flags the same way. Every command below the root now gets cobra's own help.
+- `help`, `help <command>` and `completion <shell>` failed with
+  `required flag(s) "token" not set`, so a shell completion script could not be generated
+  without a token. `--token` is no longer marked required: the `customer`, `thirdparty` and
+  `token` commands check it themselves, so a missing token now reads
+  `required flag "token" not set`, as an empty one already did. Shell completion no longer
+  offers `--token` before a dash is typed.
 - `llms.md` had the quality codes wrong: A04 is measured and A03 estimated, not A04
   estimated and A05 measured.
 
@@ -106,14 +207,50 @@ The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later;
   `docs/` also holds the current technical description (revised March 2025, replacing the
   2020 edition) and the docs.eloverblik.dk guides as Markdown, and `docs/README.md` says
   where each file comes from and which to trust.
+- A package overview in the godoc, for `go doc` and pkg.go.dev: the two clients and how the
+  refresh token becomes a data access token, the calls by task, the Copenhagen date and
+  half-open range rules, batching metering point IDs 10 at a time and the failures per
+  metering point, the errors, flattening and quality codes, retries, the retired and
+  unavailable endpoints, and closing exports. Examples for the main calls go with it;
+  `go test` compiles them all and runs the two with a fixed output, and none of them reaches
+  Eloverblik.
+- `go-eloverblik --help` carries what using the CLI takes without this repository: what the
+  tool is, how to pass the token, that a run sending an authenticated request fetches a
+  data access token against a `/token` limit of 2 calls a minute, and the rules that change
+  a result without an error, from the half-open Copenhagen date ranges to the metering
+  points that fail on their own. Every command's help says which endpoint it calls, what it
+  takes and what it prints, with examples, and `--to` on `timeseries`, `export-timeseries`
+  and `charge-links` is described as exclusive.
+- The `charge-links` help and the `GetChargeLinksWithCharges` godoc say why the endpoint
+  answers 404, where they used to say Eloverblik had not deployed it: both OpenAPI
+  documents declare it, and document its 404 as "When the Charges integration feature is
+  disabled". The live API answered 404 on both APIs when checked on 2026-07-13. They also
+  name the one way the client departs from the specification: the API takes an interval
+  per metering point, and the client sends the same interval for all of them.
+- `AGENTS.md`, with `CLAUDE.md` a symbolic link to it, for coding agents working on this
+  repository: the checks CI runs and how to run them locally, the conventions, and how a
+  release is cut.
+- The README, `llms.md`, the godoc, the `--help` texts and the comments in the build and CI
+  configuration were checked against the code, and what had drifted was corrected: wrong
+  signatures, field lists, flags, defaults and error texts, examples that did not compile
+  or would have dereferenced nil, and help listings that no longer matched `--help`. The
+  comments on the error sentinels no longer give an HTTP status per code: Energinet's
+  documentation gives none, and some were wrong.
 
 ### Dependencies, CI and tooling
 
 - testify 1.12.1, httpmock 1.4.2 and golang.org/x/net 0.59.0. resty v3 is still a release
   candidate, so the client stays on resty v2.
-- Every GitHub Action is on its current major, golangci-lint on v2.14 and govulncheck on
+- Every GitHub Action is on its current major, golangci-lint on v2.14.0 and govulncheck on
   v1.8.0, pinned. The govulncheck job had failed every week since 14 September: its
   `@latest` had started to require a newer Go than the job ran.
+- The release gate and GoReleaser run `go mod tidy -diff`, so a tag whose go.mod or go.sum
+  is not what `go mod tidy` would write fails before anything is built. The gate's step
+  for this ran only `go mod verify`, which checks the module cache, not go.mod.
+- Starting the release workflow by hand is always a dry run. Started from a `v*` tag, it
+  used to run the publishing job too, as if the tag had just been pushed.
+- The test workflow can be started by hand, so it can run on a branch that has no pull
+  request into master yet.
 - The code takes what `go fix` proposes for Go 1.27, and the linters now include errorlint,
   testifylint, modernize and gocritic. errorlint found the export errors that formatted a
   transport error instead of wrapping it, listed above.
@@ -157,10 +294,12 @@ too, because they are the ones most likely to surprise.
   returned an empty result and a nil error, so an expired token or a rate limit
   looked like "no data".
 - `TimeSeries.Flatten()` derives each point's interval from the period's
-  resolution: quarter hours and hours step by a fixed duration; days, months and
-  years by calendar unit. Day, Month and Year points, and any day containing a
-  daylight saving transition, previously got wrong intervals — for some
-  resolutions a zero-width one.
+  resolution: quarter hours and hours step by a fixed duration, as they already
+  did; days, months and years by calendar unit. Previously, in a period of
+  several points, `PT1D` points were off by an hour from a daylight saving
+  transition on and every `P1M` and `PT1Y` point got the interval of the whole
+  period; a single `PT1D` point on a daylight saving day got 24 hours; and
+  `P1D`, `P1Y` and `PXD` points got a zero-width interval.
 - `GetMeteringPoints(includeAll)` now actually sends `includeAll`. It was sent as
   a path parameter to a path with no placeholder, so resty dropped it and the
   argument had no effect.
