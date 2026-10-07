@@ -92,18 +92,9 @@ func (c *client) authenticate() error {
 // is replaced, so a request does not set out with a token that expires on the way.
 const dataAccessTokenRenewalMargin = 5 * time.Minute
 
-// GetDataAccessToken returns the data access token the client sends on its requests,
-// exchanging the refresh token for one on the first call that needs it and caching it.
-//
-// A data access token lasts about 24 hours. Once the cached one has expired, or expires
-// within five minutes, according to its exp claim, the next call fetches a new one, so a
-// long running client keeps working. A token whose expiry cannot be read is kept. If the
-// renewal fails before the cached token has expired, the call returns the cached token,
-// which still works for a few minutes, and the next call tries again; once it has
-// expired, the call returns the error.
-//
-// It is safe for concurrent use: goroutines that need a token at the same time wait for a
-// single /token request, which matters because the API allows only 2 of those a minute.
+// GetDataAccessToken implements Client.GetDataAccessToken, which documents its contract.
+// c.tokenMu is held across the /token request, so the goroutines that need a token while
+// one is being fetched wait for that request instead of sending their own.
 func (c *client) GetDataAccessToken() (string, error) {
 	c.tokenMu.Lock()
 	defer c.tokenMu.Unlock()

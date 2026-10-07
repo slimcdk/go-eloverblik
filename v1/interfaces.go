@@ -6,8 +6,30 @@ import (
 )
 
 type Client interface {
+	// GetDataAccessToken returns the data access token the client sends on its requests.
+	// The client fetches it lazily, exchanging its refresh token for one at /token on the
+	// first call that needs it, and caches it.
+	//
+	// A data access token lasts about 24 hours. Once the cached one has expired, or expires
+	// within five minutes, according to its exp claim, the next call fetches a new one, so
+	// a long running client keeps working. A token whose expiry cannot be read, because it
+	// is not a JWT or its exp is missing, null, zero or negative, is kept.
+	//
+	// It is safe for concurrent use. The API allows only 2 /token calls a minute, so the
+	// goroutines that need a token while one is being fetched wait for that request and
+	// use its token.
+	//
+	// An error means the client holds no data access token that works: /token failed, and
+	// there is no cached token or the cached one has expired. It is the error the request
+	// failed with, e.g. ErrorTokenNotValid when the refresh token has expired or been
+	// revoked, or ErrorTooManyRequests when the /token rate limit is spent. A renewal that
+	// fails before the cached token has expired is not an error: the call returns the
+	// cached token, which still works for a few minutes, and the next call tries again.
 	GetDataAccessToken() (string, error)
 	RefreshTokenClaims() (TokenClaims, error)
+	// DataAccessTokenClaims decodes the claims of the data access token GetDataAccessToken
+	// returns. Like any call that needs the token, it may fetch one first, or renew the
+	// cached one when it has expired or expires within five minutes.
 	DataAccessTokenClaims() (TokenClaims, error)
 	GetMeteringPointDetails(meteringPointIDs []string) ([]MeteringPointDetailsResponse, error)
 	GetTimeSeries(meteringPointIDs []string, from, to time.Time, aggregation Aggregation) ([]TimeSeries, error)

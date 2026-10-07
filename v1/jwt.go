@@ -182,8 +182,10 @@ func (c *client) RefreshTokenClaims() (TokenClaims, error) {
 	return ParseToken(c.refreshToken)
 }
 
-// DataAccessTokenClaims decodes the claims of the client's data access token, fetching
-// one first if the client does not hold one yet.
+// DataAccessTokenClaims decodes the claims of the client's data access token. It gets the
+// token from GetDataAccessToken, so it fetches one first if the client does not hold one
+// yet, and may trigger a renewal: when the cached token has expired or expires within
+// five minutes, it sends a /token request for a new one before decoding.
 func (c *client) DataAccessTokenClaims() (TokenClaims, error) {
 	accessToken, err := c.GetDataAccessToken()
 	if err != nil {
