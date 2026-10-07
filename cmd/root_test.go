@@ -90,6 +90,49 @@ func TestRootCmd(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// TestRootHelpGroupsCommands checks that the root help lists each group's commands under
+// the group's name, so every command the CLI has can be seen at once.
+func TestRootHelpGroupsCommands(t *testing.T) {
+	out, err := execute(t, "--help")
+	require.NoError(t, err)
+	assert.Contains(t, out, "\n  customer\n    add-relation ")
+	assert.Contains(t, out, "\n  thirdparty\n    alive ")
+	assert.Contains(t, out, "\n    timeseries ")
+	assert.Contains(t, out, "--token")
+}
+
+// TestSubcommandHelp checks that every command below the root gets cobra's own help: the
+// root's grouped listing has no room for how to call a command, so it showed a
+// "[command]" usage line for a command that takes arguments and left out the Long text,
+// the examples and the global flags, --token among them.
+func TestSubcommandHelp(t *testing.T) {
+	t.Run("a leaf command shows its arguments, its flags and the global flags", func(t *testing.T) {
+		out, err := execute(t, "customer", "timeseries", "--help")
+		require.NoError(t, err)
+		assert.Contains(t, out, "go-eloverblik customer timeseries <metering-id> [metering-id ...] [flags]")
+		assert.Contains(t, out, "--period")
+		assert.Contains(t, out, "Global Flags:")
+		assert.Contains(t, out, "--token")
+		assert.NotContains(t, out, "[command]")
+	})
+
+	t.Run("a leaf command shows its Long text", func(t *testing.T) {
+		out, err := execute(t, "thirdparty", "metering-points", "--help")
+		require.NoError(t, err)
+		assert.Contains(t, out, "Scope must be one of: authorizationId, customerCVR, customerKey")
+		assert.Contains(t, out, "go-eloverblik thirdparty metering-points <scope> <identifier> [flags]")
+	})
+
+	t.Run("a group command lists its commands and the global flags", func(t *testing.T) {
+		out, err := execute(t, "customer", "--help")
+		require.NoError(t, err)
+		assert.Contains(t, out, "go-eloverblik customer [command]")
+		assert.Contains(t, out, "timeseries")
+		assert.Contains(t, out, "Global Flags:")
+		assert.Contains(t, out, "--token")
+	})
+}
+
 func TestPrintResponseHeadersFlag(t *testing.T) {
 	flag := rootCmd.PersistentFlags().Lookup("print-response-headers")
 	assert.NotNil(t, flag, "rootCmd should have a persistent --print-response-headers flag")

@@ -33,6 +33,23 @@ func Execute() {
 	}
 }
 
+// helpFunc returns the help for the whole command tree. A help function set on the root
+// is inherited by every command below it, so it has to pick: the root lists each group's
+// commands under the group's name, and every other command gets cobra's default help,
+// which is what tells how to call it: the usage line with its arguments, the Long text,
+// the examples, its flags and the global flags such as --token.
+func helpFunc(defaultHelp func(*cobra.Command, []string)) func(*cobra.Command, []string) {
+	return func(cmd *cobra.Command, args []string) {
+		if cmd.HasParent() {
+			defaultHelp(cmd, args)
+			return
+		}
+		rootHelpFunc(cmd, args)
+	}
+}
+
+// rootHelpFunc prints the root help: the commands of each group listed under the group's
+// name, then the root's own flags.
 func rootHelpFunc(cmd *cobra.Command, _ []string) {
 	w := cmd.OutOrStdout()
 	printf := func(format string, args ...any) {
@@ -66,5 +83,5 @@ func init() {
 	rootCmd.PersistentFlags().String("token", "", "Eloverblik refresh token (required)")
 	_ = rootCmd.MarkPersistentFlagRequired("token")
 	rootCmd.PersistentFlags().Bool("print-response-headers", false, "Print HTTP response headers from the Eloverblik API to stderr")
-	rootCmd.SetHelpFunc(rootHelpFunc)
+	rootCmd.SetHelpFunc(helpFunc(rootCmd.HelpFunc()))
 }
