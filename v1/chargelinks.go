@@ -92,16 +92,19 @@ type ChargeSeriesPoint struct {
 
 // GetChargeLinksWithCharges fetches the charge links of the given metering points in the
 // interval [from, to), together with the dated price series of every charge they link to.
+// The API takes an interval per metering point; this client applies the same interval to
+// all of them. from and to are sent as timestamps in Copenhagen time, so pass midnight in
+// Europe/Copenhagen to ask for whole Danish days.
 //
 // Where GetCustomerCharges and GetThirdPartyCharges only return charges that are
 // currently valid or take effect in the future, this endpoint returns the historic price
 // series as well, and is therefore the one to price past consumption with.
 //
-// Both OpenAPI documents declare the endpoint, but as of 2026-07-13 the live API answers
-// 404 for it on BOTH the Customer and the Third-Party API, with valid tokens, on every
-// documented path, while its getcharges sibling answers normally on the same tokens.
-// Energinet has specified it but not deployed it: expect an error rather than data until
-// they do.
+// Both OpenAPI documents declare the endpoint, and document a 404 from it as "When the
+// Charges integration feature is disabled". That is what the live API answered when
+// checked on 2026-07-13: 404 on BOTH the Customer and the Third-Party API, with valid
+// tokens, on every documented path, while its getcharges sibling answered normally on the
+// same tokens. Expect a 404 error rather than data until Energinet enables the feature.
 func (c *client) GetChargeLinksWithCharges(meteringPointIDs []string, from, to time.Time) (*ChargeLinksWithChargesResponse, error) {
 
 	// Ensure access token is fresh
@@ -147,8 +150,8 @@ func (c *client) GetChargeLinksWithCharges(meteringPointIDs []string, from, to t
 	return &result.Result, nil
 }
 
-// chargeLinksRequest builds the query envelope of getchargelinkswithcharges. The interval
-// is per metering point in the API, this client applies the same interval to all of them.
+// chargeLinksRequest builds the query envelope of getchargelinkswithcharges. The API takes
+// an interval per metering point; this client applies the same interval to all of them.
 func chargeLinksRequest(meteringPointIDs []string, from, to time.Time) ChargeLinksWithChargesRequest {
 	query := make([]ChargeLinksWithChargesQueryItem, 0, len(meteringPointIDs))
 	for _, id := range meteringPointIDs {

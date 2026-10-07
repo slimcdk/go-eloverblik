@@ -16,14 +16,18 @@ func newChargeLinksCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "charge-links <metering-id> [metering-id ...]",
 		Aliases: []string{"chargelinks"},
-		Short:   "Get charge links with dated charge prices (Eloverblik has not deployed this endpoint: it answers 404)",
+		Short:   "Get charge links with dated charge prices (404 while the feature is disabled)",
 		Long: "Get charge links with charges for one or more metering points.\n\n" +
-			"NOT AVAILABLE YET. Eloverblik has not deployed getchargelinkswithcharges. Checked on\n" +
-			"2026-07-13 with valid Customer and Third-Party tokens, the live API answered 404 Not\n" +
-			"Found on BOTH the Customer API and the Third-Party API, on every documented path, while\n" +
-			"'charges' answered 200 with the same tokens. The endpoint is declared in both of\n" +
-			"Energinet's OpenAPI documents and this command implements it exactly as specified, so it\n" +
-			"is ready for the day Energinet deploys it. Until then every call returns 404.\n\n" +
+			"NOT AVAILABLE YET. Both of Energinet's OpenAPI documents declare\n" +
+			"getchargelinkswithcharges, and document a 404 from it as \"When the Charges integration\n" +
+			"feature is disabled\". That is what the live API answered when checked on 2026-07-13\n" +
+			"with valid Customer and Third-Party tokens: 404 Not Found on BOTH the Customer API and\n" +
+			"the Third-Party API, on every documented path, while 'charges' answered 200 with the\n" +
+			"same tokens. Until Energinet enables the feature, every call returns 404.\n\n" +
+			"This command implements the endpoint as both documents specify it, with one\n" +
+			"difference: the API takes an interval per metering point, and this client applies the\n" +
+			"one interval given here to all of them. A date in --from or --to is a Danish day,\n" +
+			"so 2026-07-01 means midnight in Copenhagen, and the interval stops before --to.\n\n" +
 			"What it will return: the dated price series of every charge a metering point is linked\n" +
 			"to, the charge link periods and their factors, the VAT classification and the tax\n" +
 			"indicator, so historic consumption can be priced.\n\n" +
