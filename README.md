@@ -539,7 +539,7 @@ go-eloverblik customer charge-links <metering-id>... --from=YYYY-MM-DD --to=YYYY
 
 # Data Export (CSV or JSON). The API returns CSV; --format=json makes the CLI convert it to
 # an array of objects keyed by the CSV header, without the byte order mark the CSV starts
-# with, and [] when there are no rows.
+# with or the white space around a value, and [] when there are no rows.
 go-eloverblik customer export-timeseries <metering-id>... --period=last_year
 
 go-eloverblik customer export-timeseries <metering-id>... \

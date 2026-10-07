@@ -104,7 +104,8 @@ Arguments: 1 to 10 metering point IDs, each exactly 18 digits.
 Output with --format csv (the default): the API's CSV, unchanged: separated by
 semicolons, starting with a UTF-8 byte order mark, with Danish column names.
 Output with --format json: the rows as a JSON array of objects keyed by the CSV header,
-every value a string. The byte order mark is dropped, and a CSV without rows gives [].
+every value a string, without the white space around it. The byte order mark is
+dropped, and a CSV without rows gives [].
 Any other --format gives the CSV.`,
 	Example: `  go-eloverblik customer export-charges 571313000000000001 --token "$ELO_TOKEN" > charges.csv
   go-eloverblik customer export-charges 571313000000000001 571313000000000002 --format json --token "$ELO_TOKEN"`,

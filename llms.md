@@ -1181,7 +1181,8 @@ Examples:
     stream, err := client.ExportTimeSeries(...) // the API's CSV; close it when done
     // The library stops here: it returns CSV. The JSON is the CLI's own conversion of that
     // CSV (see "CSV to JSON Conversion"); the API has no JSON export.
-  Returns: JSON array of objects keyed by the Danish CSV header, every value a string
+  Returns: JSON array of objects keyed by the Danish CSV header, every value a string,
+           without the white space around it
 
 - CLI: go-eloverblik thirdparty authorizations
   Library: client.GetAuthorizations()
@@ -1206,7 +1207,9 @@ Process:
      ("MålepunktsID", not "\uFEFFMålepunktsID")
   2. Parse CSV with ';' delimiter (LazyQuotes, TrimLeadingSpace, variable field count)
   3. Read header row as object keys
-  4. Read data rows as values (every value stays a string, e.g. "0,198" with a decimal comma)
+  4. Read data rows as values (every value stays a string, e.g. "0,198" with a decimal comma),
+     without the white space around them (the exports send every MålepunktsID with a tab
+     before it)
   5. Output an indented JSON array of objects
 Output: JSON array where each object represents one CSV row; [] (never null) when the CSV
         has a header and no rows
@@ -1338,10 +1341,11 @@ for {
         return err
     }
 
+    // The exports send every MålepunktsID with a tab before it; trim as the CLI does
     row := make(map[string]string)
     for i, value := range record {
         if i < len(headers) {
-            row[headers[i]] = value
+            row[strings.TrimSpace(headers[i])] = strings.TrimSpace(value)
         }
     }
     fmt.Println(row["MålepunktsID"], row["Fra_dato"], row["Mængde"]) // strings, decimal comma
@@ -1940,7 +1944,8 @@ alive: a human-readable line, not JSON
 Export Commands:
   --format=csv: Semicolon-delimited, UTF-8 BOM, Danish headers (streamed straight through)
   --format=json: Converted by the CLI from the CSV to an indented JSON array of objects keyed
-                 by the header, every value a string; the BOM is dropped, and no rows give []
+                 by the header, every value a string without the white space around it; the
+                 BOM is dropped, and no rows give []
 --print-response-headers: header blocks on stderr, so stdout stays parseable
 ```
 

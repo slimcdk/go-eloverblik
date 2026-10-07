@@ -98,6 +98,9 @@ func csvToJSON(stream io.ReadCloser) error {
 	if err != nil {
 		return fmt.Errorf("failed to read CSV headers: %w", err)
 	}
+	for i := range headers {
+		headers[i] = strings.TrimSpace(headers[i])
+	}
 
 	// Not nil: no rows encode as [], not null
 	records := []map[string]string{}
@@ -112,10 +115,12 @@ func csvToJSON(stream io.ReadCloser) error {
 			return fmt.Errorf("failed to read CSV record: %w", err)
 		}
 
+		// The exports send every MålepunktsID with a tab before it. No value keeps white
+		// space on either side
 		row := make(map[string]string)
 		for i, value := range record {
 			if i < len(headers) {
-				row[headers[i]] = value
+				row[headers[i]] = strings.TrimSpace(value)
 			}
 		}
 		records = append(records, row)
@@ -370,7 +375,8 @@ days too (30014).
 Output with --format csv (the default): the API's CSV, unchanged: separated by
 semicolons, starting with a UTF-8 byte order mark, with Danish column names.
 Output with --format json: the rows as a JSON array of objects keyed by the CSV header,
-every value a string. The byte order mark is dropped, and a CSV without rows gives [].
+every value a string, without the white space around it. The byte order mark is
+dropped, and a CSV without rows gives [].
 Any other --format gives the CSV.`,
 		Example: `  go-eloverblik customer export-timeseries 571313000000000001 --from 2026-09-01 --to 2026-10-01 --token "$ELO_TOKEN" > september.csv
   go-eloverblik customer export-timeseries 571313000000000001 571313000000000002 --period last_month --aggregation Day --format json --token "$ELO_TOKEN"`,
@@ -444,7 +450,8 @@ Arguments: 1 to 10 metering point IDs, each exactly 18 digits.
 Output with --format csv (the default): the API's CSV, unchanged: separated by
 semicolons, starting with a UTF-8 byte order mark, with Danish column names.
 Output with --format json: the rows as a JSON array of objects keyed by the CSV header,
-every value a string. The byte order mark is dropped, and a CSV without rows gives [].
+every value a string, without the white space around it. The byte order mark is
+dropped, and a CSV without rows gives [].
 Any other --format gives the CSV.`,
 		Example: `  go-eloverblik customer export-masterdata 571313000000000001 --token "$ELO_TOKEN" > masterdata.csv
   go-eloverblik customer export-masterdata 571313000000000001 571313000000000002 --format json --token "$ELO_TOKEN"`,

@@ -123,6 +123,9 @@ The macOS binaries are built with Go 1.27 and so need macOS 13 Ventura or later;
   start with the invisible mark (U+FEFF), so a lookup of `MålepunktsID` found nothing, and
   a quoted first header kept its quotes. A CSV without rows prints `[]` instead of `null`.
   `--format csv` still passes the API's bytes through unchanged, mark included.
+- `export-timeseries`, `export-masterdata` and `export-charges` with `--format json` drop
+  the white space after a header or a value too, not only before it. The exports send
+  every `MålepunktsID` with a tab before it, which the JSON never held.
 
 ### Deprecated
 

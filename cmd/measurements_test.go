@@ -461,6 +461,17 @@ func TestExportCmdsFormatJSON(t *testing.T) {
 			csv:  "\uFEFFMålepunktsID;Mængde\n",
 			want: `[]`,
 		},
+		{
+			// The live exports send every MålepunktsID with a tab before it
+			name: "trims the white space around a value",
+			csv:  "\uFEFFMålepunktsID;Mængde\n\t571313000000000003\t;\t0,198 ",
+			want: `[{"MålepunktsID":"571313000000000003","Mængde":"0,198"}]`,
+		},
+		{
+			name: "trims the white space after a header",
+			csv:  "\uFEFFMålepunktsID\t;Mængde \n571313000000000003;0,198",
+			want: `[{"MålepunktsID":"571313000000000003","Mængde":"0,198"}]`,
+		},
 	}
 
 	for _, command := range []string{"export-timeseries", "export-masterdata"} {
