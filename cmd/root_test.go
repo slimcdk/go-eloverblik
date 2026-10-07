@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -168,9 +169,16 @@ func TestCommandsThatNeedNoToken(t *testing.T) {
 // TestCommandsRejectMissingToken covers the commands that use --token. cobra no longer
 // checks for it, so each must refuse to run without one, and say why, before it builds a
 // client.
+//
+// It must never reach Eloverblik, not even once that check is gone. The customer and
+// thirdparty commands check the token in their group's PersistentPreRunE, which builds a
+// real client once the check passes, and the command that runs next would send a request
+// with it. So the test makes each of them fail instead of running. A fake client would
+// not do: the PersistentPreRunE skips the check when a client is already set. The token
+// command checks the token in its own RunE, and makes no request without --data-access,
+// so it runs as it is.
 func TestCommandsRejectMissingToken(t *testing.T) {
 	saved := clientInstance
-	clientInstance = nil
 	t.Cleanup(func() { clientInstance = saved })
 
 	for _, tc := range []struct {
@@ -184,11 +192,32 @@ func TestCommandsRejectMissingToken(t *testing.T) {
 		{"token with an empty token", []string{"token", "--token", ""}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := execute(t, tc.args...)
+			clientInstance = nil
+
+			command, _, err := rootCmd.Find(tc.args)
+			require.NoError(t, err)
+			if command != tokenCmd {
+				failIfRun(t, command)
+			}
+
+			_, err = execute(t, tc.args...)
 			require.EqualError(t, err, `required flag "token" not set`)
 			assert.Nil(t, clientInstance, "no client may be built without a token")
 		})
 	}
+}
+
+// failIfRun makes cmd return an error instead of running, until the test ends, so a
+// command that got past a check it should have failed cannot send a request.
+func failIfRun(t *testing.T, cmd *cobra.Command) {
+	t.Helper()
+
+	run, runE := cmd.Run, cmd.RunE
+	cmd.Run = nil
+	cmd.RunE = func(c *cobra.Command, _ []string) error {
+		return fmt.Errorf("%s ran, so it would have sent a request", c.CommandPath())
+	}
+	t.Cleanup(func() { cmd.Run, cmd.RunE = run, runE })
 }
 
 func TestPrintResponseHeadersFlag(t *testing.T) {
