@@ -2,7 +2,7 @@
   "openapi": "3.0.4",
   "info": {
     "title": "Eloverblik.Api.ThirdPartyApi",
-    "description": "\n<p>\n    This API enables third parties to access customers' data from DataHub based on authorization (power of attorney) granted by the customer. To gain access to the API the third party must:\n<p/>\n\n<ul style=\"list-style-type:disc;\">\n    <li>Be registered as a third party to DataHub.</li>\n    <li>Be authorized by use of a token</li>\n</ul>\n\n<p>\n    You can apply for becoming a third party participant here:\n    <a href=\"https://en.energinet.dk/electricity/new-player/how-to-become-a-third-party/\">\n        https://en.energinet.dk/electricity/new-player/how-to-become-a-third-party/\n    </a>\n    / Link to danish version:\n    <a href=\"https://energinet.dk/el/elmarkedet/sadan-bliver-du-tredjepart/\">\n        https://energinet.dk/el/elmarkedet/sadan-bliver-du-tredjepart/\n    </a>\n<p/>\n\n<p>\n    Authentication and authorization are handled by using bearer tokens.\n    To get started you need a refresh token. You can generate a refresh token in the ElOverblik portal after logging in with MitID as a registered third party. The token is a long text string (JWT token), which must be copied and stored for use with the system that needs to access the API.\n    When you have obtained a refresh token, you can access the token endpoint to create a short-lived data access token (valid for 24 hours)\n    The data access token allows you to access the rest of the endpoints below.\n</p>\n\n<p>\n    This API only gives you access to data from active authorizations (powers of attorneys) granted by customers. Data regarding deleted or expired authorizations are not returned.\n</p>\n\n<p>\n    When requesting user authorizations (powers of attorney) from a third-party application via ElOverblik.dk using a \"Power of Attorney\" link, it is recommended to follow the technical reference guide for MitID Integration provided by the Signaturgruppen Broker:\n    <a href=\"https://signaturgruppen-a-s.github.io/signaturgruppen-broker-documentation/idps/app-mitid-integration.html\">https://signaturgruppen-a-s.github.io/signaturgruppen-broker-documentation/idps/app-mitid-integration.html\n    </a>\n</p>\n\n<p>\n    It is possible to set a correlation id in the request header using the 'X-User-Correlation-ID' (with an UUID). When provided this id will follow the request and finally end in the response header. This id can be used for tracking the request. Parallel to this id there is another internally id (Also a UUID), which also is returned in the response header as 'X-Correlation-ID'.\n<p/>\n\n<p>Please be aware that it is only possible to get time series data for the previous 5 years + current year.</p>\n\n<b><p>Please note: Submission of meter readings to DataHub is no longer mandatory since end of 2021. Therefore, data may not be available for all metering points.</p></b>\n\n<h3>1. Limitations</h3>\n<p>At times, we may experience higher loads than our underlying data provider, DataHub, can handle. Therefore we have enforced some limitations on the usage of this API:</p>\n\n<ul style=\"list-style-type:disc;\">\n    <li>Calls to GetToken are restricted to 2 per minute per IP address.</li>\n    <li>The total number of calls per IP address is restricted to 120 per minute.</li>\n    <li>The total number of calls for <b>all</b> users is restricted to 1200 per minute.</li>\n</ul>\n\n<p>If you exceed any one of these limits, you will get an http error 429 - Too many requests.</br>\nIf DataHub is not able to keep up with the demand - even if the above limits are not exceeded - you may get an http error 503 - DataHub unavailable.</p>\n\n<h3>2. Usage recommendations</h3>\n<ul style=\"list-style-type:disc;\">\n    <li>Bundle requests for 10 metering points at a time.</li>\n    <li>Spread out multiple requests over a longer period.</li>\n    <li>Don't request data for periods of several years repeatedly.</li>\n    <li>If you get an error 429 or 503, wait 1min. before retrying.</li>\n    <li>If you get an error, then try to reduce the amount of metering points or reduce the date period of the request.</li>\n    <li>The data access token is active for 24h and should not need to be refreshed more than once a day.</li>\n    <li>If you get an error or timeout on the /thirdpartyapi/api/authorization/authorization/meteringpoints/ then try to switch to /thirdpartyapi/api/authorization/authorization/meteringpointids/ and then split the meteringpoints into smaller bundles before requesting /thirdpartyapi/api/meteringpoint/getdetails</li>\n</ul>\n\n<h3>3. Possible system error codes</h3>\n\n<h4>General Error Codes</h4>\n\n<table>\n    <thead>\n        <tr>\n            <th>Code</th>\n            <th>Name</th>\n            <th>Description</th>\n        </tr>\n    </thead>\n    <tbody>\n        <tr>\n            <td>10000</td>\n            <td>NoError</td>\n            <td>No error – the operation was successful.</td>\n        </tr>\n        <tr>\n            <td>10001</td>\n            <td>WrongNumberOfArguments</td>\n            <td>The number of arguments is incorrect.</td>\n        </tr>\n    </tbody>\n</table>\n\n<h4>Metering Point</h4>\n\n<table>\n    <thead>\n        <tr>\n            <th>Code</th>\n            <th>Name</th>\n            <th>Description</th>\n        </tr>\n    </thead>\n    <tbody>\n        <tr>\n            <td>20000</td>\n            <td>WrongMeteringPointIdOrWebAccessCode</td>\n            <td>Invalid metering point ID or web access code.</td>\n        </tr>\n        <tr>\n            <td>20001</td>\n            <td>MeteringPointBlocked</td>\n            <td>The metering point is blocked.</td>\n        </tr>\n        <tr>\n            <td>20002</td>\n            <td>MeteringPointRelationAlreadyExist</td>\n            <td>Relation to the metering point already exists.</td>\n        </tr>\n        <tr>\n            <td>20003</td>\n            <td>MeteringPointIdNot18CharsLong</td>\n            <td>Metering point ID must be 18 characters long.</td>\n        </tr>\n        <tr>\n            <td>20005</td>\n            <td>MeteringPointAliasTooLong</td>\n            <td>Metering point alias is too long.</td>\n        </tr>\n        <tr>\n            <td>20006</td>\n            <td>WebAccessCodeNot8CharsLong</td>\n            <td>Web access code must be 8 characters long.</td>\n        </tr>\n        <tr>\n            <td>20007</td>\n            <td>WebAccessCodeContainsIllegalChars</td>\n            <td>Web access code contains invalid characters.</td>\n        </tr>\n        <tr>\n            <td>20008</td>\n            <td>MeteringPointNotFound</td>\n            <td>Metering point not found.</td>\n        </tr>\n        <tr>\n            <td>20009</td>\n            <td>MeteringPointIsChild</td>\n            <td>Metering point is a child point.</td>\n        </tr>\n        <tr>\n            <td>20010</td>\n            <td>RelationNotFound</td>\n            <td>Relation not found.</td>\n        </tr>\n        <tr>\n            <td>20011</td>\n            <td>UnknownError</td>\n            <td>Unknown error occurred.</td>\n        </tr>\n        <tr>\n            <td>20012</td>\n            <td>Unauthorized</td>\n            <td>Unauthorized access.</td>\n        </tr>\n    </tbody>\n</table>\n\n<h4>MeterData</h4>\n\n<table>\n    <thead>\n        <tr>\n            <th>Code</th>\n            <th>Name</th>\n            <th>Description</th>\n        </tr>\n    </thead>\n    <tbody>\n        <tr>\n            <td>30000</td>\n            <td>FromDateIsGreaterThanToday</td>\n            <td>From-date is later than today.</td>\n        </tr>\n        <tr>\n            <td>30001</td>\n            <td>FromDateIsGreaterThanToDate</td>\n            <td>From-date is later than to-date.</td>\n        </tr>\n        <tr>\n            <td>30002</td>\n            <td>ToDateCanNotBeEqualToFromDate</td>\n            <td>To-date cannot be equal to from-date.</td>\n        </tr>\n        <tr>\n            <td>30003</td>\n            <td>ToDateIsGreaterThanToday</td>\n            <td>To-date is later than today.</td>\n        </tr>\n        <tr>\n            <td>30004</td>\n            <td>InvalidDateFormat</td>\n            <td>Invalid date format.</td>\n        </tr>\n        <tr>\n            <td>30005</td>\n            <td>InvalidRequestParameters</td>\n            <td>Invalid request parameters.</td>\n        </tr>\n        <tr>\n            <td>30008</td>\n            <td>RequestedAggregationUnavaliable</td>\n            <td>Requested aggregation is not available.</td>\n        </tr>\n        <tr>\n            <td>30011</td>\n            <td>InternalServerError</td>\n            <td>Internal server error.</td>\n        </tr>\n    </tbody>\n</table>\n\n<h4>Authorization</h4>\n\n<table>\n    <thead>\n        <tr>\n            <th>Code</th>\n            <th>Name</th>\n            <th>Description</th>\n        </tr>\n    </thead>\n    <tbody>\n        <tr>\n            <td>40000</td>\n            <td>InvalidCVR</td>\n            <td>Invalid CVR number.</td>\n        </tr>\n        <tr>\n            <td>40001</td>\n            <td>InvalidIncludeFutureMeteringPointsRelatedToCVR</td>\n            <td>Invalid parameter for future metering points.</td>\n        </tr>\n        <tr>\n            <td>40002</td>\n            <td>InvalidMasterDataFields</td>\n            <td>Invalid master data fields.</td>\n        </tr>\n        <tr>\n            <td>40003</td>\n            <td>InvalidMeteringPointIds</td>\n            <td>Invalid metering point IDs.</td>\n        </tr>\n        <tr>\n            <td>40004</td>\n            <td>InvalidSignature</td>\n            <td>Invalid signature.</td>\n        </tr>\n        <tr>\n            <td>40005</td>\n            <td>InvalidSignedByNameId</td>\n            <td>Invalid signed-by name ID.</td>\n        </tr>\n        <tr>\n            <td>40006</td>\n            <td>InvalidSignedDate</td>\n            <td>Invalid signed date.</td>\n        </tr>\n        <tr>\n            <td>40007</td>\n            <td>InvalidSignedText</td>\n            <td>Invalid signed text.</td>\n        </tr>\n        <tr>\n            <td>40008</td>\n            <td>InvalidThirdPartyId</td>\n            <td>Invalid third-party ID.</td>\n        </tr>\n        <tr>\n            <td>40009</td>\n            <td>InvalidFromDate</td>\n            <td>Invalid from-date.</td>\n        </tr>\n        <tr>\n            <td>40010</td>\n            <td>InvalidToDate</td>\n            <td>Invalid to-date.</td>\n        </tr>\n        <tr>\n            <td>40011</td>\n            <td>ValidToBeforeValidFrom</td>\n            <td>Valid-to date is before valid-from date.</td>\n        </tr>\n        <tr>\n            <td>40012</td>\n            <td>ValidToOutOfRange</td>\n            <td>Valid-to date is out of range.</td>\n        </tr>\n        <tr>\n            <td>40013</td>\n            <td>ValidFromOutOfRange</td>\n            <td>Valid-from date is out of range.</td>\n        </tr>\n        <tr>\n            <td>40014</td>\n            <td>NoAuthorizationsFound</td>\n            <td>No authorizations found.</td>\n        </tr>\n    </tbody>\n</table>\n\n<h4>Token</h4>\n\n<table>\n    <thead>\n        <tr>\n            <th>Code</th>\n            <th>Name</th>\n            <th>Description</th>\n        </tr>\n    </thead>\n    <tbody>\n        <tr>\n            <td>50000</td>\n            <td>WrongTokenType</td>\n            <td>Invalid token type.</td>\n        </tr>\n        <tr>\n            <td>50001</td>\n            <td>TokenNotValid</td>\n            <td>Token is not valid.</td>\n        </tr>\n        <tr>\n            <td>50002</td>\n            <td>ErrorCreatingToken</td>\n            <td>Error occurred while creating token.</td>\n        </tr>\n        <tr>\n            <td>50003</td>\n            <td>TokenRegistrationFailed</td>\n            <td>Token registration failed.</td>\n        </tr>\n        <tr>\n            <td>50004</td>\n            <td>TokenAlreadyActive</td>\n            <td>Token is already active.</td>\n        </tr>\n        <tr>\n            <td>50005</td>\n            <td>TokenAlreadyDeactivaed</td>\n            <td>Token is already deactivated.</td>\n        </tr>\n    </tbody>\n</table>",
+    "description": "\n<p>\n    This API enables third parties to access customers' data from DataHub based on authorization (power of attorney) granted by the customer. To gain access to the API the third party must:\n<p/>\n\n<ul style=\"list-style-type:disc;\">\n    <li>Be registered as a third party to DataHub.</li>\n    <li>Be authorized by use of a token</li>\n</ul>\n\n<p>\n    You can apply for becoming a third party participant here:\n    <a href=\"https://en.energinet.dk/electricity/new-player/how-to-become-a-third-party/\">\n        https://en.energinet.dk/electricity/new-player/how-to-become-a-third-party/\n    </a>\n    / Link to danish version:\n    <a href=\"https://energinet.dk/el/elmarkedet/sadan-bliver-du-tredjepart/\">\n        https://energinet.dk/el/elmarkedet/sadan-bliver-du-tredjepart/\n    </a>\n<p/>\n\n<p>\n    Authentication and authorization are handled by using bearer tokens.\n    To get started you need a refresh token. You can generate a refresh token in the ElOverblik portal after logging in with MitID as a registered third party. The token is a long text string (JWT token), which must be copied and stored for use with the system that needs to access the API.\n    When you have obtained a refresh token, you can access the token endpoint to create a short-lived data access token (valid for 24 hours)\n    The data access token allows you to access the rest of the endpoints below.\n</p>\n\n<p>\n    This API only gives you access to data from active authorizations (powers of attorneys) granted by customers. Data regarding deleted or expired authorizations are not returned.\n</p>\n\n<p>\n    When requesting user authorizations (powers of attorney) from a third-party application via ElOverblik.dk using a \"Power of Attorney\" link, it is recommended to follow the technical reference guide for MitID Integration provided by the Signaturgruppen Broker:\n    <a href=\"https://signaturgruppen-a-s.github.io/signaturgruppen-broker-documentation/idps/app-mitid-integration.html\">https://signaturgruppen-a-s.github.io/signaturgruppen-broker-documentation/idps/app-mitid-integration.html\n    </a>\n</p>\n\n<p>\n    It is possible to set a correlation id in the request header using the 'X-User-Correlation-ID' (with an UUID). When provided this id will follow the request and finally end in the response header. This id can be used for tracking the request. Parallel to this id there is another internally id (Also a UUID), which also is returned in the response header as 'X-Correlation-ID'.\n<p/>\n\n<p>Please be aware that it is only possible to get time series data for the previous 5 years + current year.</p>\n\n<b><p>Please note: Submission of meter readings to DataHub is no longer mandatory since end of 2021. Therefore, data may not be available for all metering points.</p></b>\n\n<h3>1. Limitations</h3>\n<p>At times, we may experience higher loads than our underlying data provider, DataHub, can handle. Therefore we have enforced some limitations on the usage of this API:</p>\n\n<ul style=\"list-style-type:disc;\">\n    <li>Calls to GetToken are restricted to 2 per minute per IP address.</li>\n    <li>The total number of calls per IP address is restricted to 120 per minute.</li>\n    <li>The total number of calls for <b>all</b> users is restricted to 1200 per minute.</li>\n</ul>\n\n<p>If you exceed any one of these limits, you will get an http error 429 - Too many requests.</br>\nIf DataHub is not able to keep up with the demand - even if the above limits are not exceeded - you may get an http error 503 - DataHub unavailable.</p>\n\n<h3>2. Usage recommendations</h3>\n<ul style=\"list-style-type:disc;\">\n    <li>Bundle requests for 10 metering points at a time.</li>\n    <li>Spread out multiple requests over a longer period.</li>\n    <li>Don't request data for periods of several years repeatedly.</li>\n    <li>If you get an error 429 or 503, wait 1min. before retrying.</li>\n    <li>If you get an error, then try to reduce the amount of metering points or reduce the date period of the request.</li>\n    <li>The data access token is active for 24h and should not need to be refreshed more than once a day.</li>\n    <li>If you get an error or timeout on the /thirdpartyapi/api/authorization/authorization/meteringpoints/ then try to switch to /thirdpartyapi/api/authorization/authorization/meteringpointids/ and then split the meteringpoints into smaller bundles before requesting /thirdpartyapi/api/meteringpoint/getdetails</li>\n</ul>\n\n<h3>3. Possible system error codes</h3>\n\n<h4>General Error Codes</h4>\n\n<table>\n    <thead>\n        <tr>\n            <th>Code</th>\n            <th>Name</th>\n            <th>Description</th>\n        </tr>\n    </thead>\n    <tbody>\n        <tr>\n            <td>10000</td>\n            <td>NoError</td>\n            <td>No error – the operation was successful.</td>\n        </tr>\n        <tr>\n            <td>10001</td>\n            <td>WrongNumberOfArguments</td>\n            <td>The request contains too few or too many arguments. Check the endpoint definition and send exactly the required parameters.</td>\n        </tr>\n    </tbody>\n</table>\n\n<h4>Metering Point</h4>\n\n<table>\n    <thead>\n        <tr>\n            <th>Code</th>\n            <th>Name</th>\n            <th>Description</th>\n        </tr>\n    </thead>\n    <tbody>\n        <tr>\n            <td>20000</td>\n            <td>WrongMeteringPointIdOrWebAccessCode</td>\n            <td>The metering-point ID and web access code could not be validated. Check that both values belong to the same metering point and enter them exactly as issued.</td>\n        </tr>\n        <tr>\n            <td>20001</td>\n            <td>MeteringPointBlocked</td>\n            <td>The metering point is blocked and cannot be linked or queried.</td>\n        </tr>\n        <tr>\n            <td>20002</td>\n            <td>MeteringPointRelationAlreadyExist</td>\n            <td>The metering point is already linked to your account. Use the existing relation instead of creating it again.</td>\n        </tr>\n        <tr>\n            <td>20003</td>\n            <td>MeteringPointIdNot18CharsLong</td>\n            <td>The metering-point ID must contain exactly 18 characters; for example, a 17-digit ID is rejected. Submit the complete ID without leading or trailing spaces.</td>\n        </tr>\n        <tr>\n            <td>20004</td>\n            <td>MeteringpointIdContainsNonDigits</td>\n            <td>The metering-point ID must contain digits only. Remove letters, spaces, hyphens, or other nonnumeric characters.</td>\n        </tr>\n        <tr>\n            <td>20005</td>\n            <td>MeteringPointAliasTooLong</td>\n            <td>The metering-point alias is longer than 50 characters. Shorten the alias and submit it again.</td>\n        </tr>\n        <tr>\n            <td>20006</td>\n            <td>WebAccessCodeNot8CharsLong</td>\n            <td>The web access code must contain exactly 8 characters; for example, a 7- or 9-character code is rejected. Check for missing, extra, or surrounding characters.</td>\n        </tr>\n        <tr>\n            <td>20007</td>\n            <td>WebAccessCodeContainsIllegalChars</td>\n            <td>The web access code may contain letters and digits only. Remove spaces, punctuation, and other symbols.</td>\n        </tr>\n        <tr>\n            <td>20008</td>\n            <td>MeteringPointNotFound</td>\n            <td>No metering point was found for the supplied ID. Check the 18-digit ID and verify that the metering point exists in DataHub.</td>\n        </tr>\n        <tr>\n            <td>20009</td>\n            <td>MeteringPointIsChild</td>\n            <td>The supplied ID identifies a child metering point, which this operation does not support. Use the associated parent metering point.</td>\n        </tr>\n        <tr>\n            <td>20010</td>\n            <td>RelationNotFound</td>\n            <td>Your account has no active relation to the metering point. Obtain authorization before requesting its data.</td>\n        </tr>\n        <tr>\n            <td>20011</td>\n            <td>UnknownError</td>\n            <td>The operation failed because the service received an unexpected error. Retry the request; if it continues to fail, contact support with the correlation ID.</td>\n        </tr>\n        <tr>\n            <td>20012</td>\n            <td>Unauthorized</td>\n            <td>You are not authorized to perform this operation for the metering point. Use a valid access token and ensure that an active authorization exists.</td>\n        </tr>\n        <tr>\n            <td>20013</td>\n            <td>NoValidMeteringPointsInList</td>\n            <td>None of the supplied metering-point IDs is valid. Submit at least one 18-digit ID containing digits only.</td>\n        </tr>\n    </tbody>\n</table>\n\n<h4>MeterData</h4>\n\n<table>\n    <thead>\n        <tr>\n            <th>Code</th>\n            <th>Name</th>\n            <th>Description</th>\n        </tr>\n    </thead>\n    <tbody>\n        <tr>\n            <td>30000</td>\n            <td>FromDateIsGreaterThanToday</td>\n            <td>The start date is in the future; for example, tomorrow is not a valid start date. Set the start date to today or an earlier date.</td>\n        </tr>\n        <tr>\n            <td>30001</td>\n            <td>FromDateIsGreaterThanToDate</td>\n            <td>The start date is later than the end date; for example, a start date of 2026-09-05 cannot be combined with an end date of 2026-09-04. Correct or swap the dates.</td>\n        </tr>\n        <tr>\n            <td>30002</td>\n            <td>ToDateCanNotBeEqualToFromDate</td>\n            <td>The start and end dates are identical. Choose an end date that is later than the start date.</td>\n        </tr>\n        <tr>\n            <td>30003</td>\n            <td>ToDateIsGreaterThanToday</td>\n            <td>The end date is later than tomorrow; for example, a date two days from now is rejected. Set the end date to tomorrow or earlier.</td>\n        </tr>\n        <tr>\n            <td>30004</td>\n            <td>InvalidDateFormat</td>\n            <td>The start date or end date could not be parsed. Send both dates in the documented format, for example <code>2026-09-04</code>.</td>\n        </tr>\n        <tr>\n            <td>30005</td>\n            <td>InvalidRequestParameters</td>\n            <td>One or more request parameters are missing, malformed, or inconsistent. Check the endpoint's documented scope, identifier, metering-point IDs, dates, and options.</td>\n        </tr>\n        <tr>\n            <td>30008</td>\n            <td>RequestedAggregationUnavaliable</td>\n            <td>The requested aggregation is not supported. Use one of the documented values: <code>Actual</code>, <code>Quarter</code>, <code>Hour</code>, <code>Day</code>, <code>Month</code>, or <code>Year</code>.</td>\n        </tr>\n        <tr>\n            <td>30010</td>\n            <td>DateNotCoveredByAuthorization</td>\n            <td>The authorization does not cover the entire requested period. Limit the dates to the authorization's validity period or obtain a new authorization that covers them.</td>\n        </tr>\n        <tr>\n            <td>30011</td>\n            <td>AggrationNotValid</td>\n            <td>The aggregation value is invalid. Replace it with a supported value listed by the endpoint, such as <code>Hour</code>, <code>Day</code>, or <code>Month</code>.</td>\n        </tr>\n        <tr>\n            <td>30014</td>\n            <td>PeriodNotAllowed</td>\n            <td>The effective end date is not later than the start date. This can happen when <code>dateFrom</code> is today and <code>dateTo</code> is tomorrow, because future end dates are adjusted to today before data is requested. Choose a start date before today or otherwise ensure that the adjusted end date remains later than the start date.</td>\n        </tr>\n        <tr>\n            <td>30015</td>\n            <td>NoDataAvailable</td>\n            <td>No time-series values were found for the requested period. Try a different or shorter period and verify that readings have been reported for the metering point.</td>\n        </tr>\n        <tr>\n            <td>30016</td>\n            <td>RelationHasExpired</td>\n            <td>The authorization relation expired before or during the requested period. Request dates covered by an active relation or obtain a new authorization.</td>\n        </tr>\n        <tr>\n            <td>30017</td>\n            <td>ToDateCutOff</td>\n            <td>The end date is on or before the oldest supported date. Choose a later period within the previous five years plus the current year.</td>\n        </tr>\n        <tr>\n            <td>30018</td>\n            <td>MeteringPointDataNotAvailableForTheRequestedPeriod</td>\n            <td>Data cannot be retrieved for the requested period. Either the entire period is outside the metering point's available-data period, or <code>dateFrom</code> is before the metering point was registered in DataHub. Set <code>dateFrom</code> to the registration date or later and request a period within the available-data period.</td>\n        </tr>\n    </tbody>\n</table>\n\n<h4>Authorization</h4>\n\n<table>\n    <thead>\n        <tr>\n            <th>Code</th>\n            <th>Name</th>\n            <th>Description</th>\n        </tr>\n    </thead>\n    <tbody>\n        <tr>\n            <td>40000</td>\n            <td>InvalidCVR</td>\n            <td>The CVR is invalid. Submit the authenticated business's 8-digit CVR; private users cannot submit a CVR.</td>\n        </tr>\n        <tr>\n            <td>40001</td>\n            <td>InvalidIncludeFutureMeteringPointsRelatedToCVR</td>\n            <td>The request does not specify whether future metering points related to the CVR are included. Send <code>true</code> or <code>false</code>.</td>\n        </tr>\n        <tr>\n            <td>40002</td>\n            <td>InvalidMasterDataFields</td>\n            <td>One or more requested master-data fields are unknown or unsupported. Check the field names and use only fields documented by the endpoint.</td>\n        </tr>\n        <tr>\n            <td>40003</td>\n            <td>InvalidMeteringPointIds</td>\n            <td>The metering-point ID list is missing or contains invalid values. Supply the required list and ensure that every ID contains exactly 18 digits.</td>\n        </tr>\n        <tr>\n            <td>40004</td>\n            <td>InvalidSignature</td>\n            <td>The supplied signature could not be validated. Recreate the signed payload with the required signing key and send the signature without modification.</td>\n        </tr>\n        <tr>\n            <td>40005</td>\n            <td>InvalidSignedByNameId</td>\n            <td>The signer identity is missing or invalid. Include the authenticated signer's name ID in <code>SignedByNameId</code>.</td>\n        </tr>\n        <tr>\n            <td>40006</td>\n            <td>InvalidSignedDate</td>\n            <td>The signing date is invalid. Use today's UTC date, or let the API populate the authenticated signing date.</td>\n        </tr>\n        <tr>\n            <td>40007</td>\n            <td>InvalidSignedText</td>\n            <td>The signed authorization text is missing, empty, or cannot be decoded. Send the complete signed text in the required encoded format.</td>\n        </tr>\n        <tr>\n            <td>40008</td>\n            <td>InvalidThirdPartyId</td>\n            <td>The third-party ID is missing or invalid. Supply the ID of a registered third party.</td>\n        </tr>\n        <tr>\n            <td>40009</td>\n            <td>InvalidFromDate</td>\n            <td>The valid-from date is missing or cannot be parsed. Send a valid date within the period allowed for the authorization.</td>\n        </tr>\n        <tr>\n            <td>40010</td>\n            <td>InvalidToDate</td>\n            <td>The valid-to date is missing or cannot be parsed. Send a valid date after the valid-from date and within the allowed authorization period.</td>\n        </tr>\n        <tr>\n            <td>40011</td>\n            <td>ValidToBeforeValidFrom</td>\n            <td>The valid-to date is earlier than the valid-from date. Correct or swap the dates so the authorization ends after it begins.</td>\n        </tr>\n        <tr>\n            <td>40012</td>\n            <td>ValidToOutOfRange</td>\n            <td>The valid-to or access-expiry date is outside the allowed range. Check the endpoint's date requirements and choose a date within the allowed range.</td>\n        </tr>\n        <tr>\n            <td>40013</td>\n            <td>ValidFromOutOfRange</td>\n            <td>The valid-from date is outside the allowed range. Check the endpoint's date requirements and choose a date within the allowed range.</td>\n        </tr>\n        <tr>\n            <td>40014</td>\n            <td>NoAuthorizationsFound</td>\n            <td>No active authorization was found for the requested customer or metering point. Obtain authorization or check the authorization ID, customer CVR, or customer key.</td>\n        </tr>\n    </tbody>\n</table>\n\n<h4>Token</h4>\n\n<table>\n    <thead>\n        <tr>\n            <th>Code</th>\n            <th>Name</th>\n            <th>Description</th>\n        </tr>\n    </thead>\n    <tbody>\n        <tr>\n            <td>50000</td>\n            <td>WrongTokenType</td>\n            <td>This endpoint requires a refresh token issued for the Third Party API. Use the correct Third Party API refresh token instead of a data-access or Customer API token.</td>\n        </tr>\n        <tr>\n            <td>50001</td>\n            <td>TokenNotValid</td>\n            <td>The refresh token is invalid or inactive. Generate or activate a valid Third Party API refresh token, then request a new data-access token.</td>\n        </tr>\n        <tr>\n            <td>50002</td>\n            <td>ErrorCreatingToken</td>\n            <td>The service could not create a data-access token. Verify that the refresh token is valid and active, then retry; contact support with the correlation ID if the error persists.</td>\n        </tr>\n        <tr>\n            <td>50003</td>\n            <td>TokenRegistrationFailed</td>\n            <td>The refresh token could not be registered. Retry the registration; if it continues to fail, contact support with the correlation ID.</td>\n        </tr>\n        <tr>\n            <td>50004</td>\n            <td>TokenAlreadyActive</td>\n            <td>The refresh token is already active and does not need to be activated again. Use it to request a data-access token, or activate a different inactive token.</td>\n        </tr>\n        <tr>\n            <td>50005</td>\n            <td>TokenAlreadyDeactivaed</td>\n            <td>The refresh token is already inactive and cannot be deactivated again. Activate it before use, or select another active token.</td>\n        </tr>\n    </tbody>\n</table>",
     "contact": {
       "name": "Datahub support",
       "email": "datahub@energinet.dk"
@@ -279,7 +279,7 @@
           "MeterData"
         ],
         "summary": "Get timeseries",
-        "description": "This request is used for querying time series data for one or more metering points\nfor which access has been granted, for a specified period and with a specified aggregation level.\n            \nPlease note that it is only possible to retrieve time series data for the previous five years plus the current year.",
+        "description": "This request is used for querying time series data for one or more metering points\nfor which access has been granted, for a specified period and with a specified aggregation level.\n            \nPlease note that it is only possible to retrieve time series data for the previous five years plus the current year.\nBy default, only the latest complete access period for each metering point is queried. If multiple historical\naccess periods are enabled by the deployment, the response can contain repeated metering point IDs.\n            \nPossible request-level error codes:\n            \n- `20013`: The request does not contain any valid metering point IDs.\n- `30000`: `dateFrom` is later than today.\n- `30001`: `dateFrom` is later than `dateTo`.\n- `30002`: `dateFrom` and `dateTo` are equal.\n- `30003`: `dateTo` is later than tomorrow.\n- `30004`: `dateFrom` or `dateTo` is not a valid date.\n- `30008`: The requested aggregation is not supported.\n- `30017`: `dateTo` is on or before the earliest supported date.\n            \nA successful HTTP 200 response contains one result per metering point. An individual result can contain\n`20003` or `20004` (invalid metering point ID), `20008` (metering point not found), `20010` (relation not found),\n`20011` (an unexpected error occurred), `30010` (the requested period is not covered by an authorization),\n`30014` (the effective end date is not later than the start date, for example when `dateFrom` is today and `dateTo` is tomorrow because future end dates are adjusted to today),\n`30015` (no data available), `30016` (relation expired),\n`30018` (the entire requested period is outside the metering point's available-data period, or `dateFrom` is before the metering point was registered in DataHub),\nor `40014` (no authorization found).",
         "parameters": [
           {
             "name": "dateFrom",
@@ -348,6 +348,21 @@
               }
             }
           },
+          "400": {
+            "description": "One or more request parameters are missing or invalid, such as the date range, aggregation, or metering point list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "401": {
             "description": "If you do not have access",
             "content": {
@@ -372,7 +387,7 @@
           "MeteringPoint"
         ],
         "summary": "Get metering point details",
-        "description": "This request is used for querying details (master data) for one or more metering points (for which access has been granted).",
+        "description": "This request is used for querying details (master data) for one or more metering points (for which access has been granted).\nBy default, master data is queried using the latest complete access period for each metering point. A deployment\ncan enable canonical multiple-period behavior for compatibility.",
         "parameters": [
           {
             "name": "api-version",
@@ -482,6 +497,87 @@
           },
           "401": {
             "description": "If you do not have access to one or more of the listed metering point id(s)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/thirdpartyapi/api/meteringpoint/getchargelinkswithcharges": {
+      "post": {
+        "tags": [
+          "MeteringPoint"
+        ],
+        "summary": "Get charge links with charges",
+        "description": "This request is used for querying charge links, charge information, and charge series for one or more\nmetering points and date intervals for which access has been granted.",
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string",
+              "default": "1.0"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetChargeLinksWithChargesRequest"
+              }
+            },
+            "application/xml": {
+              "schema": {
+                "$ref": "#/components/schemas/GetChargeLinksWithChargesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "When successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetChargeLinksWithChargesResponseApiResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetChargeLinksWithChargesResponseApiResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "If you do not have access to one or more of the listed metering point id(s)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "When the Charges integration feature is disabled",
             "content": {
               "application/json": {
                 "schema": {
@@ -632,6 +728,145 @@
         "additionalProperties": false,
         "description": "Used as the 'root' class for all responses returned from the public API's. We need these to have a 'root' when the result is transformed to XML"
       },
+      "ChargeIdentifierDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "owner": {
+            "type": "string",
+            "nullable": true
+          },
+          "type": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChargeInformationDto": {
+        "type": "object",
+        "properties": {
+          "chargeIdentifier": {
+            "$ref": "#/components/schemas/ChargeIdentifierDto"
+          },
+          "taxIndicator": {
+            "type": "boolean"
+          },
+          "resolution": {
+            "type": "string",
+            "nullable": true
+          },
+          "pricingCategory": {
+            "type": "string",
+            "nullable": true
+          },
+          "chargeInformationPeriods": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChargeInformationPeriodDto"
+            },
+            "nullable": true
+          },
+          "chargeSeriesPoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChargeSeriesPointDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChargeInformationPeriodDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "transparentInvoicing": {
+            "type": "boolean"
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "vatClassification": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChargeLinkDto": {
+        "type": "object",
+        "properties": {
+          "meteringPointId": {
+            "type": "string",
+            "nullable": true
+          },
+          "chargeIdentifier": {
+            "$ref": "#/components/schemas/ChargeIdentifierDto"
+          },
+          "chargeLinkPeriods": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChargeLinkPeriodDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChargeLinkPeriodDto": {
+        "type": "object",
+        "properties": {
+          "factor": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChargeSeriesPointDto": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "price": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
       "ChildMeteringPointDto": {
         "type": "object",
         "properties": {
@@ -769,6 +1004,88 @@
         },
         "additionalProperties": false
       },
+      "GetChargeLinksWithChargesQueryItem": {
+        "type": "object",
+        "properties": {
+          "meteringPointId": {
+            "type": "string",
+            "nullable": true
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GetChargeLinksWithChargesRequest": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GetChargeLinksWithChargesQueryItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "GetChargeLinksWithChargesResponse": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GetChargeLinksWithChargesResultDto"
+            },
+            "nullable": true
+          },
+          "chargeInformations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChargeInformationDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "GetChargeLinksWithChargesResponseApiResponse": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "$ref": "#/components/schemas/GetChargeLinksWithChargesResponse"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Used as the 'root' class for all responses returned from the public API's. We need these to have a 'root' when the result is transformed to XML"
+      },
+      "GetChargeLinksWithChargesResultDto": {
+        "type": "object",
+        "properties": {
+          "meteringPointId": {
+            "type": "string",
+            "nullable": true
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "chargeLinks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChargeLinkDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "MarketEvaluationMeteringPoint": {
         "type": "object",
         "properties": {
@@ -797,6 +1114,11 @@
       "MeteringPointChargeDto": {
         "type": "object",
         "properties": {
+          "priceId": {
+            "type": "string",
+            "description": "Identifier of the price/charge type.",
+            "nullable": true
+          },
           "name": {
             "type": "string",
             "description": "Name of the fee.",
@@ -929,7 +1251,7 @@
           },
           "typeOfMP": {
             "type": "string",
-            "description": "Specifies the type of metering point.\n            \nPossible values:\n            \nD01 (VE Production), D02 (Analysis), D04 (Surplus production group 6), D05 (Net production),\nD06 (Supply to grid), D07 (Consumption from grid), D08 (Wholesale services), D09 (Own production),\nD10 (Net from grid), D11 (Net to grid), D12 (Total consumption), D14 (Electrical heating),\nD15 (Net consumption), D17 (Other consumption), D18 (Other production), D99 (Internal use),\nE17 (Consumption measurement point), E18 (Production measurement point).",
+            "description": "Specifies the type of metering point.\n            \nPossible values:\n            \nD01 (VE Production), D02 (Analysis), D04 (Surplus production group 6), D05 (Net production),\nD06 (Supply to grid), D07 (Consumption from grid), D08 (Wholesale services), D09 (Own production),\nD10 (Net from grid), D11 (Net to grid), D12 (Total consumption), D14 (Electrical heating),\nD15 (Net consumption), D17 (Other consumption), D18 (Other production), D19 (Capacity Settlement), D99 (Internal use),\nE17 (Consumption measurement point), E18 (Production measurement point).",
             "nullable": true
           },
           "energyTimeSeriesMeasureUnit": {
@@ -1244,6 +1566,11 @@
       "MeteringPointTariffDto": {
         "type": "object",
         "properties": {
+          "priceId": {
+            "type": "string",
+            "description": "Identifier of the price/charge type.",
+            "nullable": true
+          },
           "name": {
             "type": "string",
             "description": "Name of the fee.",
@@ -1607,7 +1934,7 @@
             "nullable": true
           }
         },
-        "additionalProperties": {}
+        "additionalProperties": { }
       },
       "StringApiResponse": {
         "type": "object",
@@ -1682,7 +2009,7 @@
   },
   "security": [
     {
-      "Bearer": []
+      "Bearer": [ ]
     }
   ],
   "tags": [

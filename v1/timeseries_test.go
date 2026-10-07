@@ -11,6 +11,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetTimeSeries(t *testing.T) {
@@ -77,14 +78,139 @@ func TestGetTimeSeries(t *testing.T) {
 		timeSeries, err := c.GetTimeSeries(meteringPointIDs, from, to, aggregation)
 
 		// Assertions
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, timeSeries, 1)
 		assert.Len(t, timeSeries[0].MyEnergyDataMarketDocument.TimeSeries, 1)
 		assert.Equal(t, "571313180100000001", timeSeries[0].MyEnergyDataMarketDocument.TimeSeries[0].MRID)
 		assert.Len(t, timeSeries[0].MyEnergyDataMarketDocument.TimeSeries[0].Periods[0].Points, 1)
 		assert.Equal(t, 1, timeSeries[0].MyEnergyDataMarketDocument.TimeSeries[0].Periods[0].Points[0].Position)
-		assert.Equal(t, 0.123, timeSeries[0].MyEnergyDataMarketDocument.TimeSeries[0].Periods[0].Points[0].OutQuantityQuantity)
+		assert.InDelta(t, 0.123, timeSeries[0].MyEnergyDataMarketDocument.TimeSeries[0].Periods[0].Points[0].OutQuantityQuantity, 1e-9)
 	})
+}
+
+// TestGetTimeSeriesErrorCodes covers the error codes Energinet documented for time series
+// alongside DataHub 3.0. A request that fails as a whole must map to the code's sentinel,
+// not to an "unhandled error".
+func TestGetTimeSeriesErrorCodes(t *testing.T) {
+	mockResty := resty.New()
+	httpmock.ActivateNonDefault(mockResty.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	c := &client{
+		accessToken: "test-access-token",
+		resty:       mockResty,
+	}
+
+	from := time.Date(2026, 9, 1, 0, 0, 0, 0, cph)
+	to := time.Date(2026, 9, 2, 0, 0, 0, 0, cph)
+	url := fmt.Sprintf("/meterdata/gettimeseries/%s/%s/%s", from.Format(time.DateOnly), to.Format(time.DateOnly), Day)
+
+	tests := []struct {
+		body string
+		want error
+	}{
+		{`"[30015] NoDataAvailable"`, ErrorNoDataAvailable},
+		{`"[30016] RelationHasExpired"`, ErrorRelationHasExpired},
+		{`"[30017] ToDateCutOff"`, ErrorToDateCutOff},
+		{`"[30018] MeteringPointDataNotAvailableForTheRequestedPeriod"`, ErrorMeteringPointDataNotAvailableForTheRequestedPeriod},
+	}
+
+	for _, test := range tests {
+		t.Run(test.body, func(t *testing.T) {
+			httpmock.Reset()
+			httpmock.RegisterResponder("POST", url, func(*http.Request) (*http.Response, error) {
+				resp := httpmock.NewStringResponse(400, test.body)
+				resp.Header.Set("Content-Type", "application/json")
+				return resp, nil
+			})
+
+			_, err := c.GetTimeSeries([]string{"571313180100000001"}, from, to, Day)
+
+			assert.ErrorIs(t, err, test.want)
+		})
+	}
+
+	// Energinet renamed 30014 PeriodNotAllowed. The client named it after the 730 day limit,
+	// which is only one of the two reasons the API rejects a period with it.
+	t.Run("30014 matches both its current and its former name", func(t *testing.T) {
+		httpmock.Reset()
+		httpmock.RegisterResponder("POST", url, func(*http.Request) (*http.Response, error) {
+			resp := httpmock.NewStringResponse(400, `"[30014] PeriodNotAllowed"`)
+			resp.Header.Set("Content-Type", "application/json")
+			return resp, nil
+		})
+
+		_, err := c.GetTimeSeries([]string{"571313180100000001"}, from, to, Day)
+
+		require.ErrorIs(t, err, ErrorPeriodNotAllowed)
+		assert.ErrorIs(t, err, ErrorNumberOfDaysExcceded)
+	})
+}
+
+// TestGetTimeSeriesFailurePerMeteringPoint covers a request that succeeds while some of its
+// metering points fail. The API reports each failure in that metering point's own result,
+// without a market document, which is how 30018 and 40014 arrive in production.
+func TestGetTimeSeriesFailurePerMeteringPoint(t *testing.T) {
+	mockResty := resty.New()
+	httpmock.ActivateNonDefault(mockResty.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	c := &client{
+		accessToken: "test-access-token",
+		resty:       mockResty,
+	}
+
+	from := time.Date(2026, 9, 1, 0, 0, 0, 0, cph)
+	to := time.Date(2026, 9, 2, 0, 0, 0, 0, cph)
+	url := fmt.Sprintf("/meterdata/gettimeseries/%s/%s/%s", from.Format(time.DateOnly), to.Format(time.DateOnly), Day)
+
+	httpmock.RegisterResponder("POST", url, func(*http.Request) (*http.Response, error) {
+		resp := httpmock.NewStringResponse(200, `{
+			"result": [
+				{
+					"MyEnergyData_MarketDocument": {
+						"TimeSeries": [{
+							"mRID": "571313180100000001",
+							"Period": [{
+								"resolution": "PT1D",
+								"timeInterval": {"start": "2026-08-31T22:00:00Z", "end": "2026-09-01T22:00:00Z"},
+								"Point": [{"position": "1", "out_Quantity.quantity": "7.5", "out_Quantity.quality": "A04"}]
+							}]
+						}]
+					},
+					"success": true, "errorCode": 10000, "errorText": "NoError",
+					"id": "571313180100000001", "stackTrace": null
+				},
+				{
+					"MyEnergyData_MarketDocument": null,
+					"success": false, "errorCode": 30018, "errorText": "MeteringPointDataNotAvailableForTheRequestedPeriod",
+					"id": "571313180100000002", "stackTrace": null
+				},
+				{
+					"MyEnergyData_MarketDocument": null,
+					"success": false, "errorCode": 39999, "errorText": "SomethingNew",
+					"id": "571313180100000003", "stackTrace": null
+				}
+			]
+		}`)
+		resp.Header.Set("Content-Type", "application/json")
+		return resp, nil
+	})
+
+	ids := []string{"571313180100000001", "571313180100000002", "571313180100000003"}
+	timeSeries, err := c.GetTimeSeries(ids, from, to, Day)
+
+	require.NoError(t, err)
+	if assert.Len(t, timeSeries, 3) {
+		assert.NoError(t, timeSeries[0].Err())
+
+		assert.ErrorIs(t, timeSeries[1].Err(), ErrorMeteringPointDataNotAvailableForTheRequestedPeriod)
+		assert.EqualError(t, timeSeries[1].Err(),
+			"eloverblik: metering point 571313180100000002: 30018 MeteringPointDataNotAvailableForTheRequestedPeriod")
+
+		// A code the client does not know yet still fails the metering point.
+		assert.EqualError(t, timeSeries[2].Err(), "eloverblik: metering point 571313180100000003: 39999 SomethingNew")
+	}
 }
 
 func TestFlatten(t *testing.T) {
@@ -123,7 +249,7 @@ func TestFlatten(t *testing.T) {
 		// Check first point
 		assert.Equal(t, start.In(cph), flattened[0].From)
 		assert.Equal(t, start.In(cph).Add(1*time.Hour), flattened[0].To)
-		assert.Equal(t, 1.1, flattened[0].Measurement)
+		assert.InDelta(t, 1.1, flattened[0].Measurement, 1e-9)
 		assert.Equal(t, "A04", flattened[0].Quality)
 		assert.Equal(t, "KWH", flattened[0].Unit)
 		assert.Equal(t, Resolution("PT1H"), flattened[0].Resolution)
@@ -131,7 +257,7 @@ func TestFlatten(t *testing.T) {
 		// Check second point
 		assert.Equal(t, start.In(cph).Add(1*time.Hour), flattened[1].From)
 		assert.Equal(t, start.In(cph).Add(2*time.Hour), flattened[1].To)
-		assert.Equal(t, 2.2, flattened[1].Measurement)
+		assert.InDelta(t, 2.2, flattened[1].Measurement, 1e-9)
 		assert.Equal(t, "A03", flattened[1].Quality)
 	})
 }
@@ -294,12 +420,12 @@ func TestExportTimeSeries(t *testing.T) {
 		httpmock.RegisterResponder("POST", path, httpmock.NewStringResponder(200, mockResponse))
 
 		body, err := c.ExportTimeSeries(meteringPointIDs, from, to, aggregation)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, body)
 		defer body.Close()
 
 		content, err := io.ReadAll(body)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, mockResponse, string(content))
 	})
 }

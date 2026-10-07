@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // testToken builds a JWT carrying the given claims. Only the payload matters: the library
@@ -15,7 +16,7 @@ func testToken(t *testing.T, claims map[string]any) string {
 	t.Helper()
 
 	payload, err := json.Marshal(claims)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
 	return header + "." + base64.RawURLEncoding.EncodeToString(payload) + ".c2lnbmF0dXJl"
@@ -28,32 +29,32 @@ func TestParseToken(t *testing.T) {
 		// The refresh token names the role claim "roles".
 		claims, err := ParseToken(testToken(t, map[string]any{
 			"tokenType":         "THIRDPARTYAPI_Refresh",
-			"tokenName":         "christian local testing",
-			"tokenid":           "6ad87f99-d536-41a2-9722-622e94822fba",
+			"tokenName":         "example",
+			"tokenid":           "00000000-0000-0000-0000-000000000001",
 			"webApp":            "ThirdPartyApp",
 			"loginType":         "Certificate",
-			"cvr":               "44341603",
-			"company":           "Styr paa ApS",
-			"userId":            "995172",
-			"tpid":              "5c01496f-ca03-4bdc-88b7-114f8277ea42",
+			"cvr":               "12345678",
+			"company":           "Test Company ApS",
+			"userId":            "123456",
+			"tpid":              "00000000-0000-0000-0000-000000000002",
 			"roles":             "ReadPrivate, ReadBusiness",
 			"iss":               "Energinet",
 			"aud":               "Energinet",
 			"exp":               expiry.Unix(),
-			claimGivenName:      "Christian Silas Skjerning",
-			claimNameIdentifier: "EIA:c004d233-710c-46e3-a9fa-4d787a9e0052",
+			claimGivenName:      "Test User",
+			claimNameIdentifier: "EIA:00000000-0000-0000-0000-000000000003",
 		}))
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "THIRDPARTYAPI_Refresh", claims.TokenType)
-		assert.Equal(t, "christian local testing", claims.TokenName)
-		assert.Equal(t, "6ad87f99-d536-41a2-9722-622e94822fba", claims.TokenID)
-		assert.Equal(t, "Christian Silas Skjerning", claims.Name)
-		assert.Equal(t, "EIA:c004d233-710c-46e3-a9fa-4d787a9e0052", claims.Subject)
-		assert.Equal(t, "Styr paa ApS", claims.Company)
-		assert.Equal(t, "44341603", claims.CVR)
-		assert.Equal(t, "995172", claims.UserID)
-		assert.Equal(t, "5c01496f-ca03-4bdc-88b7-114f8277ea42", claims.ThirdPartyID)
+		assert.Equal(t, "example", claims.TokenName)
+		assert.Equal(t, "00000000-0000-0000-0000-000000000001", claims.TokenID)
+		assert.Equal(t, "Test User", claims.Name)
+		assert.Equal(t, "EIA:00000000-0000-0000-0000-000000000003", claims.Subject)
+		assert.Equal(t, "Test Company ApS", claims.Company)
+		assert.Equal(t, "12345678", claims.CVR)
+		assert.Equal(t, "123456", claims.UserID)
+		assert.Equal(t, "00000000-0000-0000-0000-000000000002", claims.ThirdPartyID)
 		assert.Equal(t, []string{"ReadPrivate", "ReadBusiness"}, claims.Roles)
 		assert.True(t, claims.ExpiresAt.Equal(expiry))
 
@@ -63,7 +64,7 @@ func TestParseToken(t *testing.T) {
 		assert.InDelta(t, 24*time.Hour, claims.ExpiresIn(), float64(time.Minute))
 
 		apiType, err := claims.APIType()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, ThirdPartyApi, apiType)
 	})
 
@@ -74,7 +75,7 @@ func TestParseToken(t *testing.T) {
 			claimRole:   "ReadPrivate, ReadBusiness",
 		}))
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, []string{"ReadPrivate", "ReadBusiness"}, claims.Roles)
 		assert.True(t, claims.IsDataAccessToken())
 		assert.False(t, claims.IsRefreshToken())
@@ -86,10 +87,10 @@ func TestParseToken(t *testing.T) {
 			"exp":       expiry.Unix(),
 		}))
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		apiType, err := claims.APIType()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, CustomerApi, apiType)
 	})
 
@@ -99,9 +100,39 @@ func TestParseToken(t *testing.T) {
 			"exp":       time.Now().Add(-time.Hour).Unix(),
 		}))
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, claims.IsExpired())
 		assert.Zero(t, claims.ExpiresIn())
+	})
+
+	// An exp of null, zero or below names no point in time. It used to be read as the Unix
+	// epoch or earlier, so the token reported itself as expired since 1970.
+	t.Run("exp that names no point in time reads as no expiry", func(t *testing.T) {
+		tests := map[string]any{
+			"null":     nil,
+			"zero":     0,
+			"negative": -1,
+		}
+
+		for name, exp := range tests {
+			t.Run(name, func(t *testing.T) {
+				claims, err := ParseToken(testToken(t, map[string]any{
+					"tokenType": "ThirdPartyApiDataAccess",
+					"exp":       exp,
+				}))
+
+				require.NoError(t, err)
+				assert.True(t, claims.ExpiresAt.IsZero(), "ExpiresAt is %v", claims.ExpiresAt)
+				assert.False(t, claims.IsExpired())
+				assert.Zero(t, claims.ExpiresIn())
+			})
+		}
+	})
+
+	t.Run("token carrying nothing but an exp that names no point in time is rejected", func(t *testing.T) {
+		_, err := ParseToken(testToken(t, map[string]any{"exp": 0}))
+
+		assert.Error(t, err)
 	})
 
 	t.Run("unknown token type cannot name its API", func(t *testing.T) {
@@ -110,7 +141,7 @@ func TestParseToken(t *testing.T) {
 			"exp":       expiry.Unix(),
 		}))
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		_, err = claims.APIType()
 		assert.Error(t, err)
 	})
@@ -146,7 +177,7 @@ func TestClientTokenClaims(t *testing.T) {
 
 		claims, err := c.RefreshTokenClaims()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "my token", claims.TokenName)
 		assert.True(t, claims.IsRefreshToken())
 	})

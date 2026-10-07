@@ -32,7 +32,7 @@ type TokenClaims struct {
 
 	// Name is the name of the person the token was issued to.
 	Name string `json:"name,omitempty"`
-	// Subject identifies the token owner, e.g. "EIA:c004d233-...".
+	// Subject identifies the token owner, e.g. "EIA:" followed by a UUID.
 	Subject string `json:"subject,omitempty"`
 
 	Company string `json:"company,omitempty"`
@@ -50,7 +50,8 @@ type TokenClaims struct {
 	Audience string `json:"audience,omitempty"`
 
 	// ExpiresAt is when the token stops working. A data access token is short lived; a
-	// refresh token typically lasts a year.
+	// refresh token typically lasts a year. It is zero when the token carries no expiry,
+	// or one that is null, zero or negative.
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
@@ -97,7 +98,7 @@ func ParseToken(token string) (TokenClaims, error) {
 	claims.Audience = rawString(raw, "aud")
 
 	// "ReadPrivate, ReadBusiness" under either of the two role claim names.
-	for _, role := range strings.Split(rawString(raw, "roles", claimRole), ",") {
+	for role := range strings.SplitSeq(rawString(raw, "roles", claimRole), ",") {
 		if role = strings.TrimSpace(role); role != "" {
 			claims.Roles = append(claims.Roles, role)
 		}
@@ -108,7 +109,11 @@ func ParseToken(token string) (TokenClaims, error) {
 		if err := json.Unmarshal(expiry, &seconds); err != nil {
 			return claims, fmt.Errorf("could not parse token expiry: %w", err)
 		}
-		claims.ExpiresAt = time.Unix(seconds, 0).In(cph)
+		// A null, zero or negative exp names no point in time a token could expire at. Read
+		// as a time, it would make the token expired since 1970.
+		if seconds > 0 {
+			claims.ExpiresAt = time.Unix(seconds, 0).In(cph)
+		}
 	}
 
 	if claims.TokenType == "" && claims.ExpiresAt.IsZero() {
@@ -118,7 +123,7 @@ func ParseToken(token string) (TokenClaims, error) {
 	return claims, nil
 }
 
-// rawString returns the first of the given claims that holds a string.
+// rawString returns the first of the given claims that holds a non-empty string.
 func rawString(raw map[string]json.RawMessage, keys ...string) string {
 	for _, key := range keys {
 		value, ok := raw[key]
@@ -138,7 +143,8 @@ func (tc TokenClaims) IsExpired() bool {
 	return !tc.ExpiresAt.IsZero() && !time.Now().Before(tc.ExpiresAt)
 }
 
-// ExpiresIn reports how long the token remains valid. It is zero once expired.
+// ExpiresIn reports how long the token remains valid. It is zero once expired, and also when
+// the token carries no expiry, in which case IsExpired reports false.
 func (tc TokenClaims) ExpiresIn() time.Duration {
 	if tc.ExpiresAt.IsZero() || tc.IsExpired() {
 		return 0
@@ -153,7 +159,7 @@ func (tc TokenClaims) IsRefreshToken() bool {
 }
 
 // IsDataAccessToken reports whether the token is a short lived data access token, i.e.
-// the one the client fetches from /token and sends on every other request.
+// the one the client fetches from /token and sends on every other authenticated request.
 func (tc TokenClaims) IsDataAccessToken() bool {
 	return strings.Contains(strings.ToLower(tc.TokenType), "dataaccess")
 }
@@ -176,8 +182,10 @@ func (c *client) RefreshTokenClaims() (TokenClaims, error) {
 	return ParseToken(c.refreshToken)
 }
 
-// DataAccessTokenClaims decodes the claims of the client's data access token, fetching
-// one first if the client does not hold one yet.
+// DataAccessTokenClaims decodes the claims of the client's data access token. It gets the
+// token from GetDataAccessToken, so it fetches one first if the client does not hold one
+// yet, and may trigger a renewal: when the cached token has expired or expires within
+// five minutes, it sends a /token request for a new one before decoding.
 func (c *client) DataAccessTokenClaims() (TokenClaims, error) {
 	accessToken, err := c.GetDataAccessToken()
 	if err != nil {

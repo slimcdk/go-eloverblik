@@ -36,6 +36,8 @@ func (c *client) AddRelationByID(meteringPointIDs []string) ([]StringResponse, e
 	return result.Result, nil
 }
 
+// AddRelationByWebAccessCode calls an endpoint Energinet retired with DataHub 3.0. It answers
+// 410 Gone, which apiErrorFromBody reports as ErrorEndpointRetired.
 func (c *client) AddRelationByWebAccessCode(meteringPointID, webAccessCode string) (string, error) {
 	if c.apiType != CustomerApi {
 		return "", fmt.Errorf("AddRelationByWebAccessCode is only available for Customer API")
@@ -67,6 +69,8 @@ func (c *client) AddRelationByWebAccessCode(meteringPointID, webAccessCode strin
 	return result.Result, nil
 }
 
+// DeleteRelation calls an endpoint Energinet retired with DataHub 3.0. It answers 410 Gone,
+// which apiErrorFromBody reports as ErrorEndpointRetired, and no longer deletes anything.
 func (c *client) DeleteRelation(meteringPointID string) (bool, error) {
 	if c.apiType != CustomerApi {
 		return false, fmt.Errorf("DeleteRelation is only available for Customer API")

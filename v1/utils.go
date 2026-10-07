@@ -1,5 +1,5 @@
 package eloverblik
 
-func meteringPointIDsToRequestStruct(IDs []string) meteringPointIDs {
-	return meteringPointIDs{MeteringPointID: meteringPointID{MeteringPointIDs: IDs}}
+func meteringPointIDsToRequestStruct(ids []string) meteringPointIDs {
+	return meteringPointIDs{MeteringPointID: meteringPointID{MeteringPointIDs: ids}}
 }

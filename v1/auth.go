@@ -2,6 +2,7 @@ package eloverblik
 
 import (
 	"fmt"
+	"time"
 )
 
 type AuthorizationScope string
@@ -50,7 +51,8 @@ type ThirdPartyMeteringPoint struct {
 	ChildMeteringPoints     []ChildMeteringPoint `json:"childMeteringPoints"`
 }
 
-// Fetches and sets a access token on the base client
+// authenticate exchanges the refresh token for a data access token and caches it on the
+// client. The caller must hold c.tokenMu.
 func (c *client) authenticate() error {
 
 	// Response struct
@@ -86,13 +88,59 @@ func (c *client) authenticate() error {
 	return nil
 }
 
+// dataAccessTokenRenewalMargin is how long before its expiry the cached data access token
+// is replaced, so a request does not set out with a token that expires on the way.
+const dataAccessTokenRenewalMargin = 5 * time.Minute
+
+// GetDataAccessToken implements Client.GetDataAccessToken, which documents its contract.
+// c.tokenMu is held across the /token request, so the goroutines that need a token while
+// one is being fetched wait for that request instead of sending their own, and share its
+// outcome: the token it cached, or the error it failed with.
 func (c *client) GetDataAccessToken() (string, error) {
-	if c.accessToken == "" {
-		if err := c.authenticate(); err != nil {
-			return c.accessToken, err
+	// A /token request that ends after this point is one this call waits for
+	requests := c.tokenRequests.Load()
+	if c.tokenRequestsRead != nil {
+		c.tokenRequestsRead()
+	}
+
+	c.tokenMu.Lock()
+	defer c.tokenMu.Unlock()
+
+	// The request this call waited for failed. Another one now would most likely fail the
+	// same way, and spend one more of the 2 /token calls a minute the API allows
+	if c.tokenRequests.Load() != requests && c.tokenErr != nil {
+		return c.cachedTokenOr(c.tokenErr)
+	}
+
+	if c.accessToken == "" || expiresWithin(c.accessToken, dataAccessTokenRenewalMargin) {
+		c.tokenErr = c.authenticate()
+		c.tokenRequests.Add(1)
+		if c.tokenErr != nil {
+			return c.cachedTokenOr(c.tokenErr)
 		}
 	}
 	return c.accessToken, nil
+}
+
+// cachedTokenOr is the outcome of a /token request that failed with err. A cached token
+// inside the renewal margin still works for a few minutes, so it is returned in place of
+// the error until it has actually expired. The caller must hold c.tokenMu.
+func (c *client) cachedTokenOr(err error) (string, error) {
+	if c.accessToken == "" || expiresWithin(c.accessToken, 0) {
+		return "", err
+	}
+	return c.accessToken, nil
+}
+
+// expiresWithin reports whether the token's exp claim is past or less than margin away. A
+// token without a readable expiry, including one whose exp is null, zero or negative, is
+// treated as not expiring, so the client keeps it and leaves it to the API to reject it.
+func expiresWithin(token string, margin time.Duration) bool {
+	claims, err := ParseToken(token)
+	if err != nil || claims.ExpiresAt.IsZero() {
+		return false
+	}
+	return time.Until(claims.ExpiresAt) < margin
 }
 
 func (c *client) GetAuthorizations() ([]Authorization, error) {

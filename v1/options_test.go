@@ -14,6 +14,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // newTestServer serves responses with a known set of headers for both the token
@@ -69,7 +70,7 @@ func TestWithResponseHeaderOutput(t *testing.T) {
 			name: "parsed call",
 			call: func(t *testing.T, c *client) {
 				accessToken, err := c.GetDataAccessToken()
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, "test-access-token", accessToken)
 			},
 			expected: []string{
@@ -86,12 +87,12 @@ func TestWithResponseHeaderOutput(t *testing.T) {
 			name: "export call streaming the body",
 			call: func(t *testing.T, c *client) {
 				stream, err := c.ExportTimeSeries(meteringPointIDs, from, to, Hour)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, stream)
 				defer func() { _ = stream.Close() }()
 
 				content, err := io.ReadAll(stream)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, exportedCSV, string(content), "the response body must not be consumed by the header printer")
 			},
 			expected: []string{
@@ -133,7 +134,7 @@ func TestWithResponseHeaderOutputDefaults(t *testing.T) {
 		assert.False(t, wrapped, "transport should not be wrapped without the option")
 
 		accessToken, err := c.GetDataAccessToken()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "test-access-token", accessToken)
 	})
 
@@ -148,7 +149,7 @@ func TestWithResponseHeaderOutputDefaults(t *testing.T) {
 		c := newTestCustomer(t, server.URL, WithResponseHeaderOutput(failingWriter{}))
 
 		accessToken, err := c.GetDataAccessToken()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "test-access-token", accessToken)
 	})
 }
@@ -299,8 +300,8 @@ func TestRetryOnlyTransientStatuses(t *testing.T) {
 			_, err := c.GetDataAccessToken()
 			elapsed := time.Since(start)
 
-			assert.Error(t, err)
-			assert.EqualError(t, err, test.expectedError.Error())
+			require.Error(t, err)
+			require.EqualError(t, err, test.expectedError.Error())
 			assert.Equal(t, test.expectedCalls, httpmock.GetTotalCallCount())
 			assert.Less(t, elapsed, time.Second, "the test retry policy must not sleep for the real defaults")
 		})
@@ -316,7 +317,7 @@ func TestRetryRecovers(t *testing.T) {
 
 	token, err := c.GetDataAccessToken()
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "fake-access-token", token)
 	assert.Equal(t, 3, httpmock.GetTotalCallCount())
 }
@@ -339,9 +340,10 @@ func TestWithRetryClampsItsArguments(t *testing.T) {
 		assert.Equal(t, testRetryWait, c.resty.RetryWaitTime)
 	})
 
-	t.Run("re-applying the policy does not stack retry conditions", func(t *testing.T) {
+	t.Run("re-applying the policy does not stack retry conditions or hooks", func(t *testing.T) {
 		c := newMockedCustomer(t, WithRetry(1, testRetryWait), WithoutRetry())
 		assert.Len(t, c.resty.RetryConditions, 1)
+		assert.Len(t, c.resty.RetryHooks, 1, "exactly one hook releasing the bodies of retried attempts")
 		assert.Equal(t, 0, c.resty.RetryCount)
 	})
 }
@@ -359,13 +361,13 @@ func TestRetryAfterHeader(t *testing.T) {
 
 	t.Run("honours a delay in seconds", func(t *testing.T) {
 		wait, err := retryAfter(nil, response("60"))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, time.Minute, wait)
 	})
 
 	t.Run("honours an HTTP-date", func(t *testing.T) {
 		wait, err := retryAfter(nil, response(time.Now().Add(30*time.Second).UTC().Format(http.TimeFormat)))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Greater(t, wait, 25*time.Second)
 		assert.LessOrEqual(t, wait, 30*time.Second)
 	})
@@ -373,7 +375,7 @@ func TestRetryAfterHeader(t *testing.T) {
 	t.Run("falls back to the backoff when the header is unusable", func(t *testing.T) {
 		for _, header := range []string{"", "soon", "0", "-5", "Mon, 02 Jan 2006 15:04:05 GMT"} {
 			wait, err := retryAfter(nil, response(header))
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Zero(t, wait, "an unusable Retry-After (%q) means: use the default backoff", header)
 		}
 	})

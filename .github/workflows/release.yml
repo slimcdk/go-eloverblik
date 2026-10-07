@@ -4,8 +4,9 @@ on:
   push:
     tags:
       - "v*"
-  # Manual dry run: builds the full matrix and renders the changelog without
-  # publishing anything or needing a tag.
+  # Manual dry run: builds the full matrix and the archives without publishing a
+  # release or needing a tag. As a snapshot it renders no changelog and no
+  # release notes.
   workflow_dispatch:
 
 # Least privilege by default: read-only for the whole workflow. Only the job
@@ -33,24 +34,57 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
-          # Exactly the toolchain go.mod requires, so the release binaries are
-          # built by the same Go the tests ran on.
+          # The toolchain line of go.mod, so the release binaries are built by the
+          # same Go the tests ran on.
           go-version-file: go.mod
           cache: true
 
-      - name: Verify module tidiness
+      # Fails if a module zip or directory already in the module cache, which
+      # setup-go restores from the Actions cache, was changed after download, or
+      # if a module's go.mod does not match go.sum. On a cache miss it checks no
+      # module contents. It does not compare go.mod or go.sum with the code: the
+      # next step does that.
+      - name: Verify dependencies
         run: go mod verify
+
+      # Fails, and prints the diff, if go.mod/go.sum are not what `go mod tidy`
+      # would write, so a tag with an untidy module cannot ship. The same check as
+      # the tidy job in test.yml.
+      - name: Check go mod tidy
+        run: go mod tidy -diff
 
       - name: Test
         run: go test -race ./...
 
-  # Real release: only ever runs for a pushed v* tag.
+      # The same 32-bit runs as the test-32bit job in test.yml, so a tag cannot ship
+      # a linux/arm binary whose tests only ever ran as 64-bit code.
+      - name: Test on linux/386
+        env:
+          GOARCH: "386"
+        run: go test ./...
+
+      - name: Install qemu-user
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-user
+
+      - name: Test on linux/arm (ARMv6) under qemu
+        env:
+          GOARCH: arm
+          # Kept in step with goarm in .goreleaser.yaml by hand.
+          GOARM: "6"
+          QEMU_CPU: arm1176
+        run: go test -exec qemu-arm ./...
+
+  # Real release: only ever runs for a pushed v* tag. The event check matters: a
+  # manual run started from a v* tag also has a refs/tags/v* ref, and must stay
+  # a dry run.
   release:
     name: Release
     needs: test
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       # Needed to create the GitHub Release and upload the archives + checksums.
@@ -65,7 +99,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -93,7 +127,7 @@ jobs:
           echo "header=${header}" >> "${GITHUB_OUTPUT}"
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
           args: release --clean --release-header=${{ steps.notes.outputs.header }}
@@ -101,7 +135,8 @@ jobs:
           # The default job token; no PAT and no org secret involved.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Dry run: same build, same changelog, publishes nothing. Stays read-only.
+  # Dry run: same build matrix, as a snapshot (no changelog, no release notes);
+  # publishes nothing. Stays read-only.
   dry-run:
     name: Dry run
     needs: test
@@ -117,25 +152,25 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
 
       - name: Validate GoReleaser configuration
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
           args: check
 
       - name: Build release artifacts (no publish)
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
           args: release --snapshot --clean --skip=publish
 
       - name: Upload dry-run artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-dry-run
           path: |

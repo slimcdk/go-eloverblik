@@ -7,6 +7,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetCharges(t *testing.T) {
@@ -53,7 +54,7 @@ func TestGetCharges(t *testing.T) {
 			})
 
 		result, err := c.GetCustomerCharges(meteringPointIDs)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		assert.IsType(t, []CustomerChargeResponse{}, result)
 		assert.Len(t, result, 1)
@@ -98,7 +99,7 @@ func TestGetCharges(t *testing.T) {
 			})
 
 		result, err := c.GetThirdPartyCharges(meteringPointIDs)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		assert.IsType(t, []ThirdPartyChargeResponse{}, result)
 		assert.Len(t, result, 1)
@@ -116,11 +117,11 @@ func TestGetChargesPriceID(t *testing.T) {
 	httpmock.ActivateNonDefault(mockResty.GetClient())
 	defer httpmock.DeactivateAndReset()
 
-	meteringPointIDs := []string{"571313113162842251"}
+	meteringPointIDs := []string{"571313180100000001"}
 
 	// Trimmed from a live /meteringpoint/getcharges response
 	mockResult := `{
-		"meteringPointId": "571313113162842251",
+		"meteringPointId": "571313180100000001",
 		"subscriptions": [
 			{
 				"price": 28.122861,
@@ -190,7 +191,7 @@ func TestGetChargesPriceID(t *testing.T) {
 			})
 
 		result, err := c.GetCustomerCharges(meteringPointIDs)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		if !assert.Len(t, result, 1) {
 			return
 		}
@@ -227,7 +228,7 @@ func TestGetChargesPriceID(t *testing.T) {
 			})
 
 		result, err := c.GetThirdPartyCharges(meteringPointIDs)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		if !assert.Len(t, result, 1) {
 			return
 		}
@@ -270,7 +271,7 @@ func TestExportCharges(t *testing.T) {
 			httpmock.NewStringResponder(200, mockCSV))
 
 		stream, err := c.ExportCharges(meteringPointIDs)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, stream)
 		defer stream.Close()
 
@@ -288,7 +289,7 @@ func TestExportCharges(t *testing.T) {
 		}
 
 		_, err := c.ExportCharges(meteringPointIDs)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "only available for Customer API")
 	})
 }

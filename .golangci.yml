@@ -2,11 +2,23 @@ version: "2"
 run:
   modules-download-mode: readonly
   tests: true
+  # Lint v1/live_test.go too. Linting compiles it but never runs it, so nothing reaches
+  # Eloverblik; only go test -tags live runs it.
+  build-tags:
+    - live
 linters:
   enable:
+    - errorlint # errors compared with == or formatted with %v instead of wrapped
+    - gocritic
     - gosec
     - misspell
+    - modernize # what go fix proposes, kept from creeping back in
+    - nilnesserr
+    - nolintlint
     - revive
+    - testifylint # error assertions with require, so a failed one stops the test
+    - unconvert
+    - usestdlibvars
   settings:
     errcheck:
       check-type-assertions: false

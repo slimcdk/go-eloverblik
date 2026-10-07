@@ -23,9 +23,17 @@ func ErrorClientConnection(status int) error {
 //     "traceId":"00-9c48...-01"}. Both OpenAPI specs declare it for 400, 401, 403 and 404,
 //     and it is what a request to an endpoint that is not deployed actually comes back with.
 //
-// Only one of the two is ever set. Unmarshalling never fails: a body that cannot be read
-// is left empty and judged by its HTTP status, rather than making resty log a warning and
-// drop the response on the floor.
+// Only one of the two is ever set. UnmarshalJSON itself never fails: a body it has no use
+// for is left empty and judged by its HTTP status.
+//
+// What reaches UnmarshalJSON depends on the call. In a parsed call resty decodes the body:
+// one with a non-JSON Content-Type never reaches UnmarshalJSON, and one that is not
+// well-formed JSON (empty, truncated, HTML) under a JSON Content-Type fails in
+// encoding/json before UnmarshalJSON runs; resty then logs a "Cannot unmarshal response
+// body" warning. Either way the error is judged by its HTTP status. exportBody instead
+// hands the body of every failed export to UnmarshalJSON itself, whatever its
+// Content-Type, so there a body that is not well-formed JSON does reach UnmarshalJSON,
+// and is left empty.
 type apiErrorBody struct {
 	// Message is the API error message when the body is a bare JSON string.
 	Message string
@@ -80,8 +88,9 @@ func (b *apiErrorBody) UnmarshalJSON(data []byte) error {
 // It keeps the parts worth having: the status, the title, the detail and the trace ID -
 // Energinet support asks for the trace ID, so it must reach the caller.
 //
-// Where the document does carry a known API error code, and for the statuses that have a
-// sentinel of their own, APIError unwraps to that sentinel, so errors.Is keeps working:
+// Where the document carries an API error code the client has a sentinel for, APIError
+// unwraps to that sentinel; otherwise it unwraps to the sentinel of its status, for the
+// statuses that have one. Either way errors.Is keeps working:
 //
 //	var apiErr *eloverblik.APIError
 //	if errors.As(err, &apiErr) {
@@ -92,8 +101,10 @@ type APIError struct {
 	// precedence over the one the response arrived with, they only ever differ if the API
 	// contradicts itself.
 	StatusCode int
-	// Code is the API error code, e.g. 20010. Zero when the document carries none, which is
-	// the usual case.
+	// Code is the API error code the detail opens with, e.g. 30004 out of
+	// "[30004] Invalid date format in request". It is set for a code the client has no
+	// sentinel for too, so a new code can still be told apart. Zero when the detail carries
+	// none, which is the usual case.
 	Code uint64
 	// Type is the URI the problem document identifies the problem type with.
 	Type string
@@ -135,6 +146,9 @@ func (e *APIError) Error() string {
 
 // Unwrap returns the sentinel error the problem maps to, so a caller can keep matching on
 // errors.Is(err, ErrorUnauthorized) no matter which of the two shapes the API answered with.
+// That is the sentinel of Code when the client has one for it, otherwise the sentinel of
+// StatusCode: ErrorUnauthorized for a 401, ErrorEndpointRetired for a 410 and
+// ErrorTooManyRequests for a 429. Any other status unwraps to nil.
 func (e *APIError) Unwrap() error { return e.err }
 
 // newAPIError builds the error a problem document is reported with. statusCode is the
@@ -156,11 +170,12 @@ func newAPIError(problem *problemDetails, statusCode int) *APIError {
 	}
 
 	// A problem document has no field for an API error code, but nothing stops the API from
-	// writing one into the detail. Read it when it is there, so a code keeps mapping to the
-	// sentinel it always mapped to; otherwise fall back to what the status alone tells.
+	// writing one into the detail. Read it when it is there and keep it, whether the client
+	// knows it or not. A code with a sentinel keeps mapping to the sentinel it always mapped
+	// to; any other falls back to what the status alone tells.
 	if code, ok := apiErrorCode(problem.Detail); ok {
-		if sentinel, known := apiErrorMap[code]; known && sentinel != nil {
-			apiErr.Code = code
+		apiErr.Code = code
+		if sentinel := apiErrorMap[code]; sentinel != nil {
 			apiErr.err = sentinel
 			return apiErr
 		}
@@ -205,15 +220,26 @@ func statusSentinel(statusCode int) error {
 		return ErrorTooManyRequests
 	case http.StatusUnauthorized:
 		return ErrorUnauthorized
+	case http.StatusGone:
+		return ErrorEndpointRetired
 	default:
 		return nil
 	}
 }
 
 // apiErrorCode reads the API error code out of a message, e.g. 20010 out of
-// "[20010] Relation not found". ok is false when the message carries no code.
+// "[20010] Relation not found", or 30002 out of "#30002: Period not allowed, ToDate is
+// equal to FromDate.", the form the time series export answers with. ok is false when the
+// message carries no code. A code is exactly five digits, in brackets or after a hash and
+// before a colon: a message that opens with a number of any other length, such as
+// "[20240101] ...", carries no code, rather than one made of its first five digits.
 func apiErrorCode(msg string) (code uint64, ok bool) {
-	if len(msg) < 6 || msg[0] != '[' {
+	if len(msg) < 7 {
+		return 0, false
+	}
+	bracketed := msg[0] == '[' && msg[6] == ']'
+	hashed := msg[0] == '#' && msg[6] == ':'
+	if !bracketed && !hashed {
 		return 0, false
 	}
 
@@ -226,8 +252,8 @@ func apiErrorCode(msg string) (code uint64, ok bool) {
 }
 
 // apiErrorFromBody turns the error body of a response into an error. It is what every
-// request calls: apiErrorBody has already told the two shapes the API answers with apart,
-// and each is reported in the way that keeps the most of it.
+// request except IsAlive calls: apiErrorBody has already told the two shapes the API
+// answers with apart, and each is reported in the way that keeps the most of it.
 func apiErrorFromBody(body apiErrorBody, statusCode int) error {
 
 	// A problem document only ever accompanies a failure. On a success the result body is
@@ -238,6 +264,57 @@ func apiErrorFromBody(body apiErrorBody, statusCode int) error {
 
 	return apiError(body.Message, statusCode)
 }
+
+// Err reports the outcome of a single metering point in a batch response, nil when it
+// succeeded. A batch call only returns an error when the request fails as a whole; a
+// metering point that fails on its own, e.g. with 30018 because the period lies before it
+// was registered in DataHub, is reported in its own result and nowhere else.
+//
+// The error unwraps to the sentinel of its code, so errors.Is works as it does for the
+// call itself. A code the client does not know yet is still an error, just one that
+// matches no sentinel:
+//
+//	for _, ts := range timeSeries {
+//		if err := ts.Err(); err != nil {
+//			log.Printf("skipping: %v", err)
+//			continue
+//		}
+//		process(ts.Flatten())
+//	}
+func (s StatusResponse) Err() error {
+	if s.Success {
+		return nil
+	}
+
+	var sentinel error
+	if s.ErrorCode > 0 {
+		sentinel = apiErrorMap[uint64(s.ErrorCode)]
+	}
+
+	return &itemError{
+		meteringPointID: s.ID,
+		code:            s.ErrorCode,
+		text:            s.ErrorText,
+		err:             sentinel,
+	}
+}
+
+// itemError is the failure of one metering point in a batch response. It unwraps to the
+// sentinel of its code, nil for a code the client does not know.
+type itemError struct {
+	meteringPointID string
+	code            int
+	text            string
+	err             error
+}
+
+// Error renders the failure in one line, e.g.
+// "eloverblik: metering point 571313180100000002: 30018 MeteringPointDataNotAvailableForTheRequestedPeriod".
+func (e *itemError) Error() string {
+	return fmt.Sprintf("eloverblik: metering point %s: %d %s", e.meteringPointID, e.code, e.text)
+}
+
+func (e *itemError) Unwrap() error { return e.err }
 
 func apiError(msg string, statusCode int) error {
 
@@ -252,15 +329,23 @@ func apiError(msg string, statusCode int) error {
 	}
 
 	// API error messages carry the code in their first characters, e.g.
-	// "[20010] Relation not found". A message without one holds nothing to look up.
+	// "[20010] Relation not found". A message without one holds nothing to look up, but
+	// on a status with a sentinel of its own it is that sentinel, said in other words.
 	code, ok := apiErrorCode(msg)
 	if !ok {
+		if sentinel := statusSentinel(statusCode); sentinel != nil {
+			return fmt.Errorf("%w: %s", sentinel, msg)
+		}
 		return fmt.Errorf("failed to parse error in api error message %s", msg)
 	}
 
-	// API Error lookup
+	// A code the client does not know maps to no sentinel of its own, but on a status with a
+	// sentinel of its own it still is that sentinel, so errors.Is keeps matching it.
 	errLookup, known := apiErrorMap[code]
 	if !known {
+		if sentinel := statusSentinel(statusCode); sentinel != nil {
+			return fmt.Errorf("%w: unhandled error: '%s'", sentinel, msg)
+		}
 		return fmt.Errorf("unhandled error: '%s'", msg)
 	}
 
@@ -273,73 +358,91 @@ func apiError(msg string, statusCode int) error {
 }
 
 var (
-	ErrorNoError                                        error = errors.New("no errors")                                                                     // status code 200 - api code 10000
-	ErrorWrongNumberOfArguments                         error = errors.New("wrong number of arguments")                                                     // status code 400 - api code 10001
-	ErrorToManyRequestItems                             error = errors.New("to many request items")                                                         // status code 412 - api code 10002
-	ErrorInternalServerError                            error = errors.New("internal server error")                                                         // status code 500 - api code 10003
-	ErrorMaximumNumberOfMeteringPointsExceeded          error = errors.New("number of metering point exceeds maximum of {max} metering points per request") // status code 429 - api code 10004
+	// ErrorNoError is named after api code 10000, the code the API reports success with.
+	//
+	// Deprecated: never returned; code 10000 maps to no error.
+	ErrorNoError                                        error = errors.New("no errors")                                                                     // api code 10000
+	ErrorWrongNumberOfArguments                         error = errors.New("wrong number of arguments")                                                     // api code 10001
+	ErrorToManyRequestItems                             error = errors.New("to many request items")                                                         // api code 10002
+	ErrorInternalServerError                            error = errors.New("internal server error")                                                         // api code 10003
+	ErrorMaximumNumberOfMeteringPointsExceeded          error = errors.New("number of metering point exceeds maximum of {max} metering points per request") // api code 10004
 	ErrorNoCprConsent                                   error = errors.New("missing consent for CPR lookup")                                                // api code 10007
-	ErrorWrongMeteringPointIdOrWebAccessCode            error = errors.New("invalid meteringpoint ID or webaccess code")                                    // status code 404 - api code 20000
-	ErrorMeteringPointBlocked                           error = errors.New("meteringpoint blocked")                                                         // status code 403 - api code 20001
-	ErrorMeteringPointAlreadyAdded                      error = errors.New("meteringpoint relation already added")                                          // status code 208 - api code 20002
-	ErrorMeteringPointIdNot18CharsLong                  error = errors.New("meteringpoint ID must be 18 characters long")                                   // status code 411 - api code 20003
-	ErrorMeteringpointIdContainsNonDigits               error = errors.New("meteringpoint IDs do not contain digits")                                       // status code 406 - api code 20004
-	ErrorMeteringPointAliasTooLong                      error = errors.New("meteringpoint alias too long")                                                  // status code 416 - api code 20005
-	ErrorWebAccessCodeNot8CharsLong                     error = errors.New("webaccess codes must be 8 characters long")                                     // status code 411 - api code 20006
-	ErrorWebAccessCodeContainsIllegalChars              error = errors.New("webaccess code contains illegal characters")                                    // status code 406 - api code 20007
-	ErrorMeteringPointNotFound                          error = errors.New("meteringpoint not found")                                                       // status code 404 - api code 20008
-	ErrorMeteringPointIsChild                           error = errors.New("meteringpoint can't be child")                                                  // status code 422 - api code 20009
-	ErrorRelationNotFound                               error = errors.New("relation not found")                                                            // status code 404 - api code 20010
-	ErrorUnknownError                                   error = errors.New("unknown erro")                                                                  // status code 500 - api code 20011
-	ErrorUnauthorized                                   error = errors.New("unauthorized access")                                                           // status code 401 - api code 20012
-	ErrorNoValidMeteringPointsInList                    error = errors.New("no meteringpoints in request conforms to valid meteringpoint format")           // status code 400 - api code 20013
-	ErrorFromDateIsGreaterThanToday                     error = errors.New("requested from date is after today")                                            // status code 400 - api code 30000
-	ErrorFromDateIsGreaterThanToDate                    error = errors.New("period not allowed, ToDate is before FromDate")                                 // status code 400 - api code 30001
-	ErrorToDateCanNotBeEqualToFromDate                  error = errors.New("period not allowed, ToDate is equal to FromDat")                                // status code 400 - api code 30002
-	ErrorToDateIsGreaterThanToday                       error = errors.New("requested to date is after today")                                              // status code 400 - api code 30003
-	ErrorInvalidDateFormat                              error = errors.New("invalid date format in request")                                                // status code 400 - api code 30004
-	ErrorInvalidRequestParameters                       error = errors.New("a request parameter is invalid")                                                // status code 400 - api code 30005
-	ErrorAccessToMeteringPointDenied                    error = errors.New("access to meterpoint denied")                                                   // status code 401 - api code 30006
-	ErrorNoMeteringPointDataAviliable                   error = errors.New("no meterpoint data aviliable")                                                  // status code 204 - api code 30007
-	ErrorRequestedAggregationUnavaliable                error = errors.New("requested data aggregation is not supported")                                   // status code 406 - api code 30008
-	ErrorInvalidMeteringpointId                         error = errors.New("requested meteringpoint ID is not valid")                                       // status code 406 - api code 30009
-	ErrorDateNotCoveredByAuthorization                  error = errors.New("requested date not covered by Authorization")                                   // status code 401 - api code 30010
-	ErrorAggrationNotValid                              error = errors.New("requested data aggregation is not supported")                                   // status code 406 - api code 30011
-	ErrorRequestToHuge                                  error = errors.New("request size too large")                                                        // status code 413 - api code 30012
-	ErrorNumberOfDaysExcceded                           error = errors.New("request period exceeds the maximum number of days (730)")                       // status code 400 - api code 30014
-	ErrorInvalidCVR                                     error = errors.New("CVR is invalid")                                                                // status code 403 - api code 40000
-	ErrorInvalidIncludeFutureMeteringPointsRelatedToCVR error = errors.New("requested future meteringpoints related to CVR are invalid")                    // status code 404 - api code 40001
-	ErrorInvalidMasterDataFields                        error = errors.New("invalid master data fields")                                                    // status code 417 - api code 40002
-	ErrorInvalidMeteringPointIds                        error = errors.New("requested meteringpoint IDs are not valid")                                     // status code 406 - api code 40003
-	ErrorInvalidSignature                               error = errors.New("invalid signature")                                                             // status code 403 - api code 40004
-	ErrorInvalidSignedByNameId                          error = errors.New("invalid signed by name I")                                                      // status code 403 - api code 40005
-	ErrorInvalidSignedDate                              error = errors.New("invalid signed date")                                                           // status code 403 - api code 40006
-	ErrorInvalidSignedText                              error = errors.New("invalid signed text")                                                           // status code 403 - api code 40007
-	ErrorInvalidThirdPartyId                            error = errors.New("invalid third party ID. 14/3")                                                  // status code 403 - api code 40008
-	ErrorInvalidValidFrom                               error = errors.New("invalid from date")                                                             // status code 400 - api code 40009
-	ErrorInvalidValidTo                                 error = errors.New("invalid to date")                                                               // status code 400 - api code 40010
-	ErrorValidToBeforeValidFrom                         error = errors.New("requested from date cannot be after requested to date")                         // status code 400 - api code 40011
-	ErrorValidToOutOfRange                              error = errors.New("requested to date is out of range")                                             // status code 400 - api code 40012
-	ErrorValidFromOutOfRange                            error = errors.New("requested from date is out of range")                                           // status code 400 - api code 40013
-	ErrorNoAuthorizationsFound                          error = errors.New("no power of attorneys found")                                                   // status code 400 - api code 40014
-	ErrorWrongTokenType                                 error = errors.New("request used wrong token type")                                                 // status code 406 - api code 50000
-	ErrorTokenNotValid                                  error = errors.New("token is invalid")                                                              // status code 401 - api code 50001
-	ErrorErrorCreatingToken                             error = errors.New("error creating token")                                                          // status code 500 - api code 50002
-	ErrorTokenRegistrationFailed                        error = errors.New("token registration failed")                                                     // status code 500 - api code 50003
-	ErrorTokenAlreadyActive                             error = errors.New("token already active")                                                          // status code 405 - api code 50004
-	ErrorTokenAlreadyDeactivated                        error = errors.New("token already deactived")                                                       // status code 405 - api code 50005
-	ErrorTokenMissingTokenId                            error = errors.New("token do not contain a token id")                                               // status code 401 - api code 50006
-	ErrorThirdPartyNotFound                             error = errors.New("third party not found")                                                         // status code 404 - api code 60000
-	ErrorThirdPartyWasNotCreated                        error = errors.New("third party not created")                                                       // status code 400 - api code 60001
-	ErrorThirdPartyAlreadyExist                         error = errors.New("third party already exist")                                                     // status code 208 - api code 60002
-	ErrorThirdPartyApplictionInPrgress                  error = errors.New("third party application is already in progress")                                // status code 400 - api code 60004
-	ErrorThirdPartyAlreadyExistButIsInactive            error = errors.New("third party already exist but is inactive")                                     // status code 401 - api code 60005
-	ErrorThirdPartyAlreadyExistButIsRevoked             error = errors.New("third party already exist but access is revoked")                               // status code 401 - api code 60006
-	ErrorTooManyRequests                                error = errors.New("too many requests")                                                             // status code 429
+	ErrorWrongMeteringPointIdOrWebAccessCode            error = errors.New("invalid meteringpoint ID or webaccess code")                                    // api code 20000
+	ErrorMeteringPointBlocked                           error = errors.New("meteringpoint blocked")                                                         // api code 20001
+	ErrorMeteringPointAlreadyAdded                      error = errors.New("meteringpoint relation already added")                                          // api code 20002
+	ErrorMeteringPointIdNot18CharsLong                  error = errors.New("meteringpoint ID must be 18 characters long")                                   // api code 20003
+	ErrorMeteringpointIdContainsNonDigits               error = errors.New("meteringpoint IDs do not contain digits")                                       // api code 20004
+	ErrorMeteringPointAliasTooLong                      error = errors.New("meteringpoint alias too long")                                                  // api code 20005
+	ErrorWebAccessCodeNot8CharsLong                     error = errors.New("webaccess codes must be 8 characters long")                                     // api code 20006
+	ErrorWebAccessCodeContainsIllegalChars              error = errors.New("webaccess code contains illegal characters")                                    // api code 20007
+	ErrorMeteringPointNotFound                          error = errors.New("meteringpoint not found")                                                       // api code 20008
+	ErrorMeteringPointIsChild                           error = errors.New("meteringpoint can't be child")                                                  // api code 20009
+	ErrorRelationNotFound                               error = errors.New("relation not found")                                                            // api code 20010
+	ErrorUnknownError                                   error = errors.New("unknown erro")                                                                  // api code 20011
+	ErrorUnauthorized                                   error = errors.New("unauthorized access")                                                           // api code 20012, and HTTP status 401 unless its api code has a sentinel of its own
+	ErrorNoValidMeteringPointsInList                    error = errors.New("no meteringpoints in request conforms to valid meteringpoint format")           // api code 20013
+	ErrorFromDateIsGreaterThanToday                     error = errors.New("requested from date is after today")                                            // api code 30000
+	ErrorFromDateIsGreaterThanToDate                    error = errors.New("period not allowed, ToDate is before FromDate")                                 // api code 30001
+	ErrorToDateCanNotBeEqualToFromDate                  error = errors.New("period not allowed, ToDate is equal to FromDat")                                // api code 30002
+	ErrorToDateIsGreaterThanToday                       error = errors.New("requested to date is after tomorrow")                                           // api code 30003
+	ErrorInvalidDateFormat                              error = errors.New("invalid date format in request")                                                // api code 30004
+	ErrorInvalidRequestParameters                       error = errors.New("a request parameter is invalid")                                                // api code 30005
+	ErrorAccessToMeteringPointDenied                    error = errors.New("access to meterpoint denied")                                                   // api code 30006
+	ErrorNoMeteringPointDataAviliable                   error = errors.New("no meterpoint data aviliable")                                                  // api code 30007
+	ErrorRequestedAggregationUnavaliable                error = errors.New("requested data aggregation is not supported")                                   // api code 30008
+	ErrorInvalidMeteringpointId                         error = errors.New("requested meteringpoint ID is not valid")                                       // api code 30009
+	ErrorDateNotCoveredByAuthorization                  error = errors.New("requested date not covered by Authorization")                                   // api code 30010
+	ErrorAggrationNotValid                              error = errors.New("requested data aggregation is not supported")                                   // api code 30011
+	ErrorRequestToHuge                                  error = errors.New("request size too large")                                                        // api code 30012
+	ErrorInvalidCVR                                     error = errors.New("CVR is invalid")                                                                // api code 40000
+	ErrorInvalidIncludeFutureMeteringPointsRelatedToCVR error = errors.New("requested future meteringpoints related to CVR are invalid")                    // api code 40001
+	ErrorInvalidMasterDataFields                        error = errors.New("invalid master data fields")                                                    // api code 40002
+	ErrorInvalidMeteringPointIds                        error = errors.New("requested meteringpoint IDs are not valid")                                     // api code 40003
+	ErrorInvalidSignature                               error = errors.New("invalid signature")                                                             // api code 40004
+	ErrorInvalidSignedByNameId                          error = errors.New("invalid signed by name I")                                                      // api code 40005
+	ErrorInvalidSignedDate                              error = errors.New("invalid signed date")                                                           // api code 40006
+	ErrorInvalidSignedText                              error = errors.New("invalid signed text")                                                           // api code 40007
+	ErrorInvalidThirdPartyId                            error = errors.New("invalid third party ID. 14/3")                                                  // api code 40008
+	ErrorInvalidValidFrom                               error = errors.New("invalid from date")                                                             // api code 40009
+	ErrorInvalidValidTo                                 error = errors.New("invalid to date")                                                               // api code 40010
+	ErrorValidToBeforeValidFrom                         error = errors.New("requested from date cannot be after requested to date")                         // api code 40011
+	ErrorValidToOutOfRange                              error = errors.New("requested to date is out of range")                                             // api code 40012
+	ErrorValidFromOutOfRange                            error = errors.New("requested from date is out of range")                                           // api code 40013
+	ErrorNoAuthorizationsFound                          error = errors.New("no power of attorneys found")                                                   // api code 40014
+	ErrorWrongTokenType                                 error = errors.New("request used wrong token type")                                                 // api code 50000
+	ErrorTokenNotValid                                  error = errors.New("token is invalid")                                                              // api code 50001
+	ErrorErrorCreatingToken                             error = errors.New("error creating token")                                                          // api code 50002
+	ErrorTokenRegistrationFailed                        error = errors.New("token registration failed")                                                     // api code 50003
+	ErrorTokenAlreadyActive                             error = errors.New("token already active")                                                          // api code 50004
+	ErrorTokenAlreadyDeactivated                        error = errors.New("token already deactived")                                                       // api code 50005
+	ErrorTokenMissingTokenId                            error = errors.New("token do not contain a token id")                                               // api code 50006
+	ErrorThirdPartyNotFound                             error = errors.New("third party not found")                                                         // api code 60000
+	ErrorThirdPartyWasNotCreated                        error = errors.New("third party not created")                                                       // api code 60001
+	ErrorThirdPartyAlreadyExist                         error = errors.New("third party already exist")                                                     // api code 60002
+	ErrorThirdPartyApplictionInPrgress                  error = errors.New("third party application is already in progress")                                // api code 60004
+	ErrorThirdPartyAlreadyExistButIsInactive            error = errors.New("third party already exist but is inactive")                                     // api code 60005
+	ErrorThirdPartyAlreadyExistButIsRevoked             error = errors.New("third party already exist but access is revoked")                               // api code 60006
+	ErrorTooManyRequests                                error = errors.New("too many requests")                                                             // HTTP status 429 unless its api code has a sentinel of its own
+	ErrorEndpointRetired                                error = errors.New("endpoint retired by Energinet")                                                 // HTTP status 410 unless its api code has a sentinel of its own
+
+	// The time series codes Energinet documented alongside DataHub 3.0. 30017 fails the request
+	// as a whole; 30015, 30016 and 30018 are reported per metering point, inside an otherwise
+	// successful response; 30014 arrives either way.
+	ErrorPeriodNotAllowed                                   error = errors.New("period not allowed, longer than 730 days or ToDate not after FromDate") // request as a whole or per metering point - api code 30014
+	ErrorNoDataAvailable                                    error = errors.New("no data available for the requested period")                            // per metering point - api code 30015
+	ErrorRelationHasExpired                                 error = errors.New("relation expired before or during the requested period")                // per metering point - api code 30016
+	ErrorToDateCutOff                                       error = errors.New("requested to date is on or before the oldest supported date")           // request as a whole - api code 30017
+	ErrorMeteringPointDataNotAvailableForTheRequestedPeriod error = errors.New("metering point data is not available for the requested period")         // per metering point - api code 30018
+
+	// ErrorNumberOfDaysExcceded is the former name of ErrorPeriodNotAllowed, and the same error.
+	//
+	// Deprecated: Energinet names 30014 PeriodNotAllowed, and a period longer than 730 days is
+	// only one of the two reasons the API rejects a period with it. Use ErrorPeriodNotAllowed.
+	ErrorNumberOfDaysExcceded error = ErrorPeriodNotAllowed
 )
 
 var apiErrorMap = map[uint64]error{
-	10000: nil, //ErrorNoError,
+	10000: nil, // NoError: success maps to no sentinel
 	10001: ErrorWrongNumberOfArguments,
 	10002: ErrorToManyRequestItems,
 	10003: ErrorInternalServerError,
@@ -372,7 +475,11 @@ var apiErrorMap = map[uint64]error{
 	30010: ErrorDateNotCoveredByAuthorization,
 	30011: ErrorAggrationNotValid,
 	30012: ErrorRequestToHuge,
-	30014: ErrorNumberOfDaysExcceded,
+	30014: ErrorPeriodNotAllowed,
+	30015: ErrorNoDataAvailable,
+	30016: ErrorRelationHasExpired,
+	30017: ErrorToDateCutOff,
+	30018: ErrorMeteringPointDataNotAvailableForTheRequestedPeriod,
 	40000: ErrorInvalidCVR,
 	40001: ErrorInvalidIncludeFutureMeteringPointsRelatedToCVR,
 	40002: ErrorInvalidMasterDataFields,

@@ -29,6 +29,7 @@ type MeteringPoints struct {
 	MeterNumber             string                `json:"meterNumber"`
 	ConsumerStartDate       FlexibleTime          `json:"consumerStartDate"`
 	HasRelation             bool                  `json:"hasRelation"`
+	IsMovedOut              bool                  `json:"isMovedOut"` // added alongside DataHub 3.0; Energinet's OpenAPI document declares it without describing it
 	ChildMeteringPoints     []ChildMeteringPoints `json:"childMeteringPoints"`
 }
 
@@ -41,10 +42,22 @@ type ChildMeteringPoints struct {
 }
 
 type MeteringPointDetailsResponse struct {
-	Result MeteringPointDetail `json:"result,omitempty"`
+	Result MeteringPointDetail `json:"result"`
 	StatusResponse
 }
 
+// MeteringPointDetail is the master data of a metering point.
+//
+// Energinet's field descriptions list several of these fields as retired ("udgået"),
+// among others SettlementMethod, ConsumerCategory, MeterReadingOccurrence,
+// EstimatedAnnualVolume, MeterCounterDigits, MeterCounterMultiplyFactor and
+// MeterCounterUnit; and three dates as unavailable for now ("utilgængelig"):
+// ConsumerStartDate, BalanceSupplierStartDate and TaxSettlementDate. Both OpenAPI
+// documents describe MpRelationType as not used, with no value ever returned. Expect all
+// of them to be empty but MeterReadingOccurrence, which the Third-Party API still filled in
+// when checked on 2026-10-07. The balance supplier fields are not shared with a third party
+// through a power of attorney either. See
+// https://docs.eloverblik.dk/docs/guides/metering-point-data-field-descriptions.
 type MeteringPointDetail struct {
 	MeteringPointID                 string               `json:"meteringPointId"`
 	ParentMeteringPointID           string               `json:"parentMeteringPointId"`
@@ -225,9 +238,5 @@ func (c *client) ExportMasterdata(meteringPointIDs []string) (io.ReadCloser, err
 		SetDoNotParseResponse(true).
 		Post("/meteringpoints/masterdata/export")
 
-	if err != nil || !res.IsSuccess() {
-		return nil, fmt.Errorf("failed to export masterdata, status: %s, err: %v", res.Status(), err)
-	}
-
-	return res.RawBody(), nil
+	return exportBody(res, err, "masterdata")
 }

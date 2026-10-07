@@ -66,7 +66,9 @@ type FlatTimeSeriesPoint struct {
 	Resolution   Resolution `json:"resolution"`
 }
 
-// GetTimeSeries fetches meter accumulated meter readings within the given aggregation
+// GetTimeSeries fetches the time series of the given metering points in the interval
+// [from, to), at the given aggregation. from and to are sent as calendar dates in
+// Copenhagen time; the time of day is dropped.
 func (c *client) GetTimeSeries(meteringPointIDs []string, from, to time.Time, aggregation Aggregation) ([]TimeSeries, error) {
 
 	// Ensure access token is fresh
@@ -137,14 +139,18 @@ func (ts *TimeSeries) Flatten() []FlatTimeSeriesPoint {
 // pointInterval returns the half-open [from, to) interval covered by the point at the
 // given 1-based position within a period, in Copenhagen local time.
 //
-// The API sends one period per day for Day, per month for Month and per year for Year,
-// each holding a single point, and one period per day holding 24 points for Hour. A
-// period with a single point therefore takes its interval verbatim, which also keeps a
-// partial period correct — a Year period may cover, say, only April to December.
+// A period with a single point takes its interval verbatim, whatever its resolution. The
+// API sends one such period per day for Day, per month for Month and per year for Year,
+// and taking the stated interval also keeps a partial period correct — a Year period may
+// cover, say, only April to December.
 //
-// Periods with several points step by calendar unit rather than by a fixed duration, so
-// that a day containing a daylight saving transition (23 or 25 hours) and months of
-// unequal length still yield the correct boundaries.
+// When a period holds several points, as the day periods of Hour do, each point steps
+// from the period start by its resolution. Sub-day resolutions (PT15M, PT1H) step by a
+// fixed duration, so on a daylight saving day each of its 23 or 25 hours (92 or 100
+// quarters) lands at its true instant. Day, month and year resolutions step by calendar
+// unit instead, so a day boundary stays at local midnight across a 23 or 25 hour day and
+// months of unequal length still yield the correct boundaries. PXD spreads the points
+// evenly over the period.
 func pointInterval(resolution Resolution, interval TimeInterval, position, points int) (time.Time, time.Time) {
 
 	start := interval.Start.In(cph)
@@ -211,9 +217,5 @@ func (c *client) ExportTimeSeries(meteringPointIDs []string, from, to time.Time,
 		SetDoNotParseResponse(true). // We want the raw response body
 		Post(path)
 
-	if err != nil || !res.IsSuccess() {
-		return nil, fmt.Errorf("failed to export time series, status: %s, err: %v", res.Status(), err)
-	}
-
-	return res.RawBody(), nil
+	return exportBody(res, err, "time series")
 }

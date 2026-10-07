@@ -6,12 +6,12 @@ import (
 )
 
 type CustomerChargeResponse struct {
-	Result CustomerCharges `json:"result,omitempty"`
+	Result CustomerCharges `json:"result"`
 	StatusResponse
 }
 
 type ThirdPartyChargeResponse struct {
-	Result ThirdPartyCharges `json:"result,omitempty"`
+	Result ThirdPartyCharges `json:"result"`
 	StatusResponse
 }
 
@@ -126,9 +126,5 @@ func (c *client) ExportCharges(meteringPointIDs []string) (io.ReadCloser, error)
 		SetDoNotParseResponse(true).
 		Post("/meteringpoints/charges/export")
 
-	if err != nil || !res.IsSuccess() {
-		return nil, fmt.Errorf("failed to export charges, status: %s, err: %v", res.Status(), err)
-	}
-
-	return res.RawBody(), nil
+	return exportBody(res, err, "charges")
 }

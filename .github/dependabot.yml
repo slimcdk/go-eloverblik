@@ -6,6 +6,13 @@
 # and no PR was ever opened to say so. Every ecosystem the repository actually uses
 # is now covered.
 #
+# Maintained by hand: Dependabot updates go.mod and the uses: lines of the
+# workflows, but does not see a version in a run step or in an action input
+# (with:). These pins are such versions, so no PR will ever be opened for them:
+#   - the golangci-lint version (version: input of golangci-lint-action, test.yml)
+#   - the govulncheck pin (go install ...@vX.Y.Z in a run step, security.yml)
+#   - the Go line (go-version: input of setup-go, both jobs in security.yml)
+#
 # Docs: https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
 #       https://containers.dev/guide/dependabot
 
@@ -25,9 +32,11 @@ updates:
       - "dependencies"
       - "go"
     commit-message:
-      # Conventional commits: "fix(deps): bump ..." for runtime dependencies.
+      # Conventional commits: every Go module bump arrives as "fix(deps): bump ...",
+      # including the test-only ones (testify, httpmock). Dependabot supports no
+      # separate prefix for development dependencies of Go modules
+      # (prefix-development does not apply to gomod), so there is nothing to set.
       prefix: "fix"
-      prefix-development: "chore"
       include: "scope"
     groups:
       # Collapse the routine churn into a single PR per week. Major bumps still

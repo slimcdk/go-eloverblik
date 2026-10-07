@@ -1,6 +1,6 @@
 {
 	"name": "Go wrapper for Eloverblik ",
-	"image": "mcr.microsoft.com/devcontainers/go:2-1.25-trixie",
+	"image": "mcr.microsoft.com/devcontainers/go:2-1.27-trixie",
 	"privileged": true,
 	"capAdd": ["SYS_PTRACE"],
 	"securityOpt": ["seccomp=unconfined"],

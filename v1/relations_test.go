@@ -8,6 +8,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAddRelationByID(t *testing.T) {
@@ -39,7 +40,7 @@ func TestAddRelationByID(t *testing.T) {
 
 		responses, err := c.AddRelationByID(meteringPointIDs)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		if assert.Len(t, responses, 1) {
 			assert.True(t, responses[0].Success)
 			assert.Equal(t, "Relation created", responses[0].Result)
@@ -57,7 +58,7 @@ func TestAddRelationByID(t *testing.T) {
 
 		_, err := c.AddRelationByID(meteringPointIDs)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, ErrorWrongMeteringPointIdOrWebAccessCode, err)
 	})
 }
@@ -89,7 +90,7 @@ func TestAddRelationByWebAccessCode(t *testing.T) {
 
 		result, err := c.AddRelationByWebAccessCode(meteringPointID, webAccessCode)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "Relation created", result)
 	})
 }
@@ -120,7 +121,7 @@ func TestDeleteRelation(t *testing.T) {
 
 		success, err := c.DeleteRelation(meteringPointID)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, success)
 	})
 
@@ -137,7 +138,7 @@ func TestDeleteRelation(t *testing.T) {
 
 		success, err := c.DeleteRelation(meteringPointID)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, ErrorRelationNotFound, err)
 		assert.False(t, success)
 	})
@@ -153,7 +154,7 @@ func TestDeleteRelation(t *testing.T) {
 
 		success, err := c.DeleteRelation(meteringPointID)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.False(t, success)
 	})
 
@@ -163,7 +164,72 @@ func TestDeleteRelation(t *testing.T) {
 
 		success, err := c.DeleteRelation(meteringPointID)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.False(t, success)
 	})
+}
+
+// TestRetiredRelationEndpoints covers the two relation endpoints Energinet retired with
+// DataHub 3.0. Both answer 410 Gone, and the specs only say the body is a string, so every
+// shape it can plausibly take must surface as ErrorEndpointRetired. Where the body is a
+// JSON string, what the API said must survive too.
+func TestRetiredRelationEndpoints(t *testing.T) {
+	mockResty := resty.New()
+	httpmock.ActivateNonDefault(mockResty.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	c := &client{
+		accessToken: "test-access-token",
+		resty:       mockResty,
+		apiType:     CustomerApi,
+	}
+
+	calls := []struct {
+		name string
+		call func() error
+	}{
+		{"AddRelationByWebAccessCode", func() error {
+			_, err := c.AddRelationByWebAccessCode("571313180100000001", "ABCD1234")
+			return err
+		}},
+		{"DeleteRelation", func() error {
+			_, err := c.DeleteRelation("571313180100000001")
+			return err
+		}},
+	}
+
+	const message = "Adding metering points with a Web Access Code is no longer supported"
+	bodies := []struct {
+		name        string
+		contentType string
+		body        string
+		keepsText   bool
+	}{
+		{"a JSON string", "application/json", `"` + message + `"`, true},
+		{"plain text", "text/plain", message, false},
+		{"a problem document", "application/problem+json", `{"title":"Gone","status":410,"traceId":"00-abc-def-01"}`, false},
+		{"no body", "", "", false},
+	}
+
+	for _, call := range calls {
+		for _, body := range bodies {
+			t.Run(call.name+" answered with "+body.name, func(t *testing.T) {
+				httpmock.Reset()
+				httpmock.RegisterNoResponder(func(*http.Request) (*http.Response, error) {
+					resp := httpmock.NewStringResponse(http.StatusGone, body.body)
+					if body.contentType != "" {
+						resp.Header.Set("Content-Type", body.contentType)
+					}
+					return resp, nil
+				})
+
+				err := call.call()
+
+				require.ErrorIs(t, err, ErrorEndpointRetired)
+				if body.keepsText {
+					assert.ErrorContains(t, err, message)
+				}
+			})
+		}
+	}
 }

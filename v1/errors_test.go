@@ -2,9 +2,11 @@ package eloverblik
 
 import (
 	"encoding/json"
-	"errors"
+	"net/http"
 	"testing"
 
+	"github.com/go-resty/resty/v2"
+	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -53,7 +55,7 @@ func TestApiErrorBodyUnmarshal(t *testing.T) {
 	t.Run("never fails, so a body it cannot read makes no resty warning", func(t *testing.T) {
 		for _, raw := range []string{`null`, `[]`, `1`, `{`, `"`, ``} {
 			var body apiErrorBody
-			assert.NoError(t, body.UnmarshalJSON([]byte(raw)), "body %q", raw)
+			require.NoError(t, body.UnmarshalJSON([]byte(raw)), "body %q", raw)
 			assert.Empty(t, body.Message, "body %q", raw)
 			assert.Nil(t, body.Problem, "body %q", raw)
 		}
@@ -72,7 +74,7 @@ func TestApiErrorFromBody(t *testing.T) {
 		require.Error(t, err)
 
 		var apiErr *APIError
-		require.True(t, errors.As(err, &apiErr), "a problem document is reported as an *APIError")
+		require.ErrorAs(t, err, &apiErr, "a problem document is reported as an *APIError")
 		assert.Equal(t, 404, apiErr.StatusCode)
 		assert.Equal(t, "Not Found", apiErr.Title)
 		assert.Equal(t, "https://tools.ietf.org/html/rfc9110#section-15.5.5", apiErr.Type)
@@ -96,7 +98,7 @@ func TestApiErrorFromBody(t *testing.T) {
 	t.Run("judges an empty body by its status", func(t *testing.T) {
 		assert.Equal(t, ErrorTooManyRequests, apiErrorFromBody(apiErrorBody{}, 429))
 		assert.Equal(t, ErrorUnauthorized, apiErrorFromBody(apiErrorBody{}, 401))
-		assert.EqualError(t, apiErrorFromBody(apiErrorBody{}, 503), "could't connect to eloverblik: 503")
+		require.EqualError(t, apiErrorFromBody(apiErrorBody{}, 503), "could't connect to eloverblik: 503")
 		assert.NoError(t, apiErrorFromBody(apiErrorBody{}, 200))
 	})
 
@@ -104,14 +106,14 @@ func TestApiErrorFromBody(t *testing.T) {
 		unauthorized := apiErrorFromBody(apiErrorBody{Problem: &problemDetails{
 			Title: "Unauthorized", Status: 401, TraceID: "00-abc-def-01",
 		}}, 401)
-		assert.ErrorIs(t, unauthorized, ErrorUnauthorized, "errors.Is keeps working on both shapes")
+		require.ErrorIs(t, unauthorized, ErrorUnauthorized, "errors.Is keeps working on both shapes")
 
 		var apiErr *APIError
-		require.True(t, errors.As(unauthorized, &apiErr))
+		require.ErrorAs(t, unauthorized, &apiErr)
 		assert.Equal(t, "00-abc-def-01", apiErr.TraceID, "the trace ID survives the wrapping")
 
 		rateLimited := apiErrorFromBody(apiErrorBody{Problem: &problemDetails{Title: "Too Many Requests"}}, 429)
-		assert.ErrorIs(t, rateLimited, ErrorTooManyRequests)
+		require.ErrorIs(t, rateLimited, ErrorTooManyRequests)
 		assert.EqualError(t, rateLimited, "eloverblik: 429 Too Many Requests")
 	})
 
@@ -119,12 +121,38 @@ func TestApiErrorFromBody(t *testing.T) {
 		err := apiErrorFromBody(apiErrorBody{Problem: &problemDetails{
 			Title: "Bad Request", Status: 400, Detail: "[30004] Invalid date format in request",
 		}}, 400)
-		assert.ErrorIs(t, err, ErrorInvalidDateFormat)
+		require.ErrorIs(t, err, ErrorInvalidDateFormat)
 
 		var apiErr *APIError
-		require.True(t, errors.As(err, &apiErr))
+		require.ErrorAs(t, err, &apiErr)
 		assert.Equal(t, uint64(30004), apiErr.Code)
 		assert.EqualError(t, err, "eloverblik: 400 Bad Request: [30004] Invalid date format in request")
+	})
+
+	t.Run("keeps a code in its detail the client has no sentinel for", func(t *testing.T) {
+		tests := []struct {
+			status int
+			detail string
+			code   uint64
+			want   error // the status sentinel, nil for a status without one
+		}{
+			{http.StatusBadRequest, "[99999] A completely new and unknown error", 99999, nil},
+			{http.StatusUnauthorized, "[99999] A completely new and unknown error", 99999, ErrorUnauthorized},
+			{http.StatusGone, "[99999] A completely new and unknown error", 99999, ErrorEndpointRetired},
+			{http.StatusTooManyRequests, "[99999] A completely new and unknown error", 99999, ErrorTooManyRequests},
+			{http.StatusTooManyRequests, "[10000] No error", 10000, ErrorTooManyRequests},
+		}
+
+		for _, test := range tests {
+			err := apiErrorFromBody(apiErrorBody{Problem: &problemDetails{
+				Title: http.StatusText(test.status), Status: test.status, Detail: test.detail,
+			}}, test.status)
+
+			var apiErr *APIError
+			require.ErrorAs(t, err, &apiErr, "status %d, detail %q", test.status, test.detail)
+			assert.Equal(t, test.code, apiErr.Code, "status %d, detail %q", test.status, test.detail)
+			assert.Equal(t, test.want, apiErr.Unwrap(), "status %d, detail %q", test.status, test.detail)
+		}
 	})
 
 	t.Run("does not report a problem document on a successful status", func(t *testing.T) {
@@ -139,11 +167,91 @@ func TestApiErrorCode(t *testing.T) {
 		assert.Equal(t, uint64(20010), code)
 	})
 
+	t.Run("reads the code out of a message that is only the code", func(t *testing.T) {
+		code, ok := apiErrorCode("[30004]")
+		assert.True(t, ok)
+		assert.Equal(t, uint64(30004), code)
+	})
+
+	// The time series export answers with "#NNNNN: message" instead, e.g. when to equals from.
+	t.Run("reads the code out of a message in the export's form", func(t *testing.T) {
+		code, ok := apiErrorCode("#30002: Period not allowed, ToDate is equal to FromDate.")
+		assert.True(t, ok)
+		assert.Equal(t, uint64(30002), code)
+	})
+
 	t.Run("reports no code for a message that carries none", func(t *testing.T) {
-		for _, msg := range []string{"", "no", "Not Found", "Request 20010 failed", "[abcde] nonsense"} {
+		for _, msg := range []string{"", "no", "Not Found", "Request 20010 failed", "[abcde] nonsense", "#abcde: nonsense"} {
 			_, ok := apiErrorCode(msg)
 			assert.False(t, ok, "message %q", msg)
 		}
+	})
+
+	// An API error code is five digits in brackets. A bracketed number of any other length
+	// is something else, such as a date, and its first five digits are no code.
+	t.Run("reports no code for a bracket that does not close after five digits", func(t *testing.T) {
+		for _, msg := range []string{
+			"[123456] Some other number",
+			"[200101] Starts with the digits of a known code",
+			"[20240101] A date",
+			"[2001] Too short",
+			"[20010",
+			"[20010 Relation not found",
+			"#300021: Six digits",
+			"#3000: Four digits",
+			"#30002 No colon",
+			"[30002: Mixed forms",
+			"#30002] Mixed forms",
+		} {
+			code, ok := apiErrorCode(msg)
+			assert.False(t, ok, "message %q", msg)
+			assert.Zero(t, code, "message %q", msg)
+		}
+	})
+}
+
+// TestApiErrorBracketedNumberIsNoCode covers a message that opens with a bracketed number
+// that is not five digits long. Its first five digits were read as a code, so a date could
+// set APIError.Code, and a bare-string message could match the sentinel of a code the API
+// never sent.
+func TestApiErrorBracketedNumberIsNoCode(t *testing.T) {
+	t.Run("a problem document detail sets no code", func(t *testing.T) {
+		for _, detail := range []string{"[123456] Some other number", "[20240101] A date"} {
+			err := apiErrorFromBody(apiErrorBody{Problem: &problemDetails{
+				Title: "Bad Request", Status: http.StatusBadRequest, Detail: detail,
+			}}, http.StatusBadRequest)
+
+			var apiErr *APIError
+			require.ErrorAs(t, err, &apiErr, "detail %q", detail)
+			assert.Zero(t, apiErr.Code, "detail %q", detail)
+			assert.NoError(t, apiErr.Unwrap(), "detail %q", detail)
+		}
+	})
+
+	t.Run("a problem document detail maps to no sentinel of a code it does not carry", func(t *testing.T) {
+		err := apiErrorFromBody(apiErrorBody{Problem: &problemDetails{
+			Title: "Not Found", Status: http.StatusNotFound, Detail: "[200101] Not a relation error",
+		}}, http.StatusNotFound)
+
+		assert.NotErrorIs(t, err, ErrorRelationNotFound)
+	})
+
+	t.Run("a bare-string message maps to no sentinel of a code it does not carry", func(t *testing.T) {
+		const msg = "[200101] Not a relation error"
+
+		err := apiErrorFromBody(apiErrorBody{Message: msg}, http.StatusNotFound)
+
+		require.NotErrorIs(t, err, ErrorRelationNotFound)
+		assert.EqualError(t, err, "failed to parse error in api error message "+msg)
+	})
+
+	t.Run("a bare-string message on a status with a sentinel is that sentinel", func(t *testing.T) {
+		const msg = "[20240101] A date"
+
+		err := apiError(msg, http.StatusUnauthorized)
+
+		require.ErrorIs(t, err, ErrorUnauthorized)
+		assert.EqualError(t, err, ErrorUnauthorized.Error()+": "+msg)
 	})
 }
 
@@ -157,19 +265,19 @@ func TestApiError(t *testing.T) {
 	t.Run("returns correct error for known error code", func(t *testing.T) {
 		// Example error for an invalid metering point ID
 		err := apiError("[20003] Metering point ID must be 18 characters long", 400)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, ErrorMeteringPointIdNot18CharsLong, err)
 	})
 
 	t.Run("returns specific error for unauthorized", func(t *testing.T) {
 		err := apiError("[20012] Unauthorized access", 401)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, ErrorUnauthorized, err)
 	})
 
 	t.Run("returns a formatted error for unknown codes", func(t *testing.T) {
 		err := apiError("[99999] A completely new and unknown error", 400)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unhandled error: '[99999] A completely new and unknown error'")
 	})
 }
@@ -177,13 +285,13 @@ func TestApiError(t *testing.T) {
 func TestErrorClientConnection(t *testing.T) {
 	t.Run("returns formatted connection error", func(t *testing.T) {
 		err := ErrorClientConnection(503)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "could't connect to eloverblik: 503")
 	})
 
 	t.Run("handles different status codes", func(t *testing.T) {
 		err := ErrorClientConnection(404)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "404")
 	})
 }
@@ -245,6 +353,104 @@ func TestApiErrorWithoutMessage(t *testing.T) {
 // not granted consent for CPR lookup. It is what the includeAll=true path runs into.
 func TestApiErrorNoCprConsent(t *testing.T) {
 	err := apiError("[10007] Missing consent for CPR lookup", 403)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Equal(t, ErrorNoCprConsent, err)
+}
+
+// TestStatusSentinelForMessageWithoutCode covers an error message without a "[code]", on a
+// status that has a sentinel of its own. The call must match that sentinel and keep what
+// the API said, rather than read as a message the client failed to parse.
+func TestStatusSentinelForMessageWithoutCode(t *testing.T) {
+	mockResty := resty.New()
+	httpmock.ActivateNonDefault(mockResty.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	c := &client{
+		accessToken: "test-access-token",
+		resty:       mockResty,
+		apiType:     CustomerApi,
+	}
+
+	tests := []struct {
+		status  int
+		message string
+		want    error
+	}{
+		{http.StatusUnauthorized, "The data access token has expired", ErrorUnauthorized},
+		{http.StatusTooManyRequests, "Rate limit exceeded", ErrorTooManyRequests},
+	}
+
+	for _, test := range tests {
+		t.Run(http.StatusText(test.status), func(t *testing.T) {
+			httpmock.Reset()
+			httpmock.RegisterNoResponder(func(*http.Request) (*http.Response, error) {
+				resp := httpmock.NewStringResponse(test.status, `"`+test.message+`"`)
+				resp.Header.Set("Content-Type", "application/json")
+				return resp, nil
+			})
+
+			_, err := c.GetMeteringPointDetails([]string{"571313180100000001"})
+
+			require.ErrorIs(t, err, test.want)
+			assert.ErrorContains(t, err, test.message)
+		})
+	}
+}
+
+// TestStatusSentinelForUnknownCode covers an error message with a "[code]" the client does
+// not know, on a status that has a sentinel of its own. The call must match that sentinel
+// and keep the message, rather than match no sentinel at all; on any other status it still
+// matches none.
+func TestStatusSentinelForUnknownCode(t *testing.T) {
+	mockResty := resty.New()
+	httpmock.ActivateNonDefault(mockResty.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	c := &client{
+		accessToken: "test-access-token",
+		resty:       mockResty,
+		apiType:     CustomerApi,
+	}
+
+	const message = "[99999] A completely new and unknown error"
+
+	respondWith := func(status int) {
+		httpmock.Reset()
+		httpmock.RegisterNoResponder(func(*http.Request) (*http.Response, error) {
+			resp := httpmock.NewStringResponse(status, `"`+message+`"`)
+			resp.Header.Set("Content-Type", "application/json")
+			return resp, nil
+		})
+	}
+
+	statusSentinels := []struct {
+		status int
+		want   error
+	}{
+		{http.StatusUnauthorized, ErrorUnauthorized},
+		{http.StatusGone, ErrorEndpointRetired},
+		{http.StatusTooManyRequests, ErrorTooManyRequests},
+	}
+
+	for _, test := range statusSentinels {
+		t.Run(http.StatusText(test.status), func(t *testing.T) {
+			respondWith(test.status)
+
+			_, err := c.GetMeteringPointDetails([]string{"571313180100000001"})
+
+			require.ErrorIs(t, err, test.want)
+			assert.EqualError(t, err, test.want.Error()+": unhandled error: '"+message+"'")
+		})
+	}
+
+	t.Run("matches no sentinel on a status without one", func(t *testing.T) {
+		respondWith(http.StatusBadRequest)
+
+		_, err := c.GetMeteringPointDetails([]string{"571313180100000001"})
+
+		require.EqualError(t, err, "unhandled error: '"+message+"'")
+		for _, sentinel := range statusSentinels {
+			assert.NotErrorIs(t, err, sentinel.want)
+		}
+	})
 }

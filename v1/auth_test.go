@@ -1,13 +1,17 @@
 package eloverblik
 
 import (
+	"fmt"
 	"net/http"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetDataAccessToken(t *testing.T) {
@@ -38,7 +42,7 @@ func TestGetDataAccessToken(t *testing.T) {
 		token, err := c.GetDataAccessToken()
 
 		// Assertions
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, expectedToken, token)
 		assert.Equal(t, expectedToken, c.accessToken, "Access token should be stored in the client struct")
 	})
@@ -52,10 +56,314 @@ func TestGetDataAccessToken(t *testing.T) {
 		token, err := c.GetDataAccessToken()
 
 		// Assertions
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "already-cached-token", token)
 		assert.Equal(t, 0, httpmock.GetTotalCallCount(), "authenticate() should not be called if token is cached")
 	})
+}
+
+// TestGetDataAccessTokenConcurrent guards the token cache against concurrent use. Every
+// goroutine used to find the cache empty and fetch a token of its own, which raced on the
+// cached token and spent the 2 calls a minute the API allows on /token many times over.
+func TestGetDataAccessTokenConcurrent(t *testing.T) {
+	c := NewThirdParty("test-refresh-token", WithoutRetry()).(*client)
+	httpmock.ActivateNonDefault(c.resty.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	token := dataAccessToken(t, time.Now().Add(24*time.Hour))
+	var tokenCalls atomic.Int32
+	httpmock.RegisterResponder(http.MethodGet, c.resty.BaseURL+"/token",
+		func(*http.Request) (*http.Response, error) {
+			tokenCalls.Add(1)
+			// A slow answer keeps the window open in which an unguarded cache is still empty
+			time.Sleep(20 * time.Millisecond)
+			return httpmock.NewJsonResponse(http.StatusOK, map[string]string{"result": token})
+		})
+	httpmock.RegisterResponder(http.MethodGet, c.resty.BaseURL+"/authorization/authorizations",
+		func(req *http.Request) (*http.Response, error) {
+			if req.Header.Get("Authorization") != "Bearer "+token {
+				return httpmock.NewStringResponse(http.StatusUnauthorized, ""), nil
+			}
+			return httpmock.NewJsonResponse(http.StatusOK, map[string]any{"result": []any{}})
+		})
+
+	const goroutines = 32
+	start := make(chan struct{})
+	errs := make(chan error, goroutines)
+	var wg sync.WaitGroup
+	for i := range goroutines {
+		wg.Go(func() {
+			<-start
+			if i%2 == 0 {
+				_, err := c.GetAuthorizations()
+				errs <- err
+				return
+			}
+			got, err := c.GetDataAccessToken()
+			if err == nil && got != token {
+				err = fmt.Errorf("got data access token %q, want the one /token issued", got)
+			}
+			errs <- err
+		})
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		require.NoError(t, err)
+	}
+	assert.Equal(t, int32(1), tokenCalls.Load(), "one client must fetch its data access token once")
+}
+
+// TestGetDataAccessTokenConcurrentFailure guards the sharing of a /token request that
+// fails. Only its token used to be shared: once it had failed, each goroutine that had
+// waited for it sent a /token request of its own in turn, spending the 2 calls a minute
+// the API allows on requests bound to fail the same way.
+func TestGetDataAccessTokenConcurrentFailure(t *testing.T) {
+	fresh := dataAccessToken(t, time.Now().Add(24*time.Hour))
+	expiring := dataAccessToken(t, time.Now().Add(2*time.Minute))
+
+	tests := []struct {
+		name   string
+		cached string
+		want   string
+		err    error
+	}{
+		{
+			name: "without a cached token every goroutine gets the error",
+			err:  ErrorTooManyRequests,
+		},
+		{
+			name:   "with a cached token that has not expired every goroutine gets that token",
+			cached: expiring,
+			want:   expiring,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c := NewThirdParty("test-refresh-token", WithoutRetry()).(*client)
+			httpmock.ActivateNonDefault(c.resty.GetClient())
+			defer httpmock.DeactivateAndReset()
+			c.accessToken = test.cached
+
+			const goroutines = 32
+			var calling sync.WaitGroup
+			calling.Add(goroutines)
+
+			// /token fails until the goroutines are done, and succeeds after that
+			var failing atomic.Bool
+			failing.Store(true)
+			var tokenCalls atomic.Int32
+			httpmock.RegisterResponder(http.MethodGet, c.resty.BaseURL+"/token",
+				func(*http.Request) (*http.Response, error) {
+					tokenCalls.Add(1)
+					if !failing.Load() {
+						return httpmock.NewJsonResponse(http.StatusOK, map[string]string{"result": fresh})
+					}
+					// Fail only once every goroutine has read the request count, so that they
+					// all wait for this request rather than arrive after it has failed
+					calling.Wait()
+					return httpmock.NewStringResponse(http.StatusTooManyRequests, ""), nil
+				})
+
+			type outcome struct {
+				token string
+				err   error
+			}
+			outcomes := make(chan outcome, goroutines)
+			c.tokenRequestsRead = calling.Done
+			var wg sync.WaitGroup
+			for range goroutines {
+				wg.Go(func() {
+					token, err := c.GetDataAccessToken()
+					outcomes <- outcome{token, err}
+				})
+			}
+			wg.Wait()
+			close(outcomes)
+			c.tokenRequestsRead = nil
+
+			for got := range outcomes {
+				if test.err != nil {
+					require.ErrorIs(t, got.err, test.err)
+					assert.Empty(t, got.token)
+				} else {
+					require.NoError(t, got.err)
+					assert.Equal(t, test.want, got.token)
+				}
+			}
+			assert.Equal(t, int32(1), tokenCalls.Load(), "the goroutines must share the one failed /token request")
+
+			// A call after the failure tries again
+			failing.Store(false)
+			token, err := c.GetDataAccessToken()
+			require.NoError(t, err)
+			assert.Equal(t, fresh, token)
+			assert.Equal(t, int32(2), tokenCalls.Load())
+		})
+	}
+}
+
+// TestGetDataAccessTokenRenewal guards the renewal of the cached data access token. It
+// lasts about 24 hours, and the client used to keep it for its own lifetime, so a long
+// running process saw every call fail with 401 once the token had expired.
+func TestGetDataAccessTokenRenewal(t *testing.T) {
+	fresh := dataAccessToken(t, time.Now().Add(24*time.Hour))
+
+	// A data access token that carries a token type but no expiry
+	withoutExpiry := testToken(t, map[string]any{"tokenType": "ThirdPartyApiDataAccess"})
+
+	tests := []struct {
+		name    string
+		cached  string
+		renewed bool
+	}{
+		{
+			name:    "expired token is renewed",
+			cached:  dataAccessToken(t, time.Now().Add(-time.Hour)),
+			renewed: true,
+		},
+		{
+			name:    "token expiring within five minutes is renewed",
+			cached:  dataAccessToken(t, time.Now().Add(2*time.Minute)),
+			renewed: true,
+		},
+		{
+			name:    "token valid for more than five minutes is kept",
+			cached:  dataAccessToken(t, time.Now().Add(10*time.Minute)),
+			renewed: false,
+		},
+		{
+			name:    "token that is not a JWT is kept",
+			cached:  "opaque-access-token",
+			renewed: false,
+		},
+		{
+			name:    "token without an expiry is kept",
+			cached:  withoutExpiry,
+			renewed: false,
+		},
+		// An exp that names no point in time used to read as 1 January 1970, so the token
+		// counted as expired and every call spent one of the 2 /token calls a minute on it
+		{
+			name:    "token whose exp is null is kept",
+			cached:  testToken(t, map[string]any{"tokenType": "ThirdPartyApiDataAccess", "exp": nil}),
+			renewed: false,
+		},
+		{
+			name:    "token whose exp is zero is kept",
+			cached:  testToken(t, map[string]any{"tokenType": "ThirdPartyApiDataAccess", "exp": 0}),
+			renewed: false,
+		},
+		{
+			name:    "token whose exp is negative is kept",
+			cached:  testToken(t, map[string]any{"tokenType": "ThirdPartyApiDataAccess", "exp": -1}),
+			renewed: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c := NewThirdParty("test-refresh-token", WithoutRetry()).(*client)
+			httpmock.ActivateNonDefault(c.resty.GetClient())
+			defer httpmock.DeactivateAndReset()
+
+			// The first /token call hands out the token under test, any later one a fresh token
+			tokenCalls := 0
+			httpmock.RegisterResponder(http.MethodGet, c.resty.BaseURL+"/token",
+				func(*http.Request) (*http.Response, error) {
+					tokenCalls++
+					token := fresh
+					if tokenCalls == 1 {
+						token = test.cached
+					}
+					return httpmock.NewJsonResponse(http.StatusOK, map[string]string{"result": token})
+				})
+
+			first, err := c.GetDataAccessToken()
+			require.NoError(t, err)
+			require.Equal(t, test.cached, first)
+
+			second, err := c.GetDataAccessToken()
+			require.NoError(t, err)
+
+			if test.renewed {
+				assert.Equal(t, fresh, second, "the cached token must be replaced")
+				assert.Equal(t, 2, tokenCalls, "the cached token must be renewed with a new /token call")
+			} else {
+				assert.Equal(t, test.cached, second, "the cached token must be kept")
+				assert.Equal(t, 1, tokenCalls, "a usable token must not cost another /token call")
+			}
+		})
+	}
+
+	// A token inside the renewal margin still works for a few minutes. Its renewal failing
+	// used to fail the call as well, although the token in hand would have done
+	failedRenewals := []struct {
+		name   string
+		cached string
+		err    error
+	}{
+		{
+			name:   "failed renewal of a token that has not expired returns that token",
+			cached: dataAccessToken(t, time.Now().Add(2*time.Minute)),
+		},
+		{
+			name:   "failed renewal of an expired token reports the error",
+			cached: dataAccessToken(t, time.Now().Add(-time.Hour)),
+			err:    ErrorTooManyRequests,
+		},
+	}
+
+	for _, test := range failedRenewals {
+		t.Run(test.name, func(t *testing.T) {
+			c := NewThirdParty("test-refresh-token", WithoutRetry()).(*client)
+			httpmock.ActivateNonDefault(c.resty.GetClient())
+			defer httpmock.DeactivateAndReset()
+
+			// /token hands out the token under test, then fails the renewal, then succeeds
+			tokenCalls := 0
+			httpmock.RegisterResponder(http.MethodGet, c.resty.BaseURL+"/token",
+				func(*http.Request) (*http.Response, error) {
+					tokenCalls++
+					switch tokenCalls {
+					case 1:
+						return httpmock.NewJsonResponse(http.StatusOK, map[string]string{"result": test.cached})
+					case 2:
+						return httpmock.NewStringResponse(http.StatusTooManyRequests, ""), nil
+					default:
+						return httpmock.NewJsonResponse(http.StatusOK, map[string]string{"result": fresh})
+					}
+				})
+
+			_, err := c.GetDataAccessToken()
+			require.NoError(t, err)
+
+			token, err := c.GetDataAccessToken()
+			if test.err != nil {
+				require.ErrorIs(t, err, test.err)
+				assert.Empty(t, token, "an expired token must not be handed out")
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, test.cached, token, "the token that still works must be handed out")
+			}
+			assert.Equal(t, 2, tokenCalls, "the token must have been due for renewal")
+
+			// The failure is not remembered: the next call tries the renewal again
+			token, err = c.GetDataAccessToken()
+			require.NoError(t, err)
+			assert.Equal(t, fresh, token)
+			assert.Equal(t, 3, tokenCalls)
+		})
+	}
+}
+
+// dataAccessToken builds a data access token that expires at exp.
+func dataAccessToken(t *testing.T, exp time.Time) string {
+	t.Helper()
+	return testToken(t, map[string]any{"tokenType": "ThirdPartyApiDataAccess", "exp": exp.Unix()})
 }
 
 // TestAuthenticateFailure guards the token endpoint. Any non-200 used to be swallowed:
@@ -121,8 +429,8 @@ func TestAuthenticateFailure(t *testing.T) {
 
 			token, err := c.GetDataAccessToken()
 
-			assert.Error(t, err)
-			assert.EqualError(t, err, test.expected.Error())
+			require.Error(t, err)
+			require.EqualError(t, err, test.expected.Error())
 			assert.Empty(t, token)
 			assert.Empty(t, c.accessToken, "no access token may be stored when authentication fails")
 		})
@@ -166,7 +474,7 @@ func TestGetAuthorizations(t *testing.T) {
 
 		authorizations, err := c.GetAuthorizations()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		if assert.Len(t, authorizations, 1) {
 			assert.Equal(t, "auth-uuid-1", authorizations[0].ID)
 			assert.Equal(t, "Test Corp", authorizations[0].ThirdPartyName)
@@ -182,7 +490,7 @@ func TestGetAuthorizations(t *testing.T) {
 
 		_, err := customerClient.GetAuthorizations()
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "only available for ThirdParty API")
 	})
 
@@ -197,7 +505,7 @@ func TestGetAuthorizations(t *testing.T) {
 
 		_, err := c.GetAuthorizations()
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, ErrorUnauthorized, err)
 	})
 }
@@ -230,7 +538,7 @@ func TestGetMeteringPointsForScope(t *testing.T) {
 
 		meteringPoints, err := c.GetMeteringPointsForScope(AuthScopeCustomerCVR, "12345678")
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		if assert.Len(t, meteringPoints, 1) {
 			assert.Equal(t, "571313180100000001", meteringPoints[0].MeteringPointID)
 		}
@@ -245,7 +553,7 @@ func TestGetMeteringPointsForScope(t *testing.T) {
 
 		_, err := customerClient.GetMeteringPointsForScope(AuthScopeCustomerCVR, "12345678")
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "only available for ThirdParty API")
 	})
 }
@@ -270,41 +578,41 @@ func TestGetMeteringPointsForScopeFullPayload(t *testing.T) {
 	mockResponse := `{
 		"result": [
 			{
-				"meteringPointId": "571313113162842251",
+				"meteringPointId": "571313180100000001",
 				"typeOfMP": "E17",
-				"accessFrom": "2024-10-31T23:00:00.000Z",
-				"accessTo": "2026-07-31T22:00:00.000Z",
-				"streetCode": "0116",
-				"streetName": "Blichers Alle",
+				"accessFrom": "2024-12-31T23:00:00.000Z",
+				"accessTo": "2026-06-30T22:00:00.000Z",
+				"streetCode": "0001",
+				"streetName": "Testvej",
 				"buildingNumber": "1",
 				"floorId": "",
 				"roomId": "",
-				"postcode": "8830",
-				"cityName": "Tjele",
-				"citySubDivisionName": "Foulum",
-				"municipalityCode": "791",
-				"locationDescription": "Bag ved laden",
+				"postcode": "8000",
+				"cityName": "Aarhus C",
+				"citySubDivisionName": "Testby",
+				"municipalityCode": "751",
+				"locationDescription": "Test location",
 				"settlementMethod": "D01",
 				"meterReadingOccurrence": "PT1H",
-				"firstConsumerPartyName": "John Sisk & Son ApS",
+				"firstConsumerPartyName": "Test Customer ApS",
 				"secondConsumerPartyName": "",
-				"consumerCVR": "42703087",
-				"dataAccessCVR": "42703087",
-				"meterNumber": "30203518",
-				"consumerStartDate": "2025-04-27T22:00:00.000Z",
+				"consumerCVR": "12345678",
+				"dataAccessCVR": "12345678",
+				"meterNumber": "10000001",
+				"consumerStartDate": "2025-06-30T22:00:00.000Z",
 				"childMeteringPoints": [
 					{
-						"parentMeteringPointId": "571313113162842251",
-						"meteringPointId": "571313113162842268",
+						"parentMeteringPointId": "571313180100000001",
+						"meteringPointId": "571313180100000002",
 						"typeOfMP": "D01",
 						"meterReadingOccurrence": "PT1H",
-						"meterNumber": "30203519"
+						"meterNumber": "10000002"
 					}
 				]
 			}
 		]
 	}`
-	path := "/authorization/authorization/meteringpoints/authorizationId/725809"
+	path := "/authorization/authorization/meteringpoints/authorizationId/123456"
 	httpmock.RegisterResponder("GET", path,
 		func(req *http.Request) (*http.Response, error) {
 			resp := httpmock.NewStringResponse(200, mockResponse)
@@ -312,33 +620,33 @@ func TestGetMeteringPointsForScopeFullPayload(t *testing.T) {
 			return resp, nil
 		})
 
-	meteringPoints, err := c.GetMeteringPointsForScope(AuthScopeID, "725809")
+	meteringPoints, err := c.GetMeteringPointsForScope(AuthScopeID, "123456")
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if !assert.Len(t, meteringPoints, 1) {
 		return
 	}
 	meteringPoint := meteringPoints[0]
 
-	assert.Equal(t, "571313113162842251", meteringPoint.MeteringPointID)
-	assert.Equal(t, "Foulum", meteringPoint.CitySubDivisionName)
-	assert.Equal(t, "791", meteringPoint.MunicipalityCode)
-	assert.Equal(t, "Bag ved laden", meteringPoint.LocationDescription)
+	assert.Equal(t, "571313180100000001", meteringPoint.MeteringPointID)
+	assert.Equal(t, "Testby", meteringPoint.CitySubDivisionName)
+	assert.Equal(t, "751", meteringPoint.MunicipalityCode)
+	assert.Equal(t, "Test location", meteringPoint.LocationDescription)
 	assert.Equal(t, "D01", meteringPoint.SettlementMethod)
 	assert.Equal(t, "PT1H", meteringPoint.MeterReadingOccurrence)
-	assert.Equal(t, "John Sisk & Son ApS", meteringPoint.FirstConsumerPartyName)
-	assert.Equal(t, "", meteringPoint.SecondConsumerPartyName)
-	assert.Equal(t, "42703087", meteringPoint.ConsumerCVR)
-	assert.Equal(t, "42703087", meteringPoint.DataAccessCVR)
-	assert.Equal(t, "30203518", meteringPoint.MeterNumber)
-	assert.Equal(t, "2025-04-27T22:00:00Z", meteringPoint.ConsumerStartDate.UTC().Format(time.RFC3339))
+	assert.Equal(t, "Test Customer ApS", meteringPoint.FirstConsumerPartyName)
+	assert.Empty(t, meteringPoint.SecondConsumerPartyName)
+	assert.Equal(t, "12345678", meteringPoint.ConsumerCVR)
+	assert.Equal(t, "12345678", meteringPoint.DataAccessCVR)
+	assert.Equal(t, "10000001", meteringPoint.MeterNumber)
+	assert.Equal(t, "2025-06-30T22:00:00Z", meteringPoint.ConsumerStartDate.UTC().Format(time.RFC3339))
 
 	if assert.Len(t, meteringPoint.ChildMeteringPoints, 1) {
 		child := meteringPoint.ChildMeteringPoints[0]
-		assert.Equal(t, "571313113162842268", child.MeteringPointID)
-		assert.Equal(t, "571313113162842251", child.ParentMeteringPointID)
+		assert.Equal(t, "571313180100000002", child.MeteringPointID)
+		assert.Equal(t, "571313180100000001", child.ParentMeteringPointID)
 		assert.Equal(t, "D01", child.TypeOfMP)
-		assert.Equal(t, "30203519", child.MeterNumber)
+		assert.Equal(t, "10000002", child.MeterNumber)
 	}
 }
 
@@ -371,7 +679,7 @@ func TestGetMeteringPointIDsForScope(t *testing.T) {
 
 		ids, err := c.GetMeteringPointIDsForScope(AuthScopeCustomerCVR, "12345678")
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		if assert.Len(t, ids, 2) {
 			assert.Equal(t, "571313180100000001", ids[0])
 			assert.Equal(t, "571313180100000002", ids[1])
@@ -387,7 +695,7 @@ func TestGetMeteringPointIDsForScope(t *testing.T) {
 
 		_, err := customerClient.GetMeteringPointIDsForScope(AuthScopeCustomerCVR, "12345678")
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "only available for ThirdParty API")
 	})
 }
@@ -402,14 +710,14 @@ func TestIsAlive(t *testing.T) {
 	t.Run("returns true on 200 OK", func(t *testing.T) {
 		httpmock.RegisterResponder("GET", "/isalive", httpmock.NewStringResponder(200, "true"))
 		alive, err := c.IsAlive()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, alive)
 	})
 
 	t.Run("returns false on 503 Service Unavailable", func(t *testing.T) {
 		httpmock.RegisterResponder("GET", "/isalive", httpmock.NewStringResponder(503, ""))
 		alive, err := c.IsAlive()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.False(t, alive)
 	})
 }

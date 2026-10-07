@@ -5,6 +5,9 @@ on:
     branches: [ master, main, develop ]
   pull_request:
     branches: [ master, main, develop ]
+  # By hand, for a branch that has no pull request into one of the branches above
+  # yet, such as one stacked on another pull request.
+  workflow_dispatch:
 
 # Least privilege by default. No job in this workflow writes to the repository,
 # so nothing widens this. Codecov uploads over its own upload endpoint and needs
@@ -20,29 +23,30 @@ concurrency:
 
 jobs:
   test:
-    name: Test
-    runs-on: ubuntu-latest
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One OS failing must not hide whether the others pass.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        # The same shell on every runner, so each command line means the same thing on
+        # Windows (Git Bash ships with the runner image) as on Linux and macOS.
+        shell: bash
 
     steps:
     - name: Check out code
       uses: actions/checkout@v7
 
-    # go-version-file keeps CI on exactly the toolchain go.mod requires, so the
-    # workflow cannot drift from the module's own requirement.
+    # go-version-file installs the toolchain line of go.mod, the Go the module is
+    # built and released with, so the workflow cannot drift from it. setup-go also
+    # caches the module and build caches, keyed on go.mod, so no separate cache step.
     - name: Set up Go
-      uses: actions/setup-go@v6
+      uses: actions/setup-go@v7
       with:
         go-version-file: go.mod
-
-    - name: Cache Go modules
-      uses: actions/cache@v6
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('go.mod', '**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
 
     - name: Download dependencies
       run: go mod download
@@ -50,22 +54,121 @@ jobs:
     - name: Verify dependencies
       run: go mod verify
 
+    # The race detector runs on all three runners: linux/amd64, windows/amd64 (cgo
+    # through the image's MinGW gcc) and darwin/arm64.
     - name: Run tests
       run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
 
+    # A release binary is built with -trimpath, which leaves runtime.GOROOT() empty,
+    # so on a machine without Go nothing falls back to $GOROOT/lib/time/zoneinfo.zip.
+    # Windows has no system zoneinfo at all, so on windows-latest this is exactly what
+    # every user's Windows machine sees. The run above cannot see it: an untrimmed
+    # test binary still finds the toolchain's copy.
+    - name: Run tests without Go's zoneinfo (-trimpath, GOROOT unset)
+      run: env -u GOROOT -u ZONEINFO go test -count=1 -trimpath ./...
+
+    # The build .goreleaser.yaml makes (CGO_ENABLED=0, -trimpath, -s -w), run in
+    # busybox: no /usr/share/zoneinfo and no Go, like a minimal container image. The
+    # token command decodes a fake token offline and the container has no network,
+    # so nothing reaches Eloverblik.
+    - name: Run the release build where no time zone database exists
+      if: runner.os == 'Linux'
+      env:
+        CGO_ENABLED: "0"
+        # Header {"alg":"none"}, payload {"exp":1830000000,"aud":"CustomerApi"}.
+        FAKE_TOKEN: eyJhbGciOiJub25lIn0.eyJleHAiOjE4MzAwMDAwMDAsImF1ZCI6IkN1c3RvbWVyQXBpIn0.sig
+        # 1830000000 falls in Copenhagen winter time: +01:00 whatever the runner's zone.
+        WANT_EXPIRY: '"expiresAt":"2027-12-28T14:20:00+01:00"'
+      run: |
+        go build -trimpath -ldflags="-s -w" -o "$RUNNER_TEMP/go-eloverblik" .
+        out="$(docker run --rm --network none -v "$RUNNER_TEMP/go-eloverblik:/go-eloverblik:ro" busybox:stable /go-eloverblik token --token "$FAKE_TOKEN")"
+        echo "$out"
+        grep -qF -- "$WANT_EXPIRY" <<<"$out"
+
     # Forks do not get repository secrets, so CODECOV_TOKEN is empty there and the
     # action falls back to tokenless upload. fail_ci_if_error stays false so a
-    # missing token or a Codecov outage never fails an otherwise green build.
+    # missing token or a Codecov outage never fails an otherwise green build. One
+    # upload is enough: the coverage is the same code on every OS.
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
+      if: runner.os == 'Linux'
+      uses: codecov/codecov-action@v7
       with:
-        file: ./coverage.out
+        files: ./coverage.out
         flags: unittests
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}
 
     - name: Generate coverage report
       run: go tool cover -func=coverage.out
+
+  # The test job runs where int is 64 bits, so it cannot see a bug that exists only
+  # where int is 32 bits: strconv.Atoi on an 18-digit metering point ID rejected
+  # every ID on linux/arm while this workflow stayed green. Both steps run the whole
+  # suite as 32-bit code. No -race: the race detector supports neither 386 nor arm.
+  test-32bit:
+    name: Test (32-bit)
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v7
+
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version-file: go.mod
+
+    # 386 runs natively on the x86_64 runner: the cheapest 32-bit run there is.
+    - name: Run tests on linux/386
+      env:
+        GOARCH: "386"
+      run: go test ./...
+
+    # qemu-user runs each cross-compiled test binary through -exec, so there is no
+    # binfmt registration and no privileged container.
+    - name: Install qemu-user
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends qemu-user
+
+    # The shipped linux/arm build, on the CPU of the Raspberry Pi Zero and Pi 1
+    # (ARM1176, ARMv6). A GOARM=7 binary dies with SIGILL on this CPU, so the step
+    # fails if its own GOARM below is raised past what a Pi Zero can run. It does
+    # not read .goreleaser.yaml: raising goarm there goes unnoticed here.
+    - name: Run tests on linux/arm (ARMv6) under qemu
+      env:
+        GOARCH: arm
+        # Kept in step with goarm in .goreleaser.yaml by hand.
+        GOARM: "6"
+        QEMU_CPU: arm1176
+      run: go test -exec qemu-arm ./...
+
+  test-oldest-go:
+    name: Test (oldest supported Go)
+    runs-on: ubuntu-latest
+    env:
+      # Build with the Go installed below, not the newer toolchain go.mod names.
+      GOTOOLCHAIN: local
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v7
+
+    # The go line in go.mod is the oldest Go a caller can build the module with.
+    # go-version-file would install the toolchain line instead, so the floor is
+    # named here. Move it together with the go line.
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version: '1.26.0'
+
+    - name: Vet
+      run: |
+        go vet ./...
+        go vet -tags live ./v1/
+
+    - name: Run tests
+      run: go test ./...
 
   tidy:
     name: Tidy
@@ -76,7 +179,7 @@ jobs:
       uses: actions/checkout@v7
 
     - name: Set up Go
-      uses: actions/setup-go@v6
+      uses: actions/setup-go@v7
       with:
         go-version-file: go.mod
 
@@ -94,17 +197,19 @@ jobs:
       uses: actions/checkout@v7
 
     - name: Set up Go
-      uses: actions/setup-go@v6
+      uses: actions/setup-go@v7
       with:
         go-version-file: go.mod
 
     # golangci-lint v2 rejects the v1 config format, so the action and the config
-    # have to move together. Pin the minor version rather than tracking latest, so a
-    # new release cannot break the build without a commit.
+    # have to move together. Pinned to an exact release, so CI reports what a local
+    # run of that same release reports, and no new release (a patch release
+    # included) can break the build without a commit. Dependabot does not see a
+    # version in an action input: move it by hand.
     - name: Run golangci-lint
       uses: golangci/golangci-lint-action@v9
       with:
-        version: v2.12
+        version: v2.14.0
         args: --timeout=5m
 
   build:
@@ -113,7 +218,8 @@ jobs:
     strategy:
       # Compilation check only: proves every shipped target still compiles, and
       # catches a break on a target the developer never builds locally (windows,
-      # arm64) before it reaches a tag.
+      # arm64, 32-bit arm) before it reaches a tag. Mirrors the builds in
+      # .goreleaser.yaml.
       #
       # This job deliberately produces no artifacts. Release binaries are built and
       # published by release.yml on tags via GoReleaser; uploading them here as well
@@ -122,16 +228,18 @@ jobs:
       matrix:
         os: [linux, darwin, windows]
         arch: [amd64, arm64]
-        exclude:
-          - os: windows
-            arch: arm64
+        # 32-bit ARM for the Raspberry Pi, at the GOARM .goreleaser.yaml ships.
+        include:
+          - os: linux
+            arch: arm
+            goarm: "6"
 
     steps:
     - name: Check out code
       uses: actions/checkout@v7
 
     - name: Set up Go
-      uses: actions/setup-go@v6
+      uses: actions/setup-go@v7
       with:
         go-version-file: go.mod
 
@@ -139,4 +247,6 @@ jobs:
       env:
         GOOS: ${{ matrix.os }}
         GOARCH: ${{ matrix.arch }}
+        # Empty, and so Go's default, everywhere but linux/arm.
+        GOARM: ${{ matrix.goarm }}
       run: go build -v -o /dev/null .
