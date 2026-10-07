@@ -211,9 +211,5 @@ func (c *client) ExportTimeSeries(meteringPointIDs []string, from, to time.Time,
 		SetDoNotParseResponse(true). // We want the raw response body
 		Post(path)
 
-	if err != nil || !res.IsSuccess() {
-		return nil, fmt.Errorf("failed to export time series, status: %s, err: %v", res.Status(), err)
-	}
-
-	return res.RawBody(), nil
+	return exportBody(res, err, "time series")
 }

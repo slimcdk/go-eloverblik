@@ -40,6 +40,10 @@ it refuses to build the module.
   the points of every period instead of only the last.
 - `customer add-relation-by-code` and `customer delete-relation` are hidden from the help and
   fail with `ErrorEndpointRetired` without calling the API.
+- A failed `ExportTimeSeries`, `ExportMasterdata` or `ExportCharges` reports the API's error
+  like every other call, e.g. `failed to export masterdata: unauthorized access`, which
+  unwraps to `ErrorUnauthorized`. It used to read `failed to export masterdata, status: 401
+  Unauthorized, err: <nil>`, and a transport error was formatted rather than wrapped.
 
 ### Deprecated
 
@@ -63,6 +67,8 @@ it refuses to build the module.
 
 - `timeseries --flatten` crashed with `index out of range [0]` as soon as one metering point
   failed on its own, e.g. with 30018 for a period that starts before it was registered.
+- A failed export left its response body open, and with it the connection. The body is
+  streamed to the caller on success, so resty never closes it; on a failure nobody did.
 - `llms.md` had the quality codes wrong: A04 is measured and A03 estimated, not A04
   estimated and A05 measured.
 

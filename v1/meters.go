@@ -235,9 +235,5 @@ func (c *client) ExportMasterdata(meteringPointIDs []string) (io.ReadCloser, err
 		SetDoNotParseResponse(true).
 		Post("/meteringpoints/masterdata/export")
 
-	if err != nil || !res.IsSuccess() {
-		return nil, fmt.Errorf("failed to export masterdata, status: %s, err: %v", res.Status(), err)
-	}
-
-	return res.RawBody(), nil
+	return exportBody(res, err, "masterdata")
 }
