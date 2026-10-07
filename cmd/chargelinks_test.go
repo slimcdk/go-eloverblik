@@ -44,3 +44,16 @@ func TestChargeLinksCmdSendsCopenhagenMidnight(t *testing.T) {
 		})
 	}
 }
+
+// TestChargeLinksCmdHelpSaysToIsExclusive: charge-links asks for [from, to), like
+// timeseries, and its --to must say so in the same words.
+func TestChargeLinksCmdHelpSaysToIsExclusive(t *testing.T) {
+	for _, api := range []string{"customer", "thirdparty"} {
+		t.Run(api, func(t *testing.T) {
+			out, err := execute(t, api, "charge-links", "--help")
+
+			require.NoError(t, err)
+			assert.Contains(t, out, "end date, exclusive (YYYY-MM-DD, now, now-30d/w/m/y, defaults to today)")
+		})
+	}
+}
