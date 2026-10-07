@@ -629,7 +629,9 @@ client. A data access token lasts about 24 hours.
 The API allows 2 `/token` calls a minute per IP, so goroutines that need a token while one
 is being fetched wait for that request and share its outcome, the token or the error,
 instead of sending their own. When a renewal fails while the cached token has not expired
-yet, the call gets the cached token and the next call tries again. A data access token
+yet, the call gets the cached token and the next call tries again. The `/token` request is
+retried on a 429 or 503 like any other request, so a failing renewal can take about two
+minutes with the default retry policy. A data access token
 whose expiry cannot be read, because it is not a JWT or its `exp` claim is missing, null,
 zero or negative, counts as never expiring: the client keeps it and leaves it to the API to
 reject it.
