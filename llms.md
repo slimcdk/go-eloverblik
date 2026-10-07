@@ -696,7 +696,9 @@ for _, result := range links.Results {
 //   - Delimiter: semicolon (;)
 //   - Encoding: UTF-8 with BOM
 //   - Headers: Danish language
-//   - Columns: MålepunktsID, Fra_dato, Til_dato, Mængde, Måleenhed, Kvalitet, Type
+//   - Columns: MålepunktsID, Fra_dato, Til_dato, Mængde, Måleenhed, Kvalitet, Type,
+//     Målepunktstype_Kode, Målepunktstype (the last two seen since DataHub 3.0, checked
+//     2026-10-07)
 // USAGE PATTERN:
 stream, err := client.ExportTimeSeries(ids, from, to, eloverblik.Hour)
 if err != nil {
