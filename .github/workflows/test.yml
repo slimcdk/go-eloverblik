@@ -104,7 +104,8 @@ jobs:
     strategy:
       # Compilation check only: proves every shipped target still compiles, and
       # catches a break on a target the developer never builds locally (windows,
-      # arm64) before it reaches a tag.
+      # arm64, 32-bit arm) before it reaches a tag. Mirrors the builds in
+      # .goreleaser.yaml.
       #
       # This job deliberately produces no artifacts. Release binaries are built and
       # published by release.yml on tags via GoReleaser; uploading them here as well
@@ -113,9 +114,11 @@ jobs:
       matrix:
         os: [linux, darwin, windows]
         arch: [amd64, arm64]
-        exclude:
-          - os: windows
-            arch: arm64
+        # 32-bit ARM for the Raspberry Pi, at the GOARM .goreleaser.yaml ships.
+        include:
+          - os: linux
+            arch: arm
+            goarm: "6"
 
     steps:
     - name: Check out code
@@ -130,4 +133,6 @@ jobs:
       env:
         GOOS: ${{ matrix.os }}
         GOARCH: ${{ matrix.arch }}
+        # Empty, and so Go's default, everywhere but linux/arm.
+        GOARM: ${{ matrix.goarm }}
       run: go build -v -o /dev/null .

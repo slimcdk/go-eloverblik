@@ -54,6 +54,9 @@ it refuses to build the module.
 
 ### Added
 
+- Release binaries for `linux_arm` (ARMv6, for Raspberry Pis on a 32-bit system, from the
+  Pi Zero and Pi 1 up) and `windows_arm64` (Windows on Arm), next to the existing amd64 and
+  arm64 builds for Linux, macOS and Windows.
 - `StatusResponse.Err()`, which reports whether a metering point in a batch response failed,
   as an error that unwraps to the sentinel of its code. Every batch result embeds
   `StatusResponse`, so it works on time series, metering point details, charges and

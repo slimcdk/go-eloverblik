@@ -34,10 +34,17 @@ builds:
     goarch:
       - amd64
       - arm64
-    ignore:
-      # Mirrors the exclude in .github/workflows/test.yml's build matrix.
-      - goos: windows
-        goarch: arm64
+      # 32-bit ARM, for the Raspberry Pis that cannot run the arm64 binary: the Pi 1,
+      # Zero, Zero W and 2, and any Pi booted with a 32-bit kernel (`uname -m` prints
+      # armv6l or armv7l). Linux only: Go has no darwin/arm or windows/arm port, and
+      # GoReleaser skips those pairs by itself.
+      - arm
+    goarm:
+      # ARMv6 only. A GOARM=6 binary runs on every 32-bit Pi, ARMv7 cores included,
+      # while a GOARM=7 binary dies with SIGILL on the ARMv6 core of the Pi Zero and
+      # Pi 1. One ARM build, so its archive is plainly linux_arm. Mirrors GOARM in
+      # .github/workflows/test.yml.
+      - "6"
     flags:
       # Strip local filesystem paths from the binary so the same commit produces
       # the same bytes regardless of where it was built.
@@ -118,6 +125,10 @@ release:
 
     Download the archive for your platform below, verify it against
     `checksums.txt`, unpack it and put `go-eloverblik` on your `PATH`.
+    On a Raspberry Pi, `uname -m` decides: `aarch64` takes `linux_arm64`,
+    `armv6l` or `armv7l` takes `linux_arm`. Windows on Arm takes
+    `windows_arm64`. The binaries need no Go installation and bring their own
+    time zone database.
 
     Or install with Go:
 
