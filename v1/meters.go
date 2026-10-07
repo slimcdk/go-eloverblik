@@ -54,7 +54,8 @@ type MeteringPointDetailsResponse struct {
 // MeterCounterUnit; and three dates as unavailable for now ("utilgængelig"):
 // ConsumerStartDate, BalanceSupplierStartDate and TaxSettlementDate. Both OpenAPI
 // documents describe MpRelationType as not used, with no value ever returned. Expect all
-// of them to be empty. The balance supplier fields are not shared with a third party
+// of them to be empty but MeterReadingOccurrence, which the Third-Party API still filled in
+// when checked on 2026-10-07. The balance supplier fields are not shared with a third party
 // through a power of attorney either. See
 // https://docs.eloverblik.dk/docs/guides/metering-point-data-field-descriptions.
 type MeteringPointDetail struct {

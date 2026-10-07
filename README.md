@@ -305,7 +305,8 @@ endpoints and its `api-version` of 1.0, but what it answers changed in places:
   [field descriptions](https://docs.eloverblik.dk/docs/guides/metering-point-data-field-descriptions),
   among them the settlement method, the consumer category, the meter reading occurrence and
   the estimated annual volume, and, for now, the consumer, balance supplier and tax reduction
-  start dates. Expect them to be empty.
+  start dates. Expect them to be empty, except the meter reading occurrence, which the
+  Third-Party API still filled in when checked on 2026-10-07.
 - The metering point list gained `isMovedOut` (`IsMovedOut`), and the type of metering point
   gained the value `D19` (capacity settlement).
 

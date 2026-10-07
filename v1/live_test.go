@@ -708,7 +708,6 @@ func liveDetails(t *testing.T, c *client, rec *liveRecorder, ids []string) (conn
 		documentedEmpty := map[string]bool{
 			"settlementMethod":           d.SettlementMethod != "",
 			"consumerCategory":           d.ConsumerCategory != "",
-			"meterReadingOccurrence":     d.MeterReadingOccurrence != "",
 			"estimatedAnnualVolume":      d.EstimatedAnnualVolume != "",
 			"meterCounterDigits":         d.MeterCounterDigits != "",
 			"meterCounterMultiplyFactor": d.MeterCounterMultiplyFactor != "",

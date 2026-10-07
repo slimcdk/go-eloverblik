@@ -295,7 +295,9 @@ repeated IDs: with more than the latest access period enabled by Energinet, deta
 master data: Energinet lists SettlementMethod, ConsumerCategory, MeterReadingOccurrence,
   EstimatedAnnualVolume and MeterCounterDigits/MultiplyFactor/Unit as retired, and
   ConsumerStartDate, BalanceSupplierStartDate and TaxSettlementDate as unavailable for now,
-  so expect them empty. Balance supplier fields are not shared with third parties.
+  so expect them empty, except MeterReadingOccurrence, which the Third-Party API still
+  filled in when checked on 2026-10-07. Balance supplier fields are not shared with third
+  parties.
 new: MeteringPoints.IsMovedOut (bool); typeOfMP D19 (Capacity Settlement)
 ```
 
@@ -453,11 +455,12 @@ for _, point := range points {
 //   Occurrence (FlexibleTime), MeteringPointAlias, AssetType, MpAddressWashInstructions,
 //   DarReference, ContactAddresses ([]ContactAddress), ChildMeteringPoints ([]ChildMeteringPoint)
 // EXPECT EMPTY (Energinet lists them, among others, as retired or, for now, unavailable):
-//   SettlementMethod, ConsumerCategory, MeterReadingOccurrence, EstimatedAnnualVolume,
-//   MeterCounterDigits, MeterCounterMultiplyFactor, MeterCounterUnit, ConsumerStartDate,
-//   BalanceSupplierStartDate, TaxSettlementDate. Both OpenAPI documents describe
-//   MpRelationType as not used, with no value ever returned. Balance supplier fields are
-//   never shared with a third party.
+//   SettlementMethod, ConsumerCategory, EstimatedAnnualVolume, MeterCounterDigits,
+//   MeterCounterMultiplyFactor, MeterCounterUnit, ConsumerStartDate,
+//   BalanceSupplierStartDate, TaxSettlementDate. Energinet lists MeterReadingOccurrence as
+//   retired too, but the Third-Party API still filled it in when checked on 2026-10-07.
+//   Both OpenAPI documents describe MpRelationType as not used, with no value ever
+//   returned. Balance supplier fields are never shared with a third party.
 // ERROR HANDLING:
 //   Always check every result with detail.Err(), not just the error return. The same
 //   metering point ID can appear more than once, once per access period.
