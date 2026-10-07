@@ -52,8 +52,10 @@ builds:
     goarm:
       # ARMv6 only. A GOARM=6 binary runs on every 32-bit Pi, ARMv7 cores included,
       # while a GOARM=7 binary dies with SIGILL on the ARMv6 core of the Pi Zero and
-      # Pi 1. One ARM build, so its archive is plainly linux_arm. Mirrors GOARM in
-      # .github/workflows/test.yml.
+      # Pi 1. One ARM build, so its archive is plainly linux_arm. The ARMv6 test
+      # steps in .github/workflows/test.yml and release.yml and the build matrix in
+      # test.yml set GOARM themselves rather than reading it from here: change them
+      # with it, by hand.
       - "6"
     flags:
       # Strip local filesystem paths from the binary so the same commit produces

@@ -130,11 +130,12 @@ jobs:
 
     # The shipped linux/arm build, on the CPU of the Raspberry Pi Zero and Pi 1
     # (ARM1176, ARMv6). A GOARM=7 binary dies with SIGILL on this CPU, so the step
-    # also fails if GOARM is raised past what a Pi Zero can run.
+    # fails if its own GOARM below is raised past what a Pi Zero can run. It does
+    # not read .goreleaser.yaml: raising goarm there goes unnoticed here.
     - name: Run tests on linux/arm (ARMv6) under qemu
       env:
         GOARCH: arm
-        # Mirrors goarm in .goreleaser.yaml.
+        # Kept in step with goarm in .goreleaser.yaml by hand.
         GOARM: "6"
         QEMU_CPU: arm1176
       run: go test -exec qemu-arm ./...

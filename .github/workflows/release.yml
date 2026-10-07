@@ -73,7 +73,7 @@ jobs:
       - name: Test on linux/arm (ARMv6) under qemu
         env:
           GOARCH: arm
-          # Mirrors goarm in .goreleaser.yaml.
+          # Kept in step with goarm in .goreleaser.yaml by hand.
           GOARM: "6"
           QEMU_CPU: arm1176
         run: go test -exec qemu-arm ./...
