@@ -160,6 +160,24 @@ func TestApiErrorFromBody(t *testing.T) {
 	})
 }
 
+// TestErrorToDateIsGreaterThanToday covers 30003. The API moves a to of tomorrow back to
+// today and rejects only a to later than tomorrow, so the message says "after tomorrow";
+// it used to say "after today", which the API does not reject.
+func TestErrorToDateIsGreaterThanToday(t *testing.T) {
+	t.Run("on the call", func(t *testing.T) {
+		err := apiErrorFromBody(apiErrorBody{Message: "[30003] To date is later than tomorrow"}, http.StatusBadRequest)
+
+		require.ErrorIs(t, err, ErrorToDateIsGreaterThanToday)
+		assert.EqualError(t, err, "requested to date is after tomorrow")
+	})
+
+	t.Run("on one metering point", func(t *testing.T) {
+		err := StatusResponse{ErrorCode: 30003, ErrorText: "ToDateIsGreaterThanToday", ID: "571313180100000001"}.Err()
+
+		require.ErrorIs(t, err, ErrorToDateIsGreaterThanToday)
+	})
+}
+
 func TestApiErrorCode(t *testing.T) {
 	t.Run("reads the code out of an API error message", func(t *testing.T) {
 		code, ok := apiErrorCode("[20010] Relation not found")
