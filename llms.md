@@ -1413,16 +1413,16 @@ _ = protected
 
 ### Pattern 3: Validate Metering Point IDs
 ```go
+// An ID is 18 ASCII digits: check the text, do not parse a number. 18 digits do not fit
+// in the int of a 32-bit platform (linux/arm, 386), where strconv.Atoi rejects every
+// valid ID, and a parser would accept a leading + or - as well.
 func validateMeteringPointID(id string) error {
-    if len(id) != 18 {
-        return fmt.Errorf("ID must be 18 digits, got %d", len(id))
-    }
-    if _, err := strconv.Atoi(id); err != nil {
-        return fmt.Errorf("ID must be numeric: %w", err)
+    if len(id) != 18 || strings.ContainsFunc(id, func(r rune) bool { return r < '0' || r > '9' }) {
+        return fmt.Errorf("ID must be 18 digits: %q", id)
     }
     return nil
 }
-// The CLI applies exactly this check to its positional arguments, plus a 1-10 count limit.
+// The CLI applies the same check to its positional arguments, plus a 1-10 count limit.
 ```
 
 ## Data Type Reference

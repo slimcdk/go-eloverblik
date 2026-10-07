@@ -197,6 +197,15 @@ func TestMeteringPointArgs(t *testing.T) {
 		assert.Contains(t, err.Error(), "invalid id")
 	})
 
+	// An ID is 18 digits, not a number: a sign must not pass for one.
+	for _, id := range []string{"+57131315541105308", "-57131315541105308"} {
+		t.Run("rejects signed ID "+id, func(t *testing.T) {
+			err := meteringPointArgs(nil, []string{id})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid id")
+		})
+	}
+
 	t.Run("requires at least one ID", func(t *testing.T) {
 		args := []string{}
 		err := meteringPointArgs(nil, args)

@@ -65,6 +65,11 @@ it refuses to build the module.
 
 ### Fixed
 
+- On 32-bit platforms, such as a Raspberry Pi running 32-bit Raspberry Pi OS (linux/arm)
+  or linux/386, every command that takes metering point IDs rejected every valid ID with
+  `looks like an invalid id`. The check parsed the 18-digit ID into an int, which is 32
+  bits there. It now checks for 18 ASCII digits, which also stops a leading `+` or `-`
+  from passing for an ID.
 - The Windows release binary panicked with `time: missing Location in call to Time.In` on
   everything that handles a date: `token`, `timeseries`, `export-timeseries` and
   `charge-links`. So did any build of the CLI, or of a program using the library, in a

@@ -32,11 +32,19 @@ func meteringPointArgs(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	for i, id := range args {
-		if _, err := strconv.Atoi(id); len(id) != 18 || err != nil {
+		if !isMeteringPointID(id) {
 			return fmt.Errorf("provided metering id (number %d) looks like an invalid id: %s", i, id)
 		}
 	}
 	return nil
+}
+
+// isMeteringPointID reports whether id has the shape of a metering point ID: exactly 18
+// ASCII digits. It checks the text instead of parsing a number: 18 digits do not fit in
+// the int of a 32-bit platform such as linux/arm, where parsing rejected every valid ID,
+// and a parser would accept a sign as well.
+func isMeteringPointID(id string) bool {
+	return len(id) == 18 && !strings.ContainsFunc(id, func(r rune) bool { return r < '0' || r > '9' })
 }
 
 // csvToJSON converts a CSV stream to JSON format
