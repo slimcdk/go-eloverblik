@@ -24,6 +24,10 @@ const (
 // GetDatesFromPeriod calculates the from and to time.Time values based on a Period.
 // This is useful for easily specifying common time ranges when calling API methods.
 //
+// Periods are computed in Copenhagen time (Europe/Copenhagen), the time the API's dates
+// are in, whatever the host's time zone: today is the current date in Copenhagen, and
+// from and to are in that zone, with midnight bounds at 00:00 Copenhagen time.
+//
 // The API treats the requested range as half-open: it returns data from dateFrom up to
 // but not including dateTo, and it rejects a request where the two dates are equal with
 // error 30002. For yesterday, last_week, last_month and last_year the returned to is
@@ -35,13 +39,16 @@ func GetDatesFromPeriod(period Period) (from time.Time, to time.Time, err error)
 }
 
 // getDatesFromPeriod is the internal, testable implementation for calculating dates.
+// now may be in any zone: the periods follow its date in Copenhagen.
 func getDatesFromPeriod(period Period, now time.Time) (from time.Time, to time.Time, err error) {
+	now = now.In(cph)
 	year, month, day := now.Date()
-	startOfToday := time.Date(year, month, day, 0, 0, 0, 0, now.Location())
-	firstOfThisMonth := time.Date(year, month, 1, 0, 0, 0, 0, now.Location())
+	startOfToday := time.Date(year, month, day, 0, 0, 0, 0, cph)
+	firstOfThisMonth := time.Date(year, month, 1, 0, 0, 0, 0, cph)
+	firstOfThisYear := time.Date(year, 1, 1, 0, 0, 0, 0, cph)
 	// Go numbers the weekdays from Sunday (0), but weeks start on Monday.
 	daysSinceMonday := (int(now.Weekday()) + 6) % 7
-	startOfThisWeek := time.Date(year, month, day-daysSinceMonday, 0, 0, 0, 0, now.Location())
+	startOfThisWeek := time.Date(year, month, day-daysSinceMonday, 0, 0, 0, 0, cph)
 
 	switch strings.ToLower(string(period)) {
 	case string(Yesterday):
@@ -60,12 +67,11 @@ func getDatesFromPeriod(period Period, now time.Time) (from time.Time, to time.T
 		from = firstOfThisMonth.AddDate(0, -1, 0)
 		to = firstOfThisMonth // Exclusive: the first of this month
 	case string(ThisYear):
-		from = time.Date(year, 1, 1, 0, 0, 0, 0, now.Location())
+		from = firstOfThisYear
 		to = now
 	case string(LastYear):
-		firstOfThisYear := time.Date(year, 1, 1, 0, 0, 0, 0, now.Location())
 		from = firstOfThisYear.AddDate(-1, 0, 0)
-		to = firstOfThisYear
+		to = firstOfThisYear // Exclusive: 1 January this year
 	default:
 		err = fmt.Errorf("invalid period: '%s'", period)
 	}
