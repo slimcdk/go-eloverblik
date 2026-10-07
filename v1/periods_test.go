@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetDatesFromPeriod(t *testing.T) {
@@ -69,7 +70,7 @@ func TestGetDatesFromPeriod(t *testing.T) {
 				return
 			}
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.WithinDuration(t, test.from, from, time.Second)
 			assert.WithinDuration(t, test.to, to, time.Second)
 		})
@@ -97,7 +98,7 @@ func TestGetDatesFromPeriodIsHalfOpen(t *testing.T) {
 	for _, period := range periods {
 		t.Run(string(period), func(t *testing.T) {
 			from, to, err := getDatesFromPeriod(period, now)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			// The API formats both bounds as YYYY-MM-DD, so they must differ as dates.
 			fromDate := from.Format(time.DateOnly)

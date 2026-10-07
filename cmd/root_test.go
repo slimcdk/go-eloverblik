@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // resetCommandFlags resets the "Changed" state and values of all flags in the
@@ -51,7 +52,7 @@ func execute(t *testing.T, args ...string) (string, error) {
 
 	// Read the output from the pipe
 	_, readErr := io.Copy(&buf, r)
-	assert.NoError(t, readErr)
+	require.NoError(t, readErr)
 
 	return strings.TrimSpace(buf.String()), err
 }
@@ -59,12 +60,12 @@ func execute(t *testing.T, args ...string) (string, error) {
 func TestRootCmd(t *testing.T) {
 	// Test --help flag
 	out, err := execute(t, "--help")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Contains(t, out, "A CLI for the Danish Eloverblik platform")
 
 	// Test with no arguments
 	_, err = execute(t)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Test with an invalid command
 	_, err = execute(t, "invalid-command")
@@ -77,7 +78,7 @@ func TestPrintResponseHeadersFlag(t *testing.T) {
 	assert.Equal(t, "false", flag.DefValue)
 
 	printHeaders, err := rootCmd.PersistentFlags().GetBool("print-response-headers")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, printHeaders)
 }
 

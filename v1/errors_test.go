@@ -2,7 +2,6 @@ package eloverblik
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"testing"
 
@@ -56,7 +55,7 @@ func TestApiErrorBodyUnmarshal(t *testing.T) {
 	t.Run("never fails, so a body it cannot read makes no resty warning", func(t *testing.T) {
 		for _, raw := range []string{`null`, `[]`, `1`, `{`, `"`, ``} {
 			var body apiErrorBody
-			assert.NoError(t, body.UnmarshalJSON([]byte(raw)), "body %q", raw)
+			require.NoError(t, body.UnmarshalJSON([]byte(raw)), "body %q", raw)
 			assert.Empty(t, body.Message, "body %q", raw)
 			assert.Nil(t, body.Problem, "body %q", raw)
 		}
@@ -75,7 +74,7 @@ func TestApiErrorFromBody(t *testing.T) {
 		require.Error(t, err)
 
 		var apiErr *APIError
-		require.True(t, errors.As(err, &apiErr), "a problem document is reported as an *APIError")
+		require.ErrorAs(t, err, &apiErr, "a problem document is reported as an *APIError")
 		assert.Equal(t, 404, apiErr.StatusCode)
 		assert.Equal(t, "Not Found", apiErr.Title)
 		assert.Equal(t, "https://tools.ietf.org/html/rfc9110#section-15.5.5", apiErr.Type)
@@ -99,7 +98,7 @@ func TestApiErrorFromBody(t *testing.T) {
 	t.Run("judges an empty body by its status", func(t *testing.T) {
 		assert.Equal(t, ErrorTooManyRequests, apiErrorFromBody(apiErrorBody{}, 429))
 		assert.Equal(t, ErrorUnauthorized, apiErrorFromBody(apiErrorBody{}, 401))
-		assert.EqualError(t, apiErrorFromBody(apiErrorBody{}, 503), "could't connect to eloverblik: 503")
+		require.EqualError(t, apiErrorFromBody(apiErrorBody{}, 503), "could't connect to eloverblik: 503")
 		assert.NoError(t, apiErrorFromBody(apiErrorBody{}, 200))
 	})
 
@@ -107,14 +106,14 @@ func TestApiErrorFromBody(t *testing.T) {
 		unauthorized := apiErrorFromBody(apiErrorBody{Problem: &problemDetails{
 			Title: "Unauthorized", Status: 401, TraceID: "00-abc-def-01",
 		}}, 401)
-		assert.ErrorIs(t, unauthorized, ErrorUnauthorized, "errors.Is keeps working on both shapes")
+		require.ErrorIs(t, unauthorized, ErrorUnauthorized, "errors.Is keeps working on both shapes")
 
 		var apiErr *APIError
-		require.True(t, errors.As(unauthorized, &apiErr))
+		require.ErrorAs(t, unauthorized, &apiErr)
 		assert.Equal(t, "00-abc-def-01", apiErr.TraceID, "the trace ID survives the wrapping")
 
 		rateLimited := apiErrorFromBody(apiErrorBody{Problem: &problemDetails{Title: "Too Many Requests"}}, 429)
-		assert.ErrorIs(t, rateLimited, ErrorTooManyRequests)
+		require.ErrorIs(t, rateLimited, ErrorTooManyRequests)
 		assert.EqualError(t, rateLimited, "eloverblik: 429 Too Many Requests")
 	})
 
@@ -122,10 +121,10 @@ func TestApiErrorFromBody(t *testing.T) {
 		err := apiErrorFromBody(apiErrorBody{Problem: &problemDetails{
 			Title: "Bad Request", Status: 400, Detail: "[30004] Invalid date format in request",
 		}}, 400)
-		assert.ErrorIs(t, err, ErrorInvalidDateFormat)
+		require.ErrorIs(t, err, ErrorInvalidDateFormat)
 
 		var apiErr *APIError
-		require.True(t, errors.As(err, &apiErr))
+		require.ErrorAs(t, err, &apiErr)
 		assert.Equal(t, uint64(30004), apiErr.Code)
 		assert.EqualError(t, err, "eloverblik: 400 Bad Request: [30004] Invalid date format in request")
 	})
@@ -160,19 +159,19 @@ func TestApiError(t *testing.T) {
 	t.Run("returns correct error for known error code", func(t *testing.T) {
 		// Example error for an invalid metering point ID
 		err := apiError("[20003] Metering point ID must be 18 characters long", 400)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, ErrorMeteringPointIdNot18CharsLong, err)
 	})
 
 	t.Run("returns specific error for unauthorized", func(t *testing.T) {
 		err := apiError("[20012] Unauthorized access", 401)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, ErrorUnauthorized, err)
 	})
 
 	t.Run("returns a formatted error for unknown codes", func(t *testing.T) {
 		err := apiError("[99999] A completely new and unknown error", 400)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unhandled error: '[99999] A completely new and unknown error'")
 	})
 }
@@ -180,13 +179,13 @@ func TestApiError(t *testing.T) {
 func TestErrorClientConnection(t *testing.T) {
 	t.Run("returns formatted connection error", func(t *testing.T) {
 		err := ErrorClientConnection(503)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "could't connect to eloverblik: 503")
 	})
 
 	t.Run("handles different status codes", func(t *testing.T) {
 		err := ErrorClientConnection(404)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "404")
 	})
 }
@@ -248,7 +247,7 @@ func TestApiErrorWithoutMessage(t *testing.T) {
 // not granted consent for CPR lookup. It is what the includeAll=true path runs into.
 func TestApiErrorNoCprConsent(t *testing.T) {
 	err := apiError("[10007] Missing consent for CPR lookup", 403)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Equal(t, ErrorNoCprConsent, err)
 }
 
@@ -286,7 +285,7 @@ func TestStatusSentinelForMessageWithoutCode(t *testing.T) {
 
 			_, err := c.GetMeteringPointDetails([]string{"571313180100000001"})
 
-			assert.ErrorIs(t, err, test.want)
+			require.ErrorIs(t, err, test.want)
 			assert.ErrorContains(t, err, test.message)
 		})
 	}

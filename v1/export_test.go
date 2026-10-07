@@ -10,6 +10,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // closeRecorder is a response body that records whether it was closed.
@@ -66,7 +67,7 @@ func TestFailedExport(t *testing.T) {
 			stream, err := export.export()
 
 			assert.Nil(t, stream)
-			assert.ErrorIs(t, err, ErrorUnauthorized)
+			require.ErrorIs(t, err, ErrorUnauthorized)
 			assert.True(t, body.closed, "the body of a failed export must be closed")
 		})
 	}

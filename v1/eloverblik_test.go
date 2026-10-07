@@ -6,6 +6,7 @@ import (
 
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNew(t *testing.T) {
@@ -66,7 +67,7 @@ func TestApiVersionHeader(t *testing.T) {
 
 			_, err := c.GetDataAccessToken()
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, "1.0", sent, "the api-version header must reach the wire")
 		})
 	}

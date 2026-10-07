@@ -8,6 +8,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAddRelationByID(t *testing.T) {
@@ -39,7 +40,7 @@ func TestAddRelationByID(t *testing.T) {
 
 		responses, err := c.AddRelationByID(meteringPointIDs)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		if assert.Len(t, responses, 1) {
 			assert.True(t, responses[0].Success)
 			assert.Equal(t, "Relation created", responses[0].Result)
@@ -57,7 +58,7 @@ func TestAddRelationByID(t *testing.T) {
 
 		_, err := c.AddRelationByID(meteringPointIDs)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, ErrorWrongMeteringPointIdOrWebAccessCode, err)
 	})
 }
@@ -89,7 +90,7 @@ func TestAddRelationByWebAccessCode(t *testing.T) {
 
 		result, err := c.AddRelationByWebAccessCode(meteringPointID, webAccessCode)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "Relation created", result)
 	})
 }
@@ -120,7 +121,7 @@ func TestDeleteRelation(t *testing.T) {
 
 		success, err := c.DeleteRelation(meteringPointID)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, success)
 	})
 
@@ -137,7 +138,7 @@ func TestDeleteRelation(t *testing.T) {
 
 		success, err := c.DeleteRelation(meteringPointID)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, ErrorRelationNotFound, err)
 		assert.False(t, success)
 	})
@@ -153,7 +154,7 @@ func TestDeleteRelation(t *testing.T) {
 
 		success, err := c.DeleteRelation(meteringPointID)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.False(t, success)
 	})
 
@@ -163,7 +164,7 @@ func TestDeleteRelation(t *testing.T) {
 
 		success, err := c.DeleteRelation(meteringPointID)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.False(t, success)
 	})
 }
@@ -224,7 +225,7 @@ func TestRetiredRelationEndpoints(t *testing.T) {
 
 				err := call.call()
 
-				assert.ErrorIs(t, err, ErrorEndpointRetired)
+				require.ErrorIs(t, err, ErrorEndpointRetired)
 				if body.keepsText {
 					assert.ErrorContains(t, err, message)
 				}

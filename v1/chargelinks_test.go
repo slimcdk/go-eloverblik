@@ -2,7 +2,6 @@ package eloverblik
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -120,7 +119,7 @@ func TestGetChargeLinksWithCharges(t *testing.T) {
 			})
 
 		result, err := c.GetChargeLinksWithCharges(meteringPointIDs, from, to)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, result)
 
 		// The request envelope is a flat query array with a date interval per metering point,
@@ -128,7 +127,7 @@ func TestGetChargeLinksWithCharges(t *testing.T) {
 		assert.JSONEq(t, `{"query":[{"meteringPointId":"571313180100000001","from":"2024-01-01T00:00:00+01:00","to":"2024-02-01T00:00:00+01:00"}]}`, string(requestBody))
 
 		var sent ChargeLinksWithChargesRequest
-		assert.NoError(t, json.Unmarshal(requestBody, &sent))
+		require.NoError(t, json.Unmarshal(requestBody, &sent))
 		assert.Len(t, sent.Query, 1)
 		assert.Equal(t, "571313180100000001", sent.Query[0].MeteringPointID)
 		assert.True(t, sent.Query[0].From.Equal(from))
@@ -195,7 +194,7 @@ func TestGetChargeLinksWithCharges(t *testing.T) {
 			})
 
 		result, err := c.GetChargeLinksWithCharges(meteringPointIDs, from, to)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, result)
 		assert.Len(t, result.Results, 1)
 		assert.Empty(t, result.Results[0].ChargeLinks)
@@ -232,7 +231,7 @@ func TestGetChargeLinksWithCharges(t *testing.T) {
 			})
 
 		result, err := c.GetChargeLinksWithCharges([]string{"571313180100000002"}, from, to)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, result)
 		assert.Len(t, result.Results, 1)
 		assert.Equal(t, "No access to metering point", result.Results[0].Error)
@@ -296,7 +295,7 @@ func TestGetChargeLinksWithChargesNotDeployed(t *testing.T) {
 	// The problem document reaches the caller whole, trace ID included: it is what Energinet
 	// support asks for when an endpoint they declare answers 404
 	var apiErr *APIError
-	require.True(t, errors.As(err, &apiErr))
+	require.ErrorAs(t, err, &apiErr)
 	assert.Equal(t, 404, apiErr.StatusCode)
 	assert.Equal(t, "Not Found", apiErr.Title)
 	assert.Equal(t, "00-9c485a3a3ed458eab22cab724111db63-ed7aa1e057161e52-01", apiErr.TraceID)

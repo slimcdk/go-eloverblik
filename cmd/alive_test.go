@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestAliveCmdPerParent guards against sharing a single "alive" command between the two
@@ -21,7 +22,7 @@ func TestAliveCmdPerParent(t *testing.T) {
 	for name, parent := range parents {
 		t.Run(name+" alive resolves to a command owned by its own parent", func(t *testing.T) {
 			cmd, _, err := rootCmd.Find([]string{name, "alive"})
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, "alive", cmd.Name())
 			assert.Same(t, parent, cmd.Parent(), "the alive command must belong to the %s command", name)
 

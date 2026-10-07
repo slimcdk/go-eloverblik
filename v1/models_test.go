@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFlexibleTime_UnmarshalJSON(t *testing.T) {
@@ -82,7 +83,7 @@ func TestFlexibleTime_MarshalJSON(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := json.Marshal(tt.input)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tt.expected, string(result))
 		})
 	}
@@ -98,7 +99,7 @@ func TestFlexibleTime_InStruct(t *testing.T) {
 		jsonData := `{"date": "", "name": "test"}`
 		var ts TestStruct
 		err := json.Unmarshal([]byte(jsonData), &ts)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, ts.Date.IsZero())
 		assert.Equal(t, "test", ts.Name)
 	})
@@ -107,7 +108,7 @@ func TestFlexibleTime_InStruct(t *testing.T) {
 		jsonData := `{"date": "2024-01-15T10:30:00Z", "name": "test"}`
 		var ts TestStruct
 		err := json.Unmarshal([]byte(jsonData), &ts)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.False(t, ts.Date.IsZero())
 		assert.Equal(t, 2024, ts.Date.Year())
 		assert.Equal(t, "test", ts.Name)
@@ -119,7 +120,7 @@ func TestFlexibleTime_InStruct(t *testing.T) {
 			Name: "test",
 		}
 		result, err := json.Marshal(ts)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Contains(t, string(result), `"date":null`)
 		assert.Contains(t, string(result), `"name":"test"`)
 	})

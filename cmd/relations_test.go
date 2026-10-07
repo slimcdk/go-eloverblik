@@ -5,6 +5,7 @@ import (
 
 	"github.com/slimcdk/go-eloverblik/v1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // retiredRelationsClient fails the test if a command calls one of the endpoints Energinet
@@ -32,13 +33,13 @@ func TestRetiredRelationCommands(t *testing.T) {
 	defer func() { clientInstance = nil }()
 
 	_, err := execute(t, "customer", "add-relation-by-code", "571313174002485069", "ABCD1234", "--token", "dummy")
-	assert.ErrorIs(t, err, eloverblik.ErrorEndpointRetired)
+	require.ErrorIs(t, err, eloverblik.ErrorEndpointRetired)
 
 	_, err = execute(t, "customer", "delete-relation", "571313174002485069", "--token", "dummy")
-	assert.ErrorIs(t, err, eloverblik.ErrorEndpointRetired)
+	require.ErrorIs(t, err, eloverblik.ErrorEndpointRetired)
 
 	help, err := execute(t, "--help")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotContains(t, help, "add-relation-by-code")
 	assert.NotContains(t, help, "delete-relation")
 	assert.Contains(t, help, "add-relation", "the relation command that still works must stay")

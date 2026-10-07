@@ -10,6 +10,7 @@ import (
 
 	"github.com/slimcdk/go-eloverblik/v1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type nopCloser struct {
@@ -31,12 +32,12 @@ func TestCsvToJSON(t *testing.T) {
 		defer func() { output = oldStdout }()
 
 		err := csvToJSON(stream)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Parse the JSON output
 		var records []map[string]string
 		err = json.Unmarshal(buf.Bytes(), &records)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, records, 2)
 
 		// Check first record (BOM will be in the first header)
@@ -60,12 +61,12 @@ func TestCsvToJSON(t *testing.T) {
 		defer func() { output = oldStdout }()
 
 		err := csvToJSON(stream)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		var records []map[string]string
 		err = json.Unmarshal(buf.Bytes(), &records)
-		assert.NoError(t, err)
-		assert.Len(t, records, 0)
+		require.NoError(t, err)
+		assert.Empty(t, records)
 	})
 
 	t.Run("handles CSV with special characters", func(t *testing.T) {
@@ -78,11 +79,11 @@ func TestCsvToJSON(t *testing.T) {
 		defer func() { output = oldStdout }()
 
 		err := csvToJSON(stream)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		var records []map[string]string
 		err = json.Unmarshal(buf.Bytes(), &records)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, records, 2)
 		assert.Equal(t, "Net abo C", records[0]["Navn"])
 		assert.Equal(t, "Net abo C forbrug flex - stikledning", records[0]["Beskrivelse"])
@@ -98,11 +99,11 @@ func TestCsvToJSON(t *testing.T) {
 		defer func() { output = oldStdout }()
 
 		err := csvToJSON(stream)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		var records []map[string]string
 		err = json.Unmarshal(buf.Bytes(), &records)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, records, 2)
 		assert.Equal(t, "A", records[0]["Col1"])
 		assert.Equal(t, "C", records[0]["Col3"])
@@ -125,7 +126,7 @@ func TestOutputStream(t *testing.T) {
 		defer func() { output = oldStdout }()
 
 		err := outputStream(stream, "csv")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Should output raw CSV
 		assert.Equal(t, csvData, buf.String())
@@ -141,12 +142,12 @@ func TestOutputStream(t *testing.T) {
 		defer func() { output = oldStdout }()
 
 		err := outputStream(stream, "json")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Should output JSON
 		var records []map[string]string
 		err = json.Unmarshal(buf.Bytes(), &records)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, records, 2)
 		assert.Equal(t, "John", records[0]["Name"])
 		assert.Equal(t, "30", records[0]["Age"])
@@ -162,7 +163,7 @@ func TestOutputStream(t *testing.T) {
 		defer func() { output = oldStdout }()
 
 		err := outputStream(stream, "unknown")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Should default to CSV output
 		assert.Equal(t, csvData, buf.String())
@@ -185,14 +186,14 @@ func TestMeteringPointArgs(t *testing.T) {
 	t.Run("rejects IDs with wrong length", func(t *testing.T) {
 		args := []string{"12345"}
 		err := meteringPointArgs(nil, args)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid id")
 	})
 
 	t.Run("rejects non-numeric IDs", func(t *testing.T) {
 		args := []string{"57131315541105308a"}
 		err := meteringPointArgs(nil, args)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid id")
 	})
 
@@ -271,7 +272,7 @@ func TestParseDate(t *testing.T) {
 			if tc.expectErr {
 				assert.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				tc.checkFunc(t, got)
 			}
 		})
@@ -355,7 +356,7 @@ func TestDetailsCmd(t *testing.T) {
 	defer func() { output = oldOutput }()
 
 	_, err := execute(t, "customer", "details", "571313174002485069", "--token", "dummy")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Contains(t, buf.String(), `"success":true`)
 }
 
@@ -376,7 +377,7 @@ func TestExportTimeseriesCmd(t *testing.T) {
 	defer func() { output = oldOutput }()
 
 	_, err := execute(t, "customer", "export-timeseries", "571313174002485069", "--from", "2026-01-01", "--token", "dummy")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "2026-01-01;1.23")
 }
 
@@ -395,7 +396,7 @@ func TestExportMasterdataCmd(t *testing.T) {
 	defer func() { output = oldOutput }()
 
 	_, err := execute(t, "customer", "export-masterdata", "571313174002485069", "--token", "dummy")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "571313174002485069;Some Address")
 }
 
@@ -415,13 +416,13 @@ func TestTimeseriesCmd(t *testing.T) {
 	defer func() { output = oldOutput }()
 
 	_, err := execute(t, "customer", "timeseries", "571313174002485069", "--from", "2026-01-01", "--token", "dummy")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.JSONEq(t, `[]`, buf.String())
 
 	// Test with period
 	buf.Reset()
 	_, err = execute(t, "customer", "timeseries", "571313174002485069", "--period", "last_week", "--token", "dummy")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.JSONEq(t, `[]`, buf.String())
 
 	// Test mutually exclusive flags
@@ -517,7 +518,7 @@ func TestTimeseriesCmdFlattenRepeatedMeteringPoint(t *testing.T) {
 	var flattened map[string][]eloverblik.FlatTimeSeriesPoint
 	assert.NoError(t, json.Unmarshal(stdout.Bytes(), &flattened))
 	if assert.Len(t, flattened["571313174002485069"], 2) {
-		assert.Equal(t, 7.5, flattened["571313174002485069"][0].Measurement)
-		assert.Equal(t, 8.5, flattened["571313174002485069"][1].Measurement)
+		assert.InDelta(t, 7.5, flattened["571313174002485069"][0].Measurement, 1e-9)
+		assert.InDelta(t, 8.5, flattened["571313174002485069"][1].Measurement, 1e-9)
 	}
 }

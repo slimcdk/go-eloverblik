@@ -8,6 +8,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetDataAccessToken(t *testing.T) {
@@ -38,7 +39,7 @@ func TestGetDataAccessToken(t *testing.T) {
 		token, err := c.GetDataAccessToken()
 
 		// Assertions
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, expectedToken, token)
 		assert.Equal(t, expectedToken, c.accessToken, "Access token should be stored in the client struct")
 	})
@@ -52,7 +53,7 @@ func TestGetDataAccessToken(t *testing.T) {
 		token, err := c.GetDataAccessToken()
 
 		// Assertions
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "already-cached-token", token)
 		assert.Equal(t, 0, httpmock.GetTotalCallCount(), "authenticate() should not be called if token is cached")
 	})
@@ -121,8 +122,8 @@ func TestAuthenticateFailure(t *testing.T) {
 
 			token, err := c.GetDataAccessToken()
 
-			assert.Error(t, err)
-			assert.EqualError(t, err, test.expected.Error())
+			require.Error(t, err)
+			require.EqualError(t, err, test.expected.Error())
 			assert.Empty(t, token)
 			assert.Empty(t, c.accessToken, "no access token may be stored when authentication fails")
 		})
@@ -166,7 +167,7 @@ func TestGetAuthorizations(t *testing.T) {
 
 		authorizations, err := c.GetAuthorizations()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		if assert.Len(t, authorizations, 1) {
 			assert.Equal(t, "auth-uuid-1", authorizations[0].ID)
 			assert.Equal(t, "Test Corp", authorizations[0].ThirdPartyName)
@@ -182,7 +183,7 @@ func TestGetAuthorizations(t *testing.T) {
 
 		_, err := customerClient.GetAuthorizations()
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "only available for ThirdParty API")
 	})
 
@@ -197,7 +198,7 @@ func TestGetAuthorizations(t *testing.T) {
 
 		_, err := c.GetAuthorizations()
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, ErrorUnauthorized, err)
 	})
 }
@@ -230,7 +231,7 @@ func TestGetMeteringPointsForScope(t *testing.T) {
 
 		meteringPoints, err := c.GetMeteringPointsForScope(AuthScopeCustomerCVR, "12345678")
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		if assert.Len(t, meteringPoints, 1) {
 			assert.Equal(t, "571313180100000001", meteringPoints[0].MeteringPointID)
 		}
@@ -245,7 +246,7 @@ func TestGetMeteringPointsForScope(t *testing.T) {
 
 		_, err := customerClient.GetMeteringPointsForScope(AuthScopeCustomerCVR, "12345678")
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "only available for ThirdParty API")
 	})
 }
@@ -314,7 +315,7 @@ func TestGetMeteringPointsForScopeFullPayload(t *testing.T) {
 
 	meteringPoints, err := c.GetMeteringPointsForScope(AuthScopeID, "725809")
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if !assert.Len(t, meteringPoints, 1) {
 		return
 	}
@@ -327,7 +328,7 @@ func TestGetMeteringPointsForScopeFullPayload(t *testing.T) {
 	assert.Equal(t, "D01", meteringPoint.SettlementMethod)
 	assert.Equal(t, "PT1H", meteringPoint.MeterReadingOccurrence)
 	assert.Equal(t, "John Sisk & Son ApS", meteringPoint.FirstConsumerPartyName)
-	assert.Equal(t, "", meteringPoint.SecondConsumerPartyName)
+	assert.Empty(t, meteringPoint.SecondConsumerPartyName)
 	assert.Equal(t, "42703087", meteringPoint.ConsumerCVR)
 	assert.Equal(t, "42703087", meteringPoint.DataAccessCVR)
 	assert.Equal(t, "30203518", meteringPoint.MeterNumber)
@@ -371,7 +372,7 @@ func TestGetMeteringPointIDsForScope(t *testing.T) {
 
 		ids, err := c.GetMeteringPointIDsForScope(AuthScopeCustomerCVR, "12345678")
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		if assert.Len(t, ids, 2) {
 			assert.Equal(t, "571313180100000001", ids[0])
 			assert.Equal(t, "571313180100000002", ids[1])
@@ -387,7 +388,7 @@ func TestGetMeteringPointIDsForScope(t *testing.T) {
 
 		_, err := customerClient.GetMeteringPointIDsForScope(AuthScopeCustomerCVR, "12345678")
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "only available for ThirdParty API")
 	})
 }
@@ -402,14 +403,14 @@ func TestIsAlive(t *testing.T) {
 	t.Run("returns true on 200 OK", func(t *testing.T) {
 		httpmock.RegisterResponder("GET", "/isalive", httpmock.NewStringResponder(200, "true"))
 		alive, err := c.IsAlive()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, alive)
 	})
 
 	t.Run("returns false on 503 Service Unavailable", func(t *testing.T) {
 		httpmock.RegisterResponder("GET", "/isalive", httpmock.NewStringResponder(503, ""))
 		alive, err := c.IsAlive()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.False(t, alive)
 	})
 }

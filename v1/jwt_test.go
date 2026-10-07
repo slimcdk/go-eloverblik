@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // testToken builds a JWT carrying the given claims. Only the payload matters: the library
@@ -15,7 +16,7 @@ func testToken(t *testing.T, claims map[string]any) string {
 	t.Helper()
 
 	payload, err := json.Marshal(claims)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
 	return header + "." + base64.RawURLEncoding.EncodeToString(payload) + ".c2lnbmF0dXJl"
@@ -44,7 +45,7 @@ func TestParseToken(t *testing.T) {
 			claimNameIdentifier: "EIA:c004d233-710c-46e3-a9fa-4d787a9e0052",
 		}))
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "THIRDPARTYAPI_Refresh", claims.TokenType)
 		assert.Equal(t, "christian local testing", claims.TokenName)
 		assert.Equal(t, "6ad87f99-d536-41a2-9722-622e94822fba", claims.TokenID)
@@ -63,7 +64,7 @@ func TestParseToken(t *testing.T) {
 		assert.InDelta(t, 24*time.Hour, claims.ExpiresIn(), float64(time.Minute))
 
 		apiType, err := claims.APIType()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, ThirdPartyApi, apiType)
 	})
 
@@ -74,7 +75,7 @@ func TestParseToken(t *testing.T) {
 			claimRole:   "ReadPrivate, ReadBusiness",
 		}))
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, []string{"ReadPrivate", "ReadBusiness"}, claims.Roles)
 		assert.True(t, claims.IsDataAccessToken())
 		assert.False(t, claims.IsRefreshToken())
@@ -86,10 +87,10 @@ func TestParseToken(t *testing.T) {
 			"exp":       expiry.Unix(),
 		}))
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		apiType, err := claims.APIType()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, CustomerApi, apiType)
 	})
 
@@ -99,7 +100,7 @@ func TestParseToken(t *testing.T) {
 			"exp":       time.Now().Add(-time.Hour).Unix(),
 		}))
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, claims.IsExpired())
 		assert.Zero(t, claims.ExpiresIn())
 	})
@@ -110,7 +111,7 @@ func TestParseToken(t *testing.T) {
 			"exp":       expiry.Unix(),
 		}))
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		_, err = claims.APIType()
 		assert.Error(t, err)
 	})
@@ -146,7 +147,7 @@ func TestClientTokenClaims(t *testing.T) {
 
 		claims, err := c.RefreshTokenClaims()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "my token", claims.TokenName)
 		assert.True(t, claims.IsRefreshToken())
 	})

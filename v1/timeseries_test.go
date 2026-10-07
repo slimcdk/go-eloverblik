@@ -11,6 +11,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetTimeSeries(t *testing.T) {
@@ -77,13 +78,13 @@ func TestGetTimeSeries(t *testing.T) {
 		timeSeries, err := c.GetTimeSeries(meteringPointIDs, from, to, aggregation)
 
 		// Assertions
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, timeSeries, 1)
 		assert.Len(t, timeSeries[0].MyEnergyDataMarketDocument.TimeSeries, 1)
 		assert.Equal(t, "571313180100000001", timeSeries[0].MyEnergyDataMarketDocument.TimeSeries[0].MRID)
 		assert.Len(t, timeSeries[0].MyEnergyDataMarketDocument.TimeSeries[0].Periods[0].Points, 1)
 		assert.Equal(t, 1, timeSeries[0].MyEnergyDataMarketDocument.TimeSeries[0].Periods[0].Points[0].Position)
-		assert.Equal(t, 0.123, timeSeries[0].MyEnergyDataMarketDocument.TimeSeries[0].Periods[0].Points[0].OutQuantityQuantity)
+		assert.InDelta(t, 0.123, timeSeries[0].MyEnergyDataMarketDocument.TimeSeries[0].Periods[0].Points[0].OutQuantityQuantity, 1e-9)
 	})
 }
 
@@ -141,7 +142,7 @@ func TestGetTimeSeriesErrorCodes(t *testing.T) {
 
 		_, err := c.GetTimeSeries([]string{"571313180100000001"}, from, to, Day)
 
-		assert.ErrorIs(t, err, ErrorPeriodNotAllowed)
+		require.ErrorIs(t, err, ErrorPeriodNotAllowed)
 		assert.ErrorIs(t, err, ErrorNumberOfDaysExcceded)
 	})
 }
@@ -199,7 +200,7 @@ func TestGetTimeSeriesFailurePerMeteringPoint(t *testing.T) {
 	ids := []string{"571313180100000001", "571313180100000002", "571313180100000003"}
 	timeSeries, err := c.GetTimeSeries(ids, from, to, Day)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if assert.Len(t, timeSeries, 3) {
 		assert.NoError(t, timeSeries[0].Err())
 
@@ -248,7 +249,7 @@ func TestFlatten(t *testing.T) {
 		// Check first point
 		assert.Equal(t, start.In(cph), flattened[0].From)
 		assert.Equal(t, start.In(cph).Add(1*time.Hour), flattened[0].To)
-		assert.Equal(t, 1.1, flattened[0].Measurement)
+		assert.InDelta(t, 1.1, flattened[0].Measurement, 1e-9)
 		assert.Equal(t, "A04", flattened[0].Quality)
 		assert.Equal(t, "KWH", flattened[0].Unit)
 		assert.Equal(t, Resolution("PT1H"), flattened[0].Resolution)
@@ -256,7 +257,7 @@ func TestFlatten(t *testing.T) {
 		// Check second point
 		assert.Equal(t, start.In(cph).Add(1*time.Hour), flattened[1].From)
 		assert.Equal(t, start.In(cph).Add(2*time.Hour), flattened[1].To)
-		assert.Equal(t, 2.2, flattened[1].Measurement)
+		assert.InDelta(t, 2.2, flattened[1].Measurement, 1e-9)
 		assert.Equal(t, "A03", flattened[1].Quality)
 	})
 }
@@ -419,12 +420,12 @@ func TestExportTimeSeries(t *testing.T) {
 		httpmock.RegisterResponder("POST", path, httpmock.NewStringResponder(200, mockResponse))
 
 		body, err := c.ExportTimeSeries(meteringPointIDs, from, to, aggregation)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, body)
 		defer body.Close()
 
 		content, err := io.ReadAll(body)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, mockResponse, string(content))
 	})
 }

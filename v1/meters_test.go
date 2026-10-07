@@ -10,6 +10,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetMeteringPoints(t *testing.T) {
@@ -52,7 +53,7 @@ func TestGetMeteringPoints(t *testing.T) {
 		meteringPoints, err := c.GetMeteringPoints(true)
 
 		// Assertions
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, meteringPoints, 1)
 		assert.Equal(t, "571313180100000001", meteringPoints[0].MeteringPointID)
 		assert.Equal(t, "Testvej", meteringPoints[0].StreetName)
@@ -78,7 +79,7 @@ func TestGetMeteringPoints(t *testing.T) {
 
 		meteringPoints, err := c.GetMeteringPoints(false)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		if assert.Len(t, meteringPoints, 2) {
 			assert.True(t, meteringPoints[0].IsMovedOut)
 			assert.False(t, meteringPoints[1].IsMovedOut)
@@ -115,7 +116,7 @@ func TestGetMeteringPointsIncludeAll(t *testing.T) {
 
 			_, err := c.GetMeteringPoints(includeAll)
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, strconv.FormatBool(includeAll), query, "includeAll must be sent as a query parameter")
 		})
 	}
@@ -178,8 +179,8 @@ func TestGetMeteringPointsFailure(t *testing.T) {
 
 			meteringPoints, err := c.GetMeteringPoints(true)
 
-			assert.Error(t, err)
-			assert.EqualError(t, err, test.expected.Error())
+			require.Error(t, err)
+			require.EqualError(t, err, test.expected.Error())
 			assert.Nil(t, meteringPoints)
 		})
 	}
@@ -229,7 +230,7 @@ func TestGetMeteringPointDetails(t *testing.T) {
 		details, err := c.GetMeteringPointDetails(meteringPointIDs)
 
 		// Assertions
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, details, 1)
 		assert.True(t, details[0].Success)
 		assert.Equal(t, "571313180100000001", details[0].Result.MeteringPointID)
@@ -247,7 +248,7 @@ func TestGetMeteringPointDetails(t *testing.T) {
 
 		_, err := c.GetMeteringPointDetails(meteringPointIDs)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, ErrorAccessToMeteringPointDenied, err)
 	})
 }
@@ -364,7 +365,7 @@ func TestGetMeteringPointDetailsFullPayload(t *testing.T) {
 
 	details, err := c.GetMeteringPointDetails([]string{"571313113162842251"})
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if !assert.Len(t, details, 1) {
 		return
 	}
@@ -385,7 +386,7 @@ func TestGetMeteringPointDetailsFullPayload(t *testing.T) {
 	assert.Equal(t, "2026-07-12T22:00:00Z", detail.Occurrence.UTC().Format(time.RFC3339))
 
 	// powerLimitKW stays a string, powerLimitKWDecimal is a number
-	assert.Equal(t, "", detail.PowerLimitKW)
+	assert.Empty(t, detail.PowerLimitKW)
 	if assert.NotNil(t, detail.PowerLimitKWDecimal) {
 		assert.InDelta(t, 25.5, *detail.PowerLimitKWDecimal, 0.0001)
 	}
@@ -442,7 +443,7 @@ func TestGetMeteringPointDetailsNullPowerLimit(t *testing.T) {
 
 	details, err := c.GetMeteringPointDetails([]string{"571313113162842251"})
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if !assert.Len(t, details, 1) {
 		return
 	}
@@ -469,7 +470,7 @@ func TestExportMasterdata(t *testing.T) {
 			httpmock.NewStringResponder(200, mockCSV))
 
 		stream, err := c.ExportMasterdata(meteringPointIDs)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, stream)
 		defer stream.Close()
 
@@ -487,7 +488,7 @@ func TestExportMasterdata(t *testing.T) {
 		}
 
 		_, err := c.ExportMasterdata(meteringPointIDs)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "only available for Customer API")
 	})
 }
