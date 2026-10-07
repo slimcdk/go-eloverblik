@@ -15,12 +15,9 @@ var thirdpartyCmd = &cobra.Command{
 		if clientInstance != nil {
 			return nil
 		}
-		token, err := cmd.Root().PersistentFlags().GetString("token")
+		token, err := refreshToken(cmd)
 		if err != nil {
 			return err
-		}
-		if token == "" {
-			return fmt.Errorf("required flag \"token\" not set")
 		}
 		clientInstance = eloverblik.NewThirdParty(token, clientOptions(cmd)...)
 		return nil

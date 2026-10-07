@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/slimcdk/go-eloverblik/v1"
 	"github.com/spf13/cobra"
 )
@@ -14,12 +12,9 @@ var customerCmd = &cobra.Command{
 		if clientInstance != nil {
 			return nil
 		}
-		token, err := cmd.Root().PersistentFlags().GetString("token")
+		token, err := refreshToken(cmd)
 		if err != nil {
 			return err
-		}
-		if token == "" {
-			return fmt.Errorf("required flag \"token\" not set")
 		}
 		clientInstance = eloverblik.NewCustomer(token, clientOptions(cmd)...)
 		return nil

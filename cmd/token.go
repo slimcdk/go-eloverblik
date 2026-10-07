@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"encoding/json"
-	"fmt"
 
 	eloverblik "github.com/slimcdk/go-eloverblik/v1"
 	"github.com/spf13/cobra"
@@ -18,12 +17,9 @@ The claims are decoded, not verified, and no request is made to Eloverblik. Use
 --data-access to exchange the refresh token for a data access token and decode that one
 instead, which does make a request.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		token, err := cmd.Root().PersistentFlags().GetString("token")
+		token, err := refreshToken(cmd)
 		if err != nil {
 			return err
-		}
-		if token == "" {
-			return fmt.Errorf("required flag \"token\" not set")
 		}
 
 		dataAccess, _ := cmd.Flags().GetBool("data-access")

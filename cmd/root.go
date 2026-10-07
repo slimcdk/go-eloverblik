@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -31,6 +32,20 @@ func Execute() {
 	if err != nil {
 		os.Exit(1)
 	}
+}
+
+// refreshToken returns the refresh token given with --token, or an error when none was
+// given. The commands that use the token call it instead of having cobra require the
+// flag, which cobra would then demand of every command, help and completion included.
+func refreshToken(cmd *cobra.Command) (string, error) {
+	token, err := cmd.Root().PersistentFlags().GetString("token")
+	if err != nil {
+		return "", err
+	}
+	if token == "" {
+		return "", errors.New(`required flag "token" not set`)
+	}
+	return token, nil
 }
 
 // helpFunc returns the help for the whole command tree. A help function set on the root
@@ -80,8 +95,7 @@ func rootHelpFunc(cmd *cobra.Command, _ []string) {
 }
 
 func init() {
-	// --token is not marked required: cobra would then demand it of every command, help
-	// and completion included. The customer, thirdparty and token commands check it.
+	// --token is not marked required: the commands that use it check it with refreshToken.
 	rootCmd.PersistentFlags().String("token", "", "Eloverblik refresh token (required by the customer, thirdparty and token commands)")
 	rootCmd.PersistentFlags().Bool("print-response-headers", false, "Print HTTP response headers from the Eloverblik API to stderr")
 	rootCmd.SetHelpFunc(helpFunc(rootCmd.HelpFunc()))
