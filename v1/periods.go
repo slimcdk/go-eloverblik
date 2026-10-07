@@ -9,7 +9,8 @@ import (
 // Period defines a custom string type for predefined time periods.
 type Period string
 
-// Defines constants for all supported time periods.
+// Defines constants for all supported time periods. Weeks run from Monday to Sunday, as
+// in ISO 8601 and the Danish calendar.
 const (
 	Yesterday Period = "yesterday"
 	ThisWeek  Period = "this_week"
@@ -38,20 +39,20 @@ func getDatesFromPeriod(period Period, now time.Time) (from time.Time, to time.T
 	year, month, day := now.Date()
 	startOfToday := time.Date(year, month, day, 0, 0, 0, 0, now.Location())
 	firstOfThisMonth := time.Date(year, month, 1, 0, 0, 0, 0, now.Location())
+	// Go numbers the weekdays from Sunday (0), but weeks start on Monday.
+	daysSinceMonday := (int(now.Weekday()) + 6) % 7
+	startOfThisWeek := time.Date(year, month, day-daysSinceMonday, 0, 0, 0, 0, now.Location())
 
 	switch strings.ToLower(string(period)) {
 	case string(Yesterday):
 		from = startOfToday.AddDate(0, 0, -1)
 		to = startOfToday // Exclusive: the day that follows yesterday
 	case string(ThisWeek):
-		weekday := int(now.Weekday())
-		from = startOfToday.AddDate(0, 0, -weekday)
+		from = startOfThisWeek
 		to = now
 	case string(LastWeek):
-		weekday := int(now.Weekday())
-		startOfThisWeek := startOfToday.AddDate(0, 0, -weekday)
 		from = startOfThisWeek.AddDate(0, 0, -7)
-		to = startOfThisWeek
+		to = startOfThisWeek // Exclusive: the Monday that follows last week
 	case string(ThisMonth):
 		from = firstOfThisMonth
 		to = now

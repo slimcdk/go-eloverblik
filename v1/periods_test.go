@@ -8,72 +8,75 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetDatesFromPeriod(t *testing.T) {
-	now := time.Now()
-	startOfToday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	firstOfThisMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	firstOfThisYear := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
-	startOfThisWeek := startOfToday.AddDate(0, 0, -int(now.Weekday()))
+// periodCase is one expected range. The bounds are RFC 3339 timestamps, which carry the
+// UTC offset, so a bound at the right wall clock in the wrong zone fails as well.
+type periodCase struct {
+	name   string
+	now    time.Time
+	period Period
+	from   string
+	to     string
+}
 
-	tests := []struct {
-		period    Period
-		expectErr bool
-		from      time.Time
-		to        time.Time
-	}{
-		{
-			period: Yesterday,
-			from:   startOfToday.AddDate(0, 0, -1),
-			to:     startOfToday,
-		},
-		{
-			period: ThisWeek,
-			from:   startOfThisWeek,
-			to:     now,
-		},
-		{
-			period: LastWeek,
-			from:   startOfThisWeek.AddDate(0, 0, -7),
-			to:     startOfThisWeek,
-		},
-		{
-			period: ThisMonth,
-			from:   firstOfThisMonth,
-			to:     now,
-		},
-		{
-			period: LastMonth,
-			from:   firstOfThisMonth.AddDate(0, -1, 0),
-			to:     firstOfThisMonth,
-		},
-		{
-			period: ThisYear,
-			from:   firstOfThisYear,
-			to:     now,
-		},
-		{
-			period: LastYear,
-			from:   firstOfThisYear.AddDate(-1, 0, 0),
-			to:     firstOfThisYear,
-		},
-		{
-			period:    "invalid",
-			expectErr: true,
-		},
+func (c periodCase) run(t *testing.T) {
+	t.Helper()
+	t.Run(c.name, func(t *testing.T) {
+		from, to, err := getDatesFromPeriod(c.period, c.now)
+		require.NoError(t, err)
+		assert.Equal(t, c.from, from.Format(time.RFC3339), "from")
+		assert.Equal(t, c.to, to.Format(time.RFC3339), "to")
+	})
+}
+
+func TestGetDatesFromPeriod(t *testing.T) {
+	// Wednesday 18 March 2026, in winter time (CET, +01:00).
+	now := time.Date(2026, 3, 18, 14, 30, 0, 0, cph)
+
+	for _, c := range []periodCase{
+		{period: Yesterday, from: "2026-03-17T00:00:00+01:00", to: "2026-03-18T00:00:00+01:00"},
+		{period: ThisWeek, from: "2026-03-16T00:00:00+01:00", to: "2026-03-18T14:30:00+01:00"},
+		{period: LastWeek, from: "2026-03-09T00:00:00+01:00", to: "2026-03-16T00:00:00+01:00"},
+		{period: ThisMonth, from: "2026-03-01T00:00:00+01:00", to: "2026-03-18T14:30:00+01:00"},
+		{period: LastMonth, from: "2026-02-01T00:00:00+01:00", to: "2026-03-01T00:00:00+01:00"},
+		{period: ThisYear, from: "2026-01-01T00:00:00+01:00", to: "2026-03-18T14:30:00+01:00"},
+		{period: LastYear, from: "2025-01-01T00:00:00+01:00", to: "2026-01-01T00:00:00+01:00"},
+		{period: "This_Week", from: "2026-03-16T00:00:00+01:00", to: "2026-03-18T14:30:00+01:00"},
+	} {
+		c.name, c.now = string(c.period), now
+		c.run(t)
 	}
 
-	for _, test := range tests {
-		t.Run(string(test.period), func(t *testing.T) {
-			from, to, err := getDatesFromPeriod(test.period, now)
-			if test.expectErr {
-				assert.Error(t, err)
-				return
-			}
+	t.Run("invalid", func(t *testing.T) {
+		from, to, err := getDatesFromPeriod("invalid", now)
+		require.Error(t, err)
+		assert.True(t, from.IsZero())
+		assert.True(t, to.IsZero())
+	})
+}
 
-			require.NoError(t, err)
-			assert.WithinDuration(t, test.from, from, time.Second)
-			assert.WithinDuration(t, test.to, to, time.Second)
-		})
+// TestGetDatesFromPeriodWeeksStartOnMonday pins the week to ISO 8601 and the Danish
+// calendar: Monday to Sunday, so a Sunday is the last day of its week, not the first.
+func TestGetDatesFromPeriodWeeksStartOnMonday(t *testing.T) {
+	sunday := time.Date(2026, 3, 22, 20, 0, 0, 0, cph)
+	saturday := time.Date(2026, 3, 21, 9, 0, 0, 0, cph)
+	monday := time.Date(2026, 3, 16, 9, 0, 0, 0, cph)
+	newYear := time.Date(2026, 1, 1, 12, 0, 0, 0, cph) // a Thursday
+
+	for _, c := range []periodCase{
+		{name: "this_week on a Sunday", now: sunday, period: ThisWeek,
+			from: "2026-03-16T00:00:00+01:00", to: "2026-03-22T20:00:00+01:00"},
+		{name: "last_week on a Sunday", now: sunday, period: LastWeek,
+			from: "2026-03-09T00:00:00+01:00", to: "2026-03-16T00:00:00+01:00"},
+		{name: "this_week on a Saturday", now: saturday, period: ThisWeek,
+			from: "2026-03-16T00:00:00+01:00", to: "2026-03-21T09:00:00+01:00"},
+		{name: "last_week on a Monday", now: monday, period: LastWeek,
+			from: "2026-03-09T00:00:00+01:00", to: "2026-03-16T00:00:00+01:00"},
+		{name: "this_week across new year", now: newYear, period: ThisWeek,
+			from: "2025-12-29T00:00:00+01:00", to: "2026-01-01T12:00:00+01:00"},
+		{name: "last_week across new year", now: newYear, period: LastWeek,
+			from: "2025-12-22T00:00:00+01:00", to: "2025-12-29T00:00:00+01:00"},
+	} {
+		c.run(t)
 	}
 }
 
@@ -82,15 +85,16 @@ func TestGetDatesFromPeriod(t *testing.T) {
 // date granularity: an equal pair is rejected with error 30002, and a to that lands
 // inside the period silently drops the period's last day.
 func TestGetDatesFromPeriodIsHalfOpen(t *testing.T) {
-	// A Monday, so that the week periods do not straddle a month boundary.
-	now := time.Date(2026, 3, 16, 14, 30, 0, 0, cph)
+	// A Wednesday, so that no this_* period starts today and the week periods do not
+	// straddle a month boundary.
+	now := time.Date(2026, 3, 18, 14, 30, 0, 0, cph)
 
 	periods := []Period{Yesterday, ThisWeek, LastWeek, ThisMonth, LastMonth, ThisYear, LastYear}
 
 	// The last day each period must still cover, i.e. the day before the exclusive to.
 	lastDay := map[Period]string{
-		Yesterday: "2026-03-15",
-		LastWeek:  "2026-03-14", // the Saturday before this week
+		Yesterday: "2026-03-17",
+		LastWeek:  "2026-03-15", // the Sunday that ends last week
 		LastMonth: "2026-02-28",
 		LastYear:  "2025-12-31",
 	}
