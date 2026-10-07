@@ -97,7 +97,7 @@ func ParseToken(token string) (TokenClaims, error) {
 	claims.Audience = rawString(raw, "aud")
 
 	// "ReadPrivate, ReadBusiness" under either of the two role claim names.
-	for _, role := range strings.Split(rawString(raw, "roles", claimRole), ",") {
+	for role := range strings.SplitSeq(rawString(raw, "roles", claimRole), ",") {
 		if role = strings.TrimSpace(role); role != "" {
 			claims.Roles = append(claims.Roles, role)
 		}

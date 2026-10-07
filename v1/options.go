@@ -74,10 +74,7 @@ func setRetryPolicy(client *resty.Client, count int, maxWait time.Duration) *res
 	}
 
 	// The base backoff can never exceed the cap
-	wait := DefaultRetryWait
-	if wait > maxWait {
-		wait = maxWait
-	}
+	wait := min(DefaultRetryWait, maxWait)
 
 	client.RetryConditions = []resty.RetryConditionFunc{retryCondition}
 

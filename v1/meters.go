@@ -42,7 +42,7 @@ type ChildMeteringPoints struct {
 }
 
 type MeteringPointDetailsResponse struct {
-	Result MeteringPointDetail `json:"result,omitempty"`
+	Result MeteringPointDetail `json:"result"`
 	StatusResponse
 }
 

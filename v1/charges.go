@@ -6,12 +6,12 @@ import (
 )
 
 type CustomerChargeResponse struct {
-	Result CustomerCharges `json:"result,omitempty"`
+	Result CustomerCharges `json:"result"`
 	StatusResponse
 }
 
 type ThirdPartyChargeResponse struct {
-	Result ThirdPartyCharges `json:"result,omitempty"`
+	Result ThirdPartyCharges `json:"result"`
 	StatusResponse
 }
 
