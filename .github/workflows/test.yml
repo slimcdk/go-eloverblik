@@ -28,21 +28,12 @@ jobs:
       uses: actions/checkout@v7
 
     # go-version-file keeps CI on exactly the toolchain go.mod requires, so the
-    # workflow cannot drift from the module's own requirement.
+    # workflow cannot drift from the module's own requirement. setup-go also caches
+    # the module and build caches, keyed on go.sum, so no separate cache step.
     - name: Set up Go
-      uses: actions/setup-go@v6
+      uses: actions/setup-go@v7
       with:
         go-version-file: go.mod
-
-    - name: Cache Go modules
-      uses: actions/cache@v6
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('go.mod', '**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
 
     - name: Download dependencies
       run: go mod download
@@ -57,9 +48,9 @@ jobs:
     # action falls back to tokenless upload. fail_ci_if_error stays false so a
     # missing token or a Codecov outage never fails an otherwise green build.
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v7
       with:
-        file: ./coverage.out
+        files: ./coverage.out
         flags: unittests
         fail_ci_if_error: false
         token: ${{ secrets.CODECOV_TOKEN }}
@@ -76,7 +67,7 @@ jobs:
       uses: actions/checkout@v7
 
     - name: Set up Go
-      uses: actions/setup-go@v6
+      uses: actions/setup-go@v7
       with:
         go-version-file: go.mod
 
@@ -94,7 +85,7 @@ jobs:
       uses: actions/checkout@v7
 
     - name: Set up Go
-      uses: actions/setup-go@v6
+      uses: actions/setup-go@v7
       with:
         go-version-file: go.mod
 
@@ -104,7 +95,7 @@ jobs:
     - name: Run golangci-lint
       uses: golangci/golangci-lint-action@v9
       with:
-        version: v2.12
+        version: v2.14
         args: --timeout=5m
 
   build:
@@ -131,7 +122,7 @@ jobs:
       uses: actions/checkout@v7
 
     - name: Set up Go
-      uses: actions/setup-go@v6
+      uses: actions/setup-go@v7
       with:
         go-version-file: go.mod
 
