@@ -116,6 +116,96 @@ func TestGetDataAccessTokenConcurrent(t *testing.T) {
 	assert.Equal(t, int32(1), tokenCalls.Load(), "one client must fetch its data access token once")
 }
 
+// TestGetDataAccessTokenConcurrentFailure guards the sharing of a /token request that
+// fails. Only its token used to be shared: once it had failed, each goroutine that had
+// waited for it sent a /token request of its own in turn, spending the 2 calls a minute
+// the API allows on requests bound to fail the same way.
+func TestGetDataAccessTokenConcurrentFailure(t *testing.T) {
+	fresh := dataAccessToken(t, time.Now().Add(24*time.Hour))
+	expiring := dataAccessToken(t, time.Now().Add(2*time.Minute))
+
+	tests := []struct {
+		name   string
+		cached string
+		want   string
+		err    error
+	}{
+		{
+			name: "without a cached token every goroutine gets the error",
+			err:  ErrorTooManyRequests,
+		},
+		{
+			name:   "with a cached token that has not expired every goroutine gets that token",
+			cached: expiring,
+			want:   expiring,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c := NewThirdParty("test-refresh-token", WithoutRetry()).(*client)
+			httpmock.ActivateNonDefault(c.resty.GetClient())
+			defer httpmock.DeactivateAndReset()
+			c.accessToken = test.cached
+
+			const goroutines = 32
+			var calling sync.WaitGroup
+			calling.Add(goroutines)
+
+			// /token fails until the goroutines are done, and succeeds after that
+			var failing atomic.Bool
+			failing.Store(true)
+			var tokenCalls atomic.Int32
+			httpmock.RegisterResponder(http.MethodGet, c.resty.BaseURL+"/token",
+				func(*http.Request) (*http.Response, error) {
+					tokenCalls.Add(1)
+					if !failing.Load() {
+						return httpmock.NewJsonResponse(http.StatusOK, map[string]string{"result": fresh})
+					}
+					// Fail only once every goroutine has read the request count, so that they
+					// all wait for this request rather than arrive after it has failed
+					calling.Wait()
+					return httpmock.NewStringResponse(http.StatusTooManyRequests, ""), nil
+				})
+
+			type outcome struct {
+				token string
+				err   error
+			}
+			outcomes := make(chan outcome, goroutines)
+			c.tokenRequestsRead = calling.Done
+			var wg sync.WaitGroup
+			for range goroutines {
+				wg.Go(func() {
+					token, err := c.GetDataAccessToken()
+					outcomes <- outcome{token, err}
+				})
+			}
+			wg.Wait()
+			close(outcomes)
+			c.tokenRequestsRead = nil
+
+			for got := range outcomes {
+				if test.err != nil {
+					require.ErrorIs(t, got.err, test.err)
+					assert.Empty(t, got.token)
+				} else {
+					require.NoError(t, got.err)
+					assert.Equal(t, test.want, got.token)
+				}
+			}
+			assert.Equal(t, int32(1), tokenCalls.Load(), "the goroutines must share the one failed /token request")
+
+			// A call after the failure tries again
+			failing.Store(false)
+			token, err := c.GetDataAccessToken()
+			require.NoError(t, err)
+			assert.Equal(t, fresh, token)
+			assert.Equal(t, int32(2), tokenCalls.Load())
+		})
+	}
+}
+
 // TestGetDataAccessTokenRenewal guards the renewal of the cached data access token. It
 // lasts about 24 hours, and the client used to keep it for its own lifetime, so a long
 // running process saw every call fail with 401 once the token had expired.

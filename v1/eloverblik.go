@@ -2,6 +2,7 @@ package eloverblik
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/go-resty/resty/v2"
 )
@@ -19,6 +20,16 @@ type client struct {
 	// first one or the one that replaces an expiring token, share the one request.
 	tokenMu     sync.Mutex
 	accessToken string
+	// tokenErr is the error the last /token request failed with, nil if it succeeded. It
+	// is guarded by tokenMu, and shared with the calls that waited for that request.
+	tokenErr error
+	// tokenRequests counts the /token requests that have ended. A call reads it before it
+	// waits for tokenMu, to tell whether a request ended while it waited.
+	tokenRequests atomic.Uint64
+	// tokenRequestsRead, when set, is called right after a call has read tokenRequests. It
+	// is nil outside tests, which use it to know that a call will wait for a request that
+	// has not ended yet, instead of guessing with a sleep.
+	tokenRequestsRead func()
 }
 
 type apiType int

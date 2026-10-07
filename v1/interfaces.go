@@ -17,7 +17,8 @@ type Client interface {
 	//
 	// It is safe for concurrent use. The API allows only 2 /token calls a minute, so the
 	// goroutines that need a token while one is being fetched wait for that request and
-	// use its token.
+	// share its outcome, its token or its error. A call made after a request has failed
+	// sends a new one.
 	//
 	// An error means the client holds no data access token that works: /token failed, and
 	// there is no cached token or the cached one has expired. It is the error the request

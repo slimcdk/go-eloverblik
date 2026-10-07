@@ -94,14 +94,29 @@ const dataAccessTokenRenewalMargin = 5 * time.Minute
 
 // GetDataAccessToken implements Client.GetDataAccessToken, which documents its contract.
 // c.tokenMu is held across the /token request, so the goroutines that need a token while
-// one is being fetched wait for that request instead of sending their own.
+// one is being fetched wait for that request instead of sending their own, and share its
+// outcome: the token it cached, or the error it failed with.
 func (c *client) GetDataAccessToken() (string, error) {
+	// A /token request that ends after this point is one this call waits for
+	requests := c.tokenRequests.Load()
+	if c.tokenRequestsRead != nil {
+		c.tokenRequestsRead()
+	}
+
 	c.tokenMu.Lock()
 	defer c.tokenMu.Unlock()
 
+	// The request this call waited for failed. Another one now would most likely fail the
+	// same way, and spend one more of the 2 /token calls a minute the API allows
+	if c.tokenRequests.Load() != requests && c.tokenErr != nil {
+		return c.cachedTokenOr(c.tokenErr)
+	}
+
 	if c.accessToken == "" || expiresWithin(c.accessToken, dataAccessTokenRenewalMargin) {
-		if err := c.authenticate(); err != nil {
-			return c.cachedTokenOr(err)
+		c.tokenErr = c.authenticate()
+		c.tokenRequests.Add(1)
+		if c.tokenErr != nil {
+			return c.cachedTokenOr(c.tokenErr)
 		}
 	}
 	return c.accessToken, nil
