@@ -19,6 +19,11 @@ import (
 // output is the destination for export commands (configurable for testing)
 var output io.Writer = os.Stdout
 
+// warningOutput receives what a command reports about a call that still succeeded, such
+// as a metering point that failed on its own (configurable for testing). It defaults to
+// stderr so stdout stays clean, parseable JSON.
+var warningOutput io.Writer = os.Stderr
+
 func meteringPointArgs(cmd *cobra.Command, args []string) error {
 	if err := cobra.MinimumNArgs(1)(cmd, args); err != nil {
 		return err
@@ -196,8 +201,15 @@ func newTimeseriesCmd() *cobra.Command {
 			} else {
 				flattened := make(map[string][]eloverblik.FlatTimeSeriesPoint, len(args))
 				for _, ts := range tss {
-					id := ts.MyEnergyDataMarketDocument.TimeSeries[0].MRID
-					flattened[id] = ts.Flatten()
+					// A metering point that failed on its own has no market document to
+					// flatten. Report it and keep the others.
+					if err := ts.Err(); err != nil {
+						_, _ = fmt.Fprintf(warningOutput, "warning: %v\n", err)
+						continue
+					}
+					// The API can report a metering point once per access period, so the
+					// same ID may come back more than once.
+					flattened[ts.ID] = append(flattened[ts.ID], ts.Flatten()...)
 				}
 				bytes, err := json.Marshal(flattened)
 				cobra.CheckErr(err)

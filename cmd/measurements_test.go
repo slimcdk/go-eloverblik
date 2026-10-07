@@ -431,3 +431,95 @@ func TestTimeseriesCmd(t *testing.T) {
 	_, err = execute(t, "customer", "timeseries", "571313174002485069", "--period", "last_week", "--from", "2026-01-01", "--token", "dummy")
 	assert.Error(t, err)
 }
+
+// timeSeriesResult is a successful time series result for one metering point, holding a
+// single daily reading.
+func timeSeriesResult(meteringPointID string, day time.Time, quantity float64) eloverblik.TimeSeries {
+	return eloverblik.TimeSeries{
+		MyEnergyDataMarketDocument: eloverblik.MyEnergyDataMarketDocumentResponse{
+			TimeSeries: []eloverblik.TimeSeriesTimeSeriesResponse{{
+				MRID:                meteringPointID,
+				MeasurementUnitName: "KWH",
+				Periods: []eloverblik.PeriodResponse{{
+					Resolution:   "PT1D",
+					TimeInterval: eloverblik.TimeInterval{Start: day, End: day.AddDate(0, 0, 1)},
+					Points:       []eloverblik.PointResponse{{Position: 1, OutQuantityQuantity: quantity, OutQuantityQuality: "A04"}},
+				}},
+			}},
+		},
+		StatusResponse: eloverblik.StatusResponse{Success: true, ErrorCode: 10000, ID: meteringPointID},
+	}
+}
+
+// TestTimeseriesCmdFlattenFailedMeteringPoint covers a response in which one metering point
+// failed on its own. Its result carries no market document, which crashed --flatten with an
+// index out of range; it must be reported as a warning instead, and the rest kept.
+func TestTimeseriesCmdFlattenFailedMeteringPoint(t *testing.T) {
+	day := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	mock := &MockClient{
+		GetTimeSeriesFunc: func(meteringPointIDs []string, from, to time.Time, aggregation eloverblik.Aggregation) ([]eloverblik.TimeSeries, error) {
+			return []eloverblik.TimeSeries{
+				timeSeriesResult("571313174002485069", day, 7.5),
+				{StatusResponse: eloverblik.StatusResponse{
+					Success:   false,
+					ErrorCode: 30018,
+					ErrorText: "MeteringPointDataNotAvailableForTheRequestedPeriod",
+					ID:        "571313174002485070",
+				}},
+			}, nil
+		},
+	}
+	clientInstance = mock
+	defer func() { clientInstance = nil }()
+
+	oldOutput, oldWarnings := output, warningOutput
+	var stdout, stderr bytes.Buffer
+	output, warningOutput = &stdout, &stderr
+	defer func() { output, warningOutput = oldOutput, oldWarnings }()
+
+	_, err := execute(t, "customer", "timeseries", "571313174002485069", "571313174002485070",
+		"--from", "2026-09-01", "--to", "2026-09-02", "--aggregation", "Day", "--flatten", "--token", "dummy")
+
+	assert.NoError(t, err)
+
+	var flattened map[string][]eloverblik.FlatTimeSeriesPoint
+	assert.NoError(t, json.Unmarshal(stdout.Bytes(), &flattened))
+	assert.Len(t, flattened["571313174002485069"], 1)
+	assert.NotContains(t, flattened, "571313174002485070")
+	assert.Contains(t, stderr.String(), "metering point 571313174002485070: 30018 MeteringPointDataNotAvailableForTheRequestedPeriod")
+}
+
+// TestTimeseriesCmdFlattenRepeatedMeteringPoint covers a response that holds the same
+// metering point twice, which the API does when it reports several access periods for it.
+// --flatten keys its output by metering point, so the periods must add up, not overwrite.
+func TestTimeseriesCmdFlattenRepeatedMeteringPoint(t *testing.T) {
+	first := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	second := time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)
+	mock := &MockClient{
+		GetTimeSeriesFunc: func(meteringPointIDs []string, from, to time.Time, aggregation eloverblik.Aggregation) ([]eloverblik.TimeSeries, error) {
+			return []eloverblik.TimeSeries{
+				timeSeriesResult("571313174002485069", first, 7.5),
+				timeSeriesResult("571313174002485069", second, 8.5),
+			}, nil
+		},
+	}
+	clientInstance = mock
+	defer func() { clientInstance = nil }()
+
+	oldOutput := output
+	var stdout bytes.Buffer
+	output = &stdout
+	defer func() { output = oldOutput }()
+
+	_, err := execute(t, "customer", "timeseries", "571313174002485069",
+		"--from", "2026-09-01", "--to", "2026-09-03", "--aggregation", "Day", "--flatten", "--token", "dummy")
+
+	assert.NoError(t, err)
+
+	var flattened map[string][]eloverblik.FlatTimeSeriesPoint
+	assert.NoError(t, json.Unmarshal(stdout.Bytes(), &flattened))
+	if assert.Len(t, flattened["571313174002485069"], 2) {
+		assert.Equal(t, 7.5, flattened["571313174002485069"][0].Measurement)
+		assert.Equal(t, 8.5, flattened["571313174002485069"][1].Measurement)
+	}
+}
