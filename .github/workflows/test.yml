@@ -171,12 +171,14 @@ jobs:
         go-version-file: go.mod
 
     # golangci-lint v2 rejects the v1 config format, so the action and the config
-    # have to move together. Pin the minor version rather than tracking latest, so a
-    # new release cannot break the build without a commit.
+    # have to move together. Pinned to an exact release, so CI reports what a local
+    # run of that same release reports, and no new release (a patch release
+    # included) can break the build without a commit. Dependabot does not see a
+    # version in an action input: move it by hand.
     - name: Run golangci-lint
       uses: golangci/golangci-lint-action@v9
       with:
-        version: v2.14
+        version: v2.14.0
         args: --timeout=5m
 
   build:
